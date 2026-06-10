@@ -1,0 +1,298 @@
+You are building Nexora — an AI-powered IoT project creation platform. 
+This is Prompt 1 of 14. You are setting up the complete project 
+foundation, folder structure, tech stack, and authentication system.
+
+═══════════════════════════════════════
+TECH STACK
+═══════════════════════════════════════
+
+Frontend: React + Vite
+Styling: Tailwind CSS
+Routing: React Router v6
+Backend: Node.js + Express
+Database: Supabase (free tier) — for auth, user data, project storage
+AI: Google Gemini API (gemini-1.5-flash model — free tier)
+IDE Component (later): Monaco Editor
+Icons: Lucide React
+Fonts: Inter (Google Fonts)
+
+═══════════════════════════════════════
+FOLDER STRUCTURE TO CREATE
+═══════════════════════════════════════
+
+nexora/
+├── client/                        → React frontend
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── ui/                → Reusable UI components
+│   │   │   ├── layout/            → Navbar, Sidebar, Layout wrappers
+│   │   │   └── auth/              → Login, Signup, RoleSelect components
+│   │   ├── pages/
+│   │   │   ├── Landing.jsx
+│   │   │   ├── Login.jsx
+│   │   │   ├── Signup.jsx
+│   │   │   ├── RoleSelect.jsx
+│   │   │   └── Dashboard.jsx      → placeholder for now
+│   │   ├── context/
+│   │   │   └── AuthContext.jsx    → global auth state
+│   │   ├── hooks/
+│   │   │   └── useAuth.js
+│   │   ├── lib/
+│   │   │   └── supabase.js        → supabase client init
+│   │   ├── styles/
+│   │   │   └── index.css
+│   │   ├── App.jsx
+│   │   └── main.jsx
+├── server/
+│   ├── routes/
+│   │   └── auth.js
+│   ├── middleware/
+│   │   └── verifyToken.js
+│   ├── lib/
+│   │   └── supabaseAdmin.js
+│   └── index.js
+├── .env
+└── package.json (root with workspaces)
+
+═══════════════════════════════════════
+DESIGN SYSTEM — APPLY EVERYWHERE
+═══════════════════════════════════════
+
+This design system must be consistent across every screen 
+built in all future prompts.
+
+Color Palette:
+  Background:        #0A0A0F  (near black, slightly purple-tinted)
+  Surface:           #12121A  (cards, panels)
+  Surface elevated:  #1A1A2E  (modals, dropdowns)
+  Border:            #2A2A3E  (subtle borders)
+  Primary:           #6C63FF  (main purple — buttons, highlights)
+  Primary hover:     #5A52E0
+  Accent:            #00D4FF  (cyan — AI elements, live indicators)
+  Success:           #00C896
+  Warning:           #FFB84D
+  Error:             #FF5A5A
+  Text primary:      #F0F0FF
+  Text secondary:    #9090B0
+  Text muted:        #5A5A7A
+
+Typography:
+  Font: Inter (import from Google Fonts)
+  Headings: font-weight 700, letter-spacing -0.02em
+  Body: font-weight 400
+  Code/IDE: JetBrains Mono
+
+Component Rules:
+  Border radius: 12px for cards, 8px for buttons, 6px for inputs
+  All cards have: background #12121A, border 1px solid #2A2A3E
+  Hover states: border color shifts to #6C63FF with 0.2s transition
+  Buttons — Primary: bg #6C63FF, hover #5A52E0, text white, 
+             px-6 py-2.5, rounded-lg, font-medium
+  Buttons — Secondary: bg transparent, border #2A2A3E, 
+             hover border #6C63FF, text #F0F0FF
+  Inputs: bg #0A0A0F, border #2A2A3E, focus border #6C63FF, 
+          text #F0F0FF, placeholder #5A5A7A
+  Shadows: use purple-tinted shadows — 
+           0 4px 24px rgba(108, 99, 255, 0.08)
+
+═══════════════════════════════════════
+SUPABASE SETUP
+═══════════════════════════════════════
+
+Create these tables in Supabase:
+
+TABLE: profiles
+  id              uuid (references auth.users, primary key)
+  email           text
+  full_name       text
+  role            text  (values: 'student' | 'maker' | 'professor' | 'professional')
+  college_name    text  (nullable)
+  course          text  (nullable)
+  avatar_url      text  (nullable)
+  created_at      timestamp with time zone (default now())
+  updated_at      timestamp with time zone (default now())
+
+TABLE: projects
+  id              uuid (default gen_random_uuid(), primary key)
+  user_id         uuid (references profiles.id)
+  title           text
+  description     text
+  idea_input      text  (original idea the user typed)
+  status          text  (values: 'draft' | 'in_progress' | 'completed')
+  current_step    integer (default 0)
+  ai_analysis     jsonb  (stores full AI analysis result)
+  components      jsonb  (stores component list)
+  build_plan      jsonb  (stores all steps)
+  created_at      timestamp with time zone
+  updated_at      timestamp with time zone
+
+TABLE: project_members
+  id              uuid (default gen_random_uuid(), primary key)
+  project_id      uuid (references projects.id)
+  user_id         uuid (references profiles.id)
+  role            text  (values: 'owner' | 'collaborator')
+  joined_at       timestamp with time zone
+
+Enable Row Level Security on all tables.
+Profiles: users can read/update their own profile.
+Projects: users can CRUD their own projects, 
+          collaborators can read projects they are members of.
+
+═══════════════════════════════════════
+AUTHENTICATION SYSTEM
+═══════════════════════════════════════
+
+Use Supabase Auth (email + password).
+
+Flow:
+1. User signs up with email + password + full name
+2. Supabase creates auth user
+3. Trigger automatically creates a row in profiles table
+4. User is redirected to /role-select
+5. User picks their role (student / maker / professor / professional)
+6. Role is saved to profiles table
+7. User is redirected to /dashboard
+
+Create a Supabase database trigger:
+  After insert on auth.users →
+  Automatically insert into profiles(id, email) 
+  using the new user's id and email.
+
+AuthContext.jsx must provide:
+  - user (supabase auth user object)
+  - profile (row from profiles table)
+  - loading (boolean)
+  - signUp(email, password, fullName)
+  - signIn(email, password)
+  - signOut()
+  - updateProfile(data)
+
+Protected routes: /dashboard and all inner pages 
+require authentication. Redirect to /login if not authenticated.
+
+═══════════════════════════════════════
+PAGES TO BUILD IN THIS PROMPT
+═══════════════════════════════════════
+
+── Landing Page (/):
+  Navbar: Logo "Nexora" (purple gradient text) on left. 
+          "Sign In" and "Get Started Free" buttons on right.
+  
+  Hero Section:
+    Badge at top: small pill badge saying 
+    "✦ AI-Powered IoT Platform"  (purple border, subtle bg)
+    
+    Headline (large, bold):
+    "Turn any IoT idea into a
+     working project."
+    
+    Subheadline:
+    "From idea to code — guided by AI, step by step. 
+     No more jumping between tools."
+    
+    Two CTAs: "Start Building Free" (primary) 
+              "Browse Blueprints" (secondary)
+    
+    Below CTAs: small social proof text: 
+    "Trusted by students and makers across India"
+    
+  Problem Section:
+    Heading: "You're using 5 tools. You should use one."
+    Show 5 cards in a row — each representing a 
+    fragmented tool (Arduino IDE, Tinkercad, Blynk, 
+    ChatGPT, Documentation) with a label showing 
+    what it does and a faint red "fragmented" indicator.
+    Then a large arrow pointing to one "Nexora" card 
+    glowing in purple — "Everything. One place."
+    
+  Features Section:
+    3 feature cards in a grid:
+    1. "Idea to Plan in seconds" — describe AI analysis
+    2. "IDE that builds itself" — describe incremental code push
+    3. "Built for learners" — describe step by step guidance
+    
+  Footer: minimal. Logo, copyright, "Made for makers."
+
+── Login Page (/login):
+  Centered card on dark background.
+  Logo at top.
+  "Welcome back" heading.
+  Email + Password inputs.
+  "Sign In" primary button.
+  "Don't have an account? Sign up" link.
+  Show error messages cleanly below inputs.
+
+── Signup Page (/signup):
+  Same card layout.
+  Full Name + Email + Password + Confirm Password.
+  "Create Account" button.
+  Password strength indicator (simple: weak/good/strong).
+  Error handling for existing email, password mismatch.
+
+── Role Selection Page (/role-select):
+  Only shown after signup.
+  Heading: "How are you using Nexora?"
+  Subheading: "This helps us personalize your experience."
+  4 large clickable cards arranged in 2x2 grid:
+    🎓 Student — "Working on college or university projects"
+    🔧 Maker — "Building smart things for fun or learning"  
+    👨‍🏫 Professor — "Teaching IoT and managing assignments"
+    💼 Professional — "Building real-world IoT solutions"
+  
+  When student is selected, two additional fields 
+  slide down smoothly:
+    - College name (text input)
+    - Course / Subject (text input)
+  
+  "Continue to Dashboard" button — 
+  saves role to profile, redirects to /dashboard.
+
+── Dashboard Page (/dashboard):
+  Placeholder only for now.
+  Show: "Welcome, [user name]" 
+  Show their role badge
+  Show "Dashboard coming in next build"
+  Keep the sidebar and navbar layout ready 
+  so future prompts can fill it in.
+
+  Sidebar should have these nav items 
+  (all placeholder links for now):
+    - Dashboard (home icon)
+    - My Projects (folder icon)
+    - New Project (plus icon)
+    - Blueprints (grid icon)
+    - My Components (chip icon)
+    - AI Assistant (sparkles icon)
+    - Settings (gear icon)
+  
+  Top navbar: Logo left, 
+  right side: notification bell + user avatar + name
+
+═══════════════════════════════════════
+ENVIRONMENT VARIABLES NEEDED
+═══════════════════════════════════════
+
+Create a .env file with these keys 
+(user will fill in their own values):
+
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+GEMINI_API_KEY=your_gemini_api_key
+PORT=3001
+
+═══════════════════════════════════════
+IMPORTANT RULES FOR REPLIT
+═══════════════════════════════════════
+
+1. Apply the design system colors and typography 
+   to every component. No default whites or grays.
+2. Every page must be fully responsive 
+   (mobile + desktop).
+3. All transitions and hover states must be smooth 
+   (use transition-all duration-200).
+4. No placeholder lorem ipsum text anywhere.
+5. The codebase must be clean, commented, 
+   and ready for 13 more prompts to build on top.
+6. After building, show me the file structure 
+   created and confirm all routes are working.

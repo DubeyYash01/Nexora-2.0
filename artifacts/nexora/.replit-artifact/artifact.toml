@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Nexora"
+version = "1.0.0"
+id = "artifacts/nexora"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23292
+
+[services.development]
+run = "pnpm --filter @workspace/nexora run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/nexora", "run", "build" ]
+publicDir = "artifacts/nexora/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23292"
+BASE_PATH = "/"
