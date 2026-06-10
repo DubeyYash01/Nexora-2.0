@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -12,10 +12,12 @@ import Login from "@/pages/login";
 import Signup from "@/pages/signup";
 import RoleSelect from "@/pages/role-select";
 import Dashboard from "@/pages/dashboard";
+import Projects from "@/pages/projects";
+import NewProject from "@/pages/new-project";
 
 const queryClient = new QueryClient();
 
-function ProtectedRoute({ component: Component }: { component: () => JSX.Element }) {
+function ProtectedRoute({ component: Component }: { component: () => ReactNode }) {
   const { user, loading } = useAuth();
   const [, setLocation] = useLocation();
 
@@ -28,14 +30,12 @@ function ProtectedRoute({ component: Component }: { component: () => JSX.Element
   if (loading) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-background">
-        <div className="animate-pulse w-8 h-8 rounded-full bg-primary/50"></div>
+        <div className="animate-pulse w-8 h-8 rounded-full bg-primary/50" />
       </div>
     );
   }
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   return <Component />;
 }
@@ -51,6 +51,12 @@ function Router() {
       </Route>
       <Route path="/dashboard">
         <ProtectedRoute component={Dashboard} />
+      </Route>
+      <Route path="/projects">
+        <ProtectedRoute component={Projects} />
+      </Route>
+      <Route path="/projects/new">
+        <ProtectedRoute component={NewProject} />
       </Route>
       <Route component={NotFound} />
     </Switch>

@@ -97,6 +97,65 @@ paths:
         "401":
           description: Unauthorized
 
+  /projects/stats:
+    get:
+      operationId: getProjectStats
+      tags: [projects]
+      summary: Get project stats summary for dashboard
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStats"
+        "401":
+          description: Unauthorized
+
+  /projects/analyze:
+    post:
+      operationId: analyzeProject
+      tags: [projects]
+      summary: Analyze an IoT idea with Gemini AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeProjectInput"
+      responses:
+        "200":
+          description: Analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyzeProjectResult"
+        "401":
+          description: Unauthorized
+        "500":
+          description: AI analysis failed
+
+  /projects/save-components:
+    post:
+      operationId: saveProjectComponents
+      tags: [projects]
+      summary: Save component ownership selections
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveComponentsInput"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaveComponentsResult"
+        "401":
+          description: Unauthorized
+
   /projects/{id}:
     get:
       operationId: getProject
@@ -153,21 +212,6 @@ paths:
       responses:
         "204":
           description: Deleted
-
-  /projects/stats:
-    get:
-      operationId: getProjectStats
-      tags: [projects]
-      summary: Get project stats summary for dashboard
-      responses:
-        "200":
-          description: Stats
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProjectStats"
-        "401":
-          description: Unauthorized
 
 components:
   schemas:
@@ -287,3 +331,41 @@ components:
           type: integer
         completed:
           type: integer
+
+    AnalyzeProjectInput:
+      type: object
+      required: [idea, skillLevel, projectType]
+      properties:
+        idea:
+          type: string
+        skillLevel:
+          type: string
+        projectType:
+          type: string
+
+    AnalyzeProjectResult:
+      type: object
+      required: [projectId, analysis]
+      properties:
+        projectId:
+          type: string
+        analysis:
+          type: object
+
+    SaveComponentsInput:
+      type: object
+      required: [projectId, components]
+      properties:
+        projectId:
+          type: string
+        components:
+          type: array
+          items:
+            type: object
+
+    SaveComponentsResult:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean

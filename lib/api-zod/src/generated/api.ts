@@ -94,6 +94,49 @@ export const CreateProjectBody = zod.object({
 
 
 /**
+ * @summary Get project stats summary for dashboard
+ */
+export const GetProjectStatsResponse = zod.object({
+  "total": zod.number(),
+  "draft": zod.number(),
+  "in_progress": zod.number(),
+  "completed": zod.number()
+})
+
+
+/**
+ * @summary Analyze an IoT idea with Gemini AI
+ */
+export const AnalyzeProjectBody = zod.object({
+  "idea": zod.string(),
+  "skillLevel": zod.string(),
+  "projectType": zod.string()
+})
+
+export const AnalyzeProjectResponse = zod.object({
+  "projectId": zod.string(),
+  "analysis": zod.object({
+
+}).passthrough()
+})
+
+
+/**
+ * @summary Save component ownership selections
+ */
+export const SaveProjectComponentsBody = zod.object({
+  "projectId": zod.string(),
+  "components": zod.array(zod.object({
+
+}).passthrough())
+})
+
+export const SaveProjectComponentsResponse = zod.object({
+  "success": zod.boolean()
+})
+
+
+/**
  * @summary Get a project by ID
  */
 export const GetProjectParams = zod.object({
@@ -172,17 +215,6 @@ export const UpdateProjectResponse = zod.object({
  */
 export const DeleteProjectParams = zod.object({
   "id": zod.coerce.string()
-})
-
-
-/**
- * @summary Get project stats summary for dashboard
- */
-export const GetProjectStatsResponse = zod.object({
-  "total": zod.number(),
-  "draft": zod.number(),
-  "in_progress": zod.number(),
-  "completed": zod.number()
 })
 
 

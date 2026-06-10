@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './analyzeProjectInput';
+export * from './analyzeProjectResult';
+export * from './analyzeProjectResultAnalysis';
 export * from './healthStatus';
 export * from './profile';
 export * from './profileUpdate';
@@ -19,3 +22,6 @@ export * from './projectUpdate';
 export * from './projectUpdateAiAnalysis';
 export * from './projectUpdateBuildPlan';
 export * from './projectUpdateComponents';
+export * from './saveComponentsInput';
+export * from './saveComponentsInputComponentsItem';
+export * from './saveComponentsResult';

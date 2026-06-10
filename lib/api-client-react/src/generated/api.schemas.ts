@@ -103,3 +103,27 @@ export interface ProjectStats {
   completed: number;
 }
 
+export interface AnalyzeProjectInput {
+  idea: string;
+  skillLevel: string;
+  projectType: string;
+}
+
+export type AnalyzeProjectResultAnalysis = { [key: string]: unknown };
+
+export interface AnalyzeProjectResult {
+  projectId: string;
+  analysis: AnalyzeProjectResultAnalysis;
+}
+
+export type SaveComponentsInputComponentsItem = { [key: string]: unknown };
+
+export interface SaveComponentsInput {
+  projectId: string;
+  components: SaveComponentsInputComponentsItem[];
+}
+
+export interface SaveComponentsResult {
+  success: boolean;
+}
+

@@ -20,13 +20,17 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AnalyzeProjectInput,
+  AnalyzeProjectResult,
   HealthStatus,
   Profile,
   ProfileUpdate,
   Project,
   ProjectInput,
   ProjectStats,
-  ProjectUpdate
+  ProjectUpdate,
+  SaveComponentsInput,
+  SaveComponentsResult
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -414,6 +418,225 @@ export const useCreateProject = <TError = ErrorType<void>,
       return useMutation(getCreateProjectMutationOptions(options));
     }
 
+export const getGetProjectStatsUrl = () => {
+
+
+
+
+  return `/api/projects/stats`
+}
+
+/**
+ * @summary Get project stats summary for dashboard
+ */
+export const getProjectStats = async ( options?: RequestInit): Promise<ProjectStats> => {
+
+  return customFetch<ProjectStats>(getGetProjectStatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectStatsQueryKey = () => {
+    return [
+    `/api/projects/stats`
+    ] as const;
+    }
+
+
+export const getGetProjectStatsQueryOptions = <TData = Awaited<ReturnType<typeof getProjectStats>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectStatsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectStats>>> = ({ signal }) => getProjectStats({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectStats>>>
+export type GetProjectStatsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get project stats summary for dashboard
+ */
+
+export function useGetProjectStats<TData = Awaited<ReturnType<typeof getProjectStats>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectStatsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getAnalyzeProjectUrl = () => {
+
+
+
+
+  return `/api/projects/analyze`
+}
+
+/**
+ * @summary Analyze an IoT idea with Gemini AI
+ */
+export const analyzeProject = async (analyzeProjectInput: AnalyzeProjectInput, options?: RequestInit): Promise<AnalyzeProjectResult> => {
+
+  return customFetch<AnalyzeProjectResult>(getAnalyzeProjectUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      analyzeProjectInput,)
+  }
+);}
+
+
+
+
+export const getAnalyzeProjectMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeProject>>, TError,{data: BodyType<AnalyzeProjectInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof analyzeProject>>, TError,{data: BodyType<AnalyzeProjectInput>}, TContext> => {
+
+const mutationKey = ['analyzeProject'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof analyzeProject>>, {data: BodyType<AnalyzeProjectInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  analyzeProject(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AnalyzeProjectMutationResult = NonNullable<Awaited<ReturnType<typeof analyzeProject>>>
+    export type AnalyzeProjectMutationBody = BodyType<AnalyzeProjectInput>
+    export type AnalyzeProjectMutationError = ErrorType<void>
+
+    /**
+ * @summary Analyze an IoT idea with Gemini AI
+ */
+export const useAnalyzeProject = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeProject>>, TError,{data: BodyType<AnalyzeProjectInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof analyzeProject>>,
+        TError,
+        {data: BodyType<AnalyzeProjectInput>},
+        TContext
+      > => {
+      return useMutation(getAnalyzeProjectMutationOptions(options));
+    }
+
+export const getSaveProjectComponentsUrl = () => {
+
+
+
+
+  return `/api/projects/save-components`
+}
+
+/**
+ * @summary Save component ownership selections
+ */
+export const saveProjectComponents = async (saveComponentsInput: SaveComponentsInput, options?: RequestInit): Promise<SaveComponentsResult> => {
+
+  return customFetch<SaveComponentsResult>(getSaveProjectComponentsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      saveComponentsInput,)
+  }
+);}
+
+
+
+
+export const getSaveProjectComponentsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveProjectComponents>>, TError,{data: BodyType<SaveComponentsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveProjectComponents>>, TError,{data: BodyType<SaveComponentsInput>}, TContext> => {
+
+const mutationKey = ['saveProjectComponents'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveProjectComponents>>, {data: BodyType<SaveComponentsInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  saveProjectComponents(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveProjectComponentsMutationResult = NonNullable<Awaited<ReturnType<typeof saveProjectComponents>>>
+    export type SaveProjectComponentsMutationBody = BodyType<SaveComponentsInput>
+    export type SaveProjectComponentsMutationError = ErrorType<void>
+
+    /**
+ * @summary Save component ownership selections
+ */
+export const useSaveProjectComponents = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveProjectComponents>>, TError,{data: BodyType<SaveComponentsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveProjectComponents>>,
+        TError,
+        {data: BodyType<SaveComponentsInput>},
+        TContext
+      > => {
+      return useMutation(getSaveProjectComponentsMutationOptions(options));
+    }
+
 export const getGetProjectUrl = (id: string,) => {
 
 
@@ -632,81 +855,4 @@ export const useDeleteProject = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getDeleteProjectMutationOptions(options));
     }
-
-export const getGetProjectStatsUrl = () => {
-
-
-
-
-  return `/api/projects/stats`
-}
-
-/**
- * @summary Get project stats summary for dashboard
- */
-export const getProjectStats = async ( options?: RequestInit): Promise<ProjectStats> => {
-
-  return customFetch<ProjectStats>(getGetProjectStatsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetProjectStatsQueryKey = () => {
-    return [
-    `/api/projects/stats`
-    ] as const;
-    }
-
-
-export const getGetProjectStatsQueryOptions = <TData = Awaited<ReturnType<typeof getProjectStats>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetProjectStatsQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectStats>>> = ({ signal }) => getProjectStats({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectStats>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type GetProjectStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectStats>>>
-export type GetProjectStatsQueryError = ErrorType<void>
-
-
-/**
- * @summary Get project stats summary for dashboard
- */
-
-export function useGetProjectStats<TData = Awaited<ReturnType<typeof getProjectStats>>, TError = ErrorType<void>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetProjectStatsQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-
-
-
-
-
 
