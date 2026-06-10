@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
-  status: string;
+export interface ProjectStats {
+  total: number;
+  draft: number;
+  in_progress: number;
+  completed: number;
 }

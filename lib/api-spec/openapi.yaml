@@ -1,22 +1,24 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Nexora API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: profiles
+    description: User profile operations
+  - name: projects
+    description: Project operations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +26,264 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /profiles/me:
+    get:
+      operationId: getMyProfile
+      tags: [profiles]
+      summary: Get the current user's profile
+      responses:
+        "200":
+          description: Profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "401":
+          description: Unauthorized
+    patch:
+      operationId: updateMyProfile
+      tags: [profiles]
+      summary: Update the current user's profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "401":
+          description: Unauthorized
+
+  /projects:
+    get:
+      operationId: getProjects
+      tags: [projects]
+      summary: List all projects for the current user
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Create a new project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInput"
+      responses:
+        "201":
+          description: Created project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          description: Unauthorized
+
+  /projects/{id}:
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Get a project by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateProject
+      tags: [projects]
+      summary: Update a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectUpdate"
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+    delete:
+      operationId: deleteProject
+      tags: [projects]
+      summary: Delete a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/stats:
+    get:
+      operationId: getProjectStats
+      tags: [projects]
+      summary: Get project stats summary for dashboard
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStats"
+        "401":
+          description: Unauthorized
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    Profile:
+      type: object
+      required: [id, email]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        full_name:
+          type: ["string", "null"]
+        role:
+          type: ["string", "null"]
+        college_name:
+          type: ["string", "null"]
+        course:
+          type: ["string", "null"]
+        avatar_url:
+          type: ["string", "null"]
+        created_at:
+          type: ["string", "null"]
+        updated_at:
+          type: ["string", "null"]
+
+    ProfileUpdate:
+      type: object
+      properties:
+        full_name:
+          type: string
+        role:
+          type: string
+        college_name:
+          type: string
+        course:
+          type: string
+        avatar_url:
+          type: string
+
+    Project:
+      type: object
+      required: [id, user_id, title, status, current_step]
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        idea_input:
+          type: ["string", "null"]
+        status:
+          type: string
+        current_step:
+          type: integer
+        ai_analysis:
+          type: ["object", "null"]
+        components:
+          type: ["object", "null"]
+        build_plan:
+          type: ["object", "null"]
+        created_at:
+          type: ["string", "null"]
+        updated_at:
+          type: ["string", "null"]
+
+    ProjectInput:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        idea_input:
+          type: string
+        status:
+          type: string
+
+    ProjectUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        current_step:
+          type: integer
+        ai_analysis:
+          type: object
+        components:
+          type: object
+        build_plan:
+          type: object
+
+    ProjectStats:
+      type: object
+      required: [total, draft, in_progress, completed]
+      properties:
+        total:
+          type: integer
+        draft:
+          type: integer
+        in_progress:
+          type: integer
+        completed:
+          type: integer
