@@ -1,0 +1,590 @@
+This is Prompt 2 of 14 for building Nexora.
+Prompt 1 already built the foundation, auth system, 
+landing page, and basic dashboard shell.
+
+Do NOT touch or recreate anything from Prompt 1.
+Only ADD to what exists.
+
+═══════════════════════════════════════
+WHAT THIS PROMPT BUILDS
+═══════════════════════════════════════
+
+1. Full Dashboard Page (replacing the placeholder)
+2. "My Projects" Page
+3. New Project Flow — Step 1 (Idea Input + Gemini AI Analysis)
+4. New Project Flow — Step 2 (AI Results Screen)
+5. Project Card Component (reusable)
+6. All routing connections between these pages
+
+═══════════════════════════════════════
+DASHBOARD PAGE — /dashboard
+═══════════════════════════════════════
+
+Layout:
+  Fixed sidebar on left (from Prompt 1 shell)
+  Top navbar fixed
+  Main content area scrollable
+
+Top Section — Greeting:
+  Left side:
+    "Good morning, [first name] 👋" (dynamic based on time:
+      morning = before 12pm
+      afternoon = 12–5pm  
+      evening = after 5pm)
+    Subtext: "What are you building today?"
+  
+  Right side:
+    One primary CTA button: 
+    "+ New Project" → navigates to /projects/new
+
+Stats Row (4 cards in a row, each small):
+  Card 1: Total Projects (count from Supabase)
+  Card 2: In Progress (count where status = 'in_progress')
+  Card 3: Completed (count where status = 'completed')
+  Card 4: Components Saved (count from user's component list)
+  
+  Each stat card:
+    bg: #12121A
+    border: 1px solid #2A2A3E
+    border-radius: 12px
+    padding: 20px
+    Icon on top left (lucide icon, color #6C63FF)
+    Large number below (font-size 28px, bold, color #F0F0FF)
+    Label below number (text secondary color)
+    Subtle hover: border shifts to #6C63FF
+
+Recent Projects Section:
+  Heading: "Recent Projects" with 
+  "View all →" link on right → goes to /projects
+  
+  If user has projects:
+    Show last 3 projects as ProjectCard components
+    (defined below)
+  
+  If user has NO projects yet:
+    Show empty state:
+      Centered in a card:
+      Icon: large circuit board or sparkles icon 
+            (color #6C63FF, size 48px)
+      Heading: "No projects yet"
+      Subtext: "Start by describing your IoT idea 
+                and let Nexora do the rest."
+      Button: "Create your first project" → /projects/new
+
+Suggested Blueprints Section:
+  Heading: "Start from a Blueprint"
+  Subtext: "Pre-built IoT project templates 
+            you can customize"
+  
+  Show 3 hardcoded blueprint cards for now 
+  (real blueprint system comes in Prompt 11):
+  
+  Blueprint 1:
+    Title: "Smart Plant Monitor"
+    Description: "Monitors soil moisture and 
+                  auto-waters your plant"
+    Components: ESP32, Soil Moisture Sensor, 
+                Water Pump, Relay Module
+    Difficulty: Beginner
+    Estimated Cost: ₹850
+    Tag: 🌱 Popular
+  
+  Blueprint 2:
+    Title: "Home Temperature Logger"
+    Description: "Logs temperature and humidity 
+                  with phone alerts"
+    Components: ESP32, DHT22, OLED Display
+    Difficulty: Beginner
+    Estimated Cost: ₹650
+    Tag: ⭐ Staff Pick
+  
+  Blueprint 3:
+    Title: "Motion Security Alert"
+    Description: "Detects motion and sends 
+                  WhatsApp/email notification"
+    Components: ESP32, PIR Sensor, Buzzer
+    Difficulty: Intermediate
+    Estimated Cost: ₹550
+    Tag: 🔥 Trending
+  
+  Each blueprint card:
+    "Use this Blueprint" button → 
+    for now just navigate to /projects/new 
+    with blueprint title pre-filled as query param
+
+═══════════════════════════════════════
+PROJECT CARD COMPONENT
+═══════════════════════════════════════
+
+File: client/src/components/ui/ProjectCard.jsx
+
+Props: { project }
+
+Display:
+  Card bg: #12121A, border: 1px solid #2A2A3E
+  Border radius: 12px, padding: 20px
+  Hover: border #6C63FF, 
+         shadow: 0 4px 24px rgba(108,99,255,0.12)
+  Transition: all 0.2s
+
+  Top row:
+    Left: Project title (bold, #F0F0FF, truncate if long)
+    Right: Status badge
+      'draft' → gray badge: bg #2A2A3E, text #9090B0
+      'in_progress' → blue badge: 
+                      bg rgba(0,212,255,0.1), 
+                      text #00D4FF, 
+                      with a small pulsing dot
+      'completed' → green badge: 
+                    bg rgba(0,200,150,0.1), 
+                    text #00C896
+
+  Middle: 
+    Project description (2 lines max, text secondary)
+    
+  Components row:
+    Show first 3 component names as small pills
+    If more than 3: show "+X more" pill
+    Pill style: bg #1A1A2E, text #9090B0, 
+                border #2A2A3E, rounded-full, 
+                text-xs, px-2 py-1
+
+  Bottom row:
+    Left: Progress indicator
+      "Step X of Y" with a thin progress bar below
+      Progress bar: bg #2A2A3E, 
+                    fill #6C63FF, 
+                    height 3px, 
+                    border-radius full
+    Right: 
+      Date created (formatted: "12 Jun 2025")
+      Small arrow icon → clicking card navigates 
+      to /projects/[id]
+
+═══════════════════════════════════════
+MY PROJECTS PAGE — /projects
+═══════════════════════════════════════
+
+Header:
+  Title: "My Projects"
+  Right side: "+ New Project" button
+
+Filter/Sort bar:
+  Filter pills: All | In Progress | Completed | Draft
+  Sort dropdown: Newest | Oldest | Last Updated
+
+Projects Grid:
+  2 columns on desktop, 1 on mobile
+  Show all user projects as ProjectCard components
+  
+  Empty state same as dashboard empty state.
+
+═══════════════════════════════════════
+NEW PROJECT PAGE — /projects/new
+═══════════════════════════════════════
+
+This is a multi-step page. 
+It has 2 steps visible in this prompt.
+(More steps will be added in Prompts 3 onwards)
+
+Step indicator at top:
+  Shows: Step 1 of 6 (we will have 6 total steps 
+  by the end of all prompts — show future steps 
+  as locked/dimmed for now)
+  
+  Steps preview (small, horizontal):
+  [1: Idea] → [2: Analysis] → [3: Components] → 
+  [4: Build Plan] → [5: Code & IDE] → [6: Deploy]
+  
+  Current step highlighted in #6C63FF
+  Future steps dimmed in #2A2A3E
+  Completed steps shown with checkmark in #00C896
+
+────────────────────────────────────
+STEP 1: IDEA INPUT
+────────────────────────────────────
+
+Layout: Centered, max-width 720px, 
+        vertically centered on screen
+
+Top badge: 
+  "✦ AI-Powered Analysis" 
+  (pill, purple border, small text)
+
+Heading: "What do you want to build?"
+Subheading: "Describe your IoT idea in plain English. 
+             The more detail, the better."
+
+Main input:
+  Large textarea (min-height 140px)
+  Placeholder: "e.g. I want to build a smart plant 
+  watering system that monitors soil moisture and 
+  automatically waters the plant when it gets dry. 
+  It should also send me a notification on my phone."
+  
+  Character counter bottom right of textarea: 
+  "X / 500" (limit 500 chars)
+  Border glows purple (#6C63FF) on focus
+
+Example prompts section:
+  Heading: "Or try one of these examples:"
+  3 clickable example chips:
+  
+  Chip 1: "🌡️ Temperature & humidity monitor 
+            with phone alerts"
+  Chip 2: "🚗 Smart parking sensor with LED 
+            indicator"
+  Chip 3: "💧 Automatic plant watering system"
+  
+  Clicking a chip fills the textarea with 
+  a fuller version of that idea automatically.
+  
+  Chip fuller versions:
+  Chip 1 fills: "I want to build a temperature and 
+  humidity monitoring system using ESP32. It should 
+  display readings on an OLED screen and send an 
+  alert to my phone when temperature exceeds 35°C."
+  
+  Chip 2 fills: "I want to build a smart parking 
+  sensor that detects if a parking spot is occupied 
+  using an ultrasonic sensor and shows availability 
+  with a green or red LED."
+  
+  Chip 3 fills: "I want to build an automatic plant 
+  watering system that checks soil moisture every 
+  hour and turns on a water pump when the soil is 
+  too dry. It should also log the data."
+
+Skill level selector (below textarea):
+  Label: "Your experience level:"
+  3 toggle buttons (select one):
+    🌱 Beginner — "New to IoT"
+    ⚡ Intermediate — "Built a few things"
+    🔥 Advanced — "I know my way around"
+  Selected state: bg #6C63FF, text white
+  Unselected: bg #12121A, border #2A2A3E
+
+Project type (below skill selector):
+  Label: "Project type:"
+  Toggle: Solo Project | Group Project
+  If Group selected: show input 
+  "Enter teammate emails (comma separated)"
+
+Bottom:
+  "Analyze My Idea →" primary button (full width)
+  Disabled state until textarea has min 20 chars
+  
+  When clicked:
+    Button shows loading state: 
+    "✦ Analyzing your idea..."
+    Spinner inside button
+    Calls Gemini API (logic below)
+    On success: transitions to Step 2
+
+────────────────────────────────────
+GEMINI AI ANALYSIS — LOGIC
+────────────────────────────────────
+
+When user clicks "Analyze My Idea":
+
+Call your Express backend at POST /api/projects/analyze
+
+Backend receives: { idea, skillLevel, projectType }
+
+Backend calls Gemini API (gemini-1.5-flash) 
+with this exact system prompt:
+
+---SYSTEM PROMPT START---
+You are Nexora's IoT project analysis AI. 
+Your job is to analyze an IoT project idea and 
+return a structured JSON response.
+
+Analyze the given idea and return ONLY a valid 
+JSON object with NO markdown, NO explanation, 
+NO code fences. Just raw JSON.
+
+Return this exact structure:
+{
+  "projectTitle": "smart concise project name",
+  "projectSummary": "2-3 sentence summary of what 
+                     this project does",
+  "howItWorks": "simple explanation of the working 
+                 principle in 3-4 sentences",
+  "estimatedComplexity": "Beginner|Intermediate|Advanced",
+  "estimatedCost": {
+    "min": number in INR,
+    "max": number in INR,
+    "currency": "INR"
+  },
+  "estimatedTime": "e.g. 1-2 weeks",
+  "components": [
+    {
+      "id": "unique_id",
+      "name": "component name",
+      "type": "microcontroller|sensor|actuator|
+               display|communication|power|other",
+      "purpose": "why this component is needed 
+                  in one sentence",
+      "estimatedCost": number in INR,
+      "isEssential": true|false,
+      "alternatives": ["alternative 1", "alternative 2"]
+    }
+  ],
+  "feasibility": {
+    "costFeasibility": {
+      "status": "good|moderate|high",
+      "note": "one line explanation"
+    },
+    "complexityFeasibility": {
+      "status": "good|moderate|high",
+      "note": "one line explanation"
+    },
+    "availabilityFeasibility": {
+      "status": "good|moderate|high",
+      "note": "one line explanation"
+    },
+    "timelineFeasibility": {
+      "status": "good|moderate|high",
+      "note": "one line explanation"
+    }
+  },
+  "risks": [
+    "risk 1 in one sentence",
+    "risk 2 in one sentence"
+  ],
+  "tips": [
+    "helpful tip 1 for this skill level",
+    "helpful tip 2"
+  ]
+}
+---SYSTEM PROMPT END---
+
+User message to Gemini:
+"Analyze this IoT project idea for a [skillLevel] 
+level user: [idea]"
+
+Parse the JSON response.
+Save the full analysis to Supabase projects table 
+(create new project row with status 'draft', 
+ai_analysis = parsed JSON, idea_input = original idea,
+title = projectTitle from response).
+Return the analysis to frontend.
+
+If Gemini returns invalid JSON: retry once.
+If retry fails: return a user-friendly error.
+
+────────────────────────────────────
+STEP 2: AI ANALYSIS RESULTS
+────────────────────────────────────
+
+This screen appears after Gemini responds.
+URL stays at /projects/new but step indicator 
+updates to Step 2.
+
+Do NOT navigate away — use React state 
+to show Step 2 content.
+
+Layout: max-width 860px, centered
+
+Top section:
+  Left aligned:
+  Small text: "✦ Analysis Complete"  (color #00C896)
+  Large heading: display projectTitle from AI response
+  Below: projectSummary text (color #9090B0)
+
+  Right side (inline with heading row):
+  Two badges:
+    Complexity badge (color based on level:
+      Beginner → green, 
+      Intermediate → yellow/warning, 
+      Advanced → red/error)
+    Time estimate badge (color #00D4FF)
+
+How It Works card:
+  Card bg #12121A, border #2A2A3E, 
+  border-radius 12px, padding 24px
+  
+  Left side: icon (lightbulb, color #6C63FF, size 24px)
+  Heading: "How It Works"
+  Body: howItWorks text from AI
+
+Estimated Cost card (inline with How It Works):
+  Show min–max range in large text
+  "₹[min] – ₹[max]"
+  Subtext: "Estimated component cost"
+
+Components Section:
+  Heading: "Required Components"
+  Subtext: "Toggle the ones you already own"
+  
+  For each component from AI response:
+    Component row card:
+      Left: Type icon (use different lucide icons 
+            for each type:
+            microcontroller → cpu
+            sensor → activity
+            actuator → zap
+            display → monitor
+            communication → wifi
+            power → battery)
+      
+      Middle:
+        Component name (bold)
+        Purpose text (small, secondary)
+        If isEssential = false: 
+          small badge "Optional"
+        If alternatives exist:
+          small collapsible "Alternatives: X, Y"
+      
+      Right:
+        Cost: "~₹[estimatedCost]"
+        "I own this" toggle switch
+          OFF state: border #2A2A3E, bg #0A0A0F
+          ON state: bg #6C63FF, shows checkmark
+          When toggled ON: row gets subtle 
+          green-tinted border #00C896
+  
+  Below component list:
+    Running cost summary:
+    "You need to purchase: ₹[calculated total 
+     of unowned components]"
+    "Total project cost: ₹[full total]"
+    Both update live as user toggles ownership
+
+Feasibility Analysis Section:
+  Heading: "Feasibility Check"
+  4 cards in a 2x2 grid:
+  
+  Each card shows:
+    Icon + Label (Cost / Complexity / 
+                  Availability / Timeline)
+    Status indicator:
+      'good' → green dot + "Good" text
+      'moderate' → yellow dot + "Moderate" text  
+      'high' → red dot + "High" text
+    Note text below (from AI response)
+
+Risks & Tips Section:
+  Two columns:
+  Left — "Risks to Watch":
+    Each risk as a row with 
+    warning icon (color #FFB84D)
+  
+  Right — "Pro Tips":
+    Each tip as a row with 
+    lightbulb icon (color #00D4FF)
+
+Bottom Action Bar (fixed at bottom of screen):
+  Left: "← Back" secondary button
+  Center: Project title (small, muted)
+  Right: "Generate Build Plan →" primary button
+    → This button will be wired up in Prompt 3
+    → For now just save component ownership 
+      selections to Supabase and show 
+      "Build plan coming soon!" toast
+
+═══════════════════════════════════════
+LOADING & TRANSITION STATES
+═══════════════════════════════════════
+
+When Gemini is analyzing (between Step 1 → Step 2):
+  Full screen overlay (semi-transparent dark)
+  Centered content:
+    Animated logo or sparkles icon 
+    (pulse animation, color #6C63FF)
+    
+    Rotating status messages 
+    (cycle every 1.5 seconds):
+    "✦ Understanding your idea..."
+    "✦ Identifying components..."
+    "✦ Checking feasibility..."
+    "✦ Calculating costs..."
+    "✦ Almost ready..."
+    
+  Progress bar at bottom of overlay:
+    Animated indeterminate progress
+    Color: #6C63FF
+
+On success: overlay fades out (0.4s), 
+Step 2 fades in (0.3s)
+
+On error: overlay shows error state:
+  Red icon
+  "Analysis failed. Please try again."
+  "Try Again" button
+
+═══════════════════════════════════════
+TOAST NOTIFICATION SYSTEM
+═══════════════════════════════════════
+
+Create a reusable Toast component:
+File: client/src/components/ui/Toast.jsx
+
+Position: top-right, fixed
+Types: success (green) | error (red) | 
+       info (blue) | warning (yellow)
+
+Each toast:
+  Icon matching type
+  Message text
+  Auto-dismiss after 4 seconds
+  Manual close button (X)
+  Slide in from right animation
+  Slide out to right on dismiss
+
+Create a useToast hook that can be called 
+from anywhere in the app.
+
+═══════════════════════════════════════
+BACKEND ROUTES TO ADD
+═══════════════════════════════════════
+
+Add to server/routes/:
+
+POST /api/projects/analyze
+  Body: { idea, skillLevel, projectType, userId }
+  → Calls Gemini API with system prompt above
+  → Creates project in Supabase
+  → Returns { projectId, analysis }
+
+POST /api/projects/save-components
+  Body: { projectId, components (with ownership), userId }
+  → Updates project components in Supabase
+  → Returns { success }
+
+GET /api/projects/:userId
+  → Returns all projects for user from Supabase
+  → Ordered by updated_at desc
+
+GET /api/projects/single/:projectId
+  → Returns full project data
+
+═══════════════════════════════════════
+IMPORTANT RULES
+═══════════════════════════════════════
+
+1. All API calls from frontend go through 
+   the Express backend — never call Gemini 
+   directly from frontend (API key security).
+
+2. Every Supabase operation must handle errors 
+   gracefully with user-facing messages.
+
+3. The component ownership state must persist — 
+   if user refreshes, their toggles are saved.
+
+4. All animations must use CSS transitions 
+   or Framer Motion (if available) — 
+   no janky instant state changes.
+
+5. Mobile responsive — the component list 
+   especially must work on small screens.
+
+6. Do not hardcode any API keys in frontend code.
+
+7. After building, confirm:
+   - /dashboard loads with stats
+   - /projects shows empty state for new users
+   - /projects/new Step 1 renders correctly
+   - Gemini API call works and Step 2 renders
+   - Component toggles work and save to Supabase
