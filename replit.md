@@ -91,6 +91,34 @@ CREATE TABLE projects (
 -- ALTER TABLE projects ADD COLUMN IF NOT EXISTS completed_steps integer[];
 -- ALTER TABLE projects ADD COLUMN IF NOT EXISTS instruction_checks jsonb;
 
+-- AI Conversations table (Prompt 4)
+CREATE TABLE ai_conversations (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  project_id uuid REFERENCES projects(id),
+  user_id uuid REFERENCES profiles(id),
+  messages jsonb DEFAULT '[]',
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- AI Feedback table (Prompt 4)
+CREATE TABLE ai_feedback (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  message_id text NOT NULL,
+  project_id uuid REFERENCES projects(id),
+  user_id uuid REFERENCES profiles(id),
+  feedback text CHECK (feedback IN ('helpful','not_helpful')),
+  created_at timestamptz DEFAULT now()
+);
+
+-- Enable RLS on new tables
+ALTER TABLE ai_conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_feedback ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies for new tables
+CREATE POLICY "Users can manage own conversations" ON ai_conversations FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users can manage own feedback" ON ai_feedback FOR ALL USING (auth.uid() = user_id);
+
 -- Project members table
 CREATE TABLE project_members (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -139,20 +167,31 @@ Colors (dark purple-tinted palette):
 
 ## Product
 
-Nexora is a complete IoT project creation platform. Prompts 1–3 of 14 complete:
+Nexora is a complete IoT project creation platform. Prompts 1–4 of 14 complete:
 - **Prompt 1**: Landing page, auth (login/signup/role-select), dashboard shell, Supabase setup
 - **Prompt 2**: Project creation (2-step: AI analysis → component selection), Gemini integration, project/stats routes
 - **Prompt 3**: Build plan generator (Gemini), Project Workspace (`/workspace/:id`) with 3-panel layout:
   - Left panel: step-by-step build plan (locked/active/completed states, checkboxes, wiring notes, safety warnings)
   - Right panel: Nexora IDE (Monaco Editor, custom nexora-dark theme, C++/Arduino, code push on step completion, highlight animation)
   - Right panel tabs: Code Editor + Library Reference (auto-accumulated per completed step)
-  - Bottom panel: AI Assistant placeholder (Prompt 4 will wire this)
   - Resizable panels, 30s auto-save, state persists across reloads
+- **Prompt 4**: Full context-aware AI Assistant:
+  - Bottom panel in workspace: real Gemini-powered chat with full project context injection every message
+  - Conversation persists in Supabase `ai_conversations` table per project
+  - Smart suggested prompts that change by build phase (Setup/Wiring/Coding/Testing/Integration/Deployment)
+  - Markdown + syntax-highlighted code rendering in AI responses
+  - "Push to IDE" button on AI code blocks (replace or insert mode)
+  - Error debugger modal: paste Arduino error → AI diagnoses with structured response format
+  - "Explain this" tooltip: select code in Monaco → floating button → AI explains in chat panel
+  - Voice input via Web Speech API
+  - 👍/👎 feedback saved to `ai_feedback` table
+  - Rate limiting: 30 messages/hour per user (in-memory)
+  - Floating AI button on all non-workspace pages: general IoT Q&A mode (session-only, no project context)
 
 ## User preferences
 
 - Design system must be consistent across every screen built in all future prompts
-- This is Prompt 3 of 14 — future prompts will build on top of this foundation
+- This is Prompt 4 of 14 — future prompts will build on top of this foundation
 
 ## Gotchas
 

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/context/AuthContext";
 import { useAuth } from "@/hooks/useAuth";
+import FloatingAI from "@/components/ai/FloatingAI";
 
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
@@ -41,29 +42,39 @@ function ProtectedRoute({ component: Component }: { component: () => ReactNode }
   return <Component />;
 }
 
+function FloatingAIWrapper() {
+  const [location] = useLocation();
+  const isWorkspace = location.startsWith("/workspace/");
+  if (isWorkspace) return null;
+  return <FloatingAI />;
+}
+
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Landing} />
-      <Route path="/login" component={Login} />
-      <Route path="/signup" component={Signup} />
-      <Route path="/role-select">
-        <ProtectedRoute component={RoleSelect} />
-      </Route>
-      <Route path="/dashboard">
-        <ProtectedRoute component={Dashboard} />
-      </Route>
-      <Route path="/projects">
-        <ProtectedRoute component={Projects} />
-      </Route>
-      <Route path="/projects/new">
-        <ProtectedRoute component={NewProject} />
-      </Route>
-      <Route path="/workspace/:projectId">
-        <ProtectedRoute component={Workspace} />
-      </Route>
-      <Route component={NotFound} />
-    </Switch>
+    <>
+      <Switch>
+        <Route path="/" component={Landing} />
+        <Route path="/login" component={Login} />
+        <Route path="/signup" component={Signup} />
+        <Route path="/role-select">
+          <ProtectedRoute component={RoleSelect} />
+        </Route>
+        <Route path="/dashboard">
+          <ProtectedRoute component={Dashboard} />
+        </Route>
+        <Route path="/projects">
+          <ProtectedRoute component={Projects} />
+        </Route>
+        <Route path="/projects/new">
+          <ProtectedRoute component={NewProject} />
+        </Route>
+        <Route path="/workspace/:projectId">
+          <ProtectedRoute component={Workspace} />
+        </Route>
+        <Route component={NotFound} />
+      </Switch>
+      <FloatingAIWrapper />
+    </>
   );
 }
 

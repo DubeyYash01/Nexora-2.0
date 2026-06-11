@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
 import {
-  ArrowLeft, CheckCircle, Lock, Clock, BookOpen,
+  ArrowLeft, CheckCircle, Lock, Clock,
   AlertTriangle, Zap, ChevronDown, ChevronRight,
-  Loader2, Sparkles, Send, Cpu, Timer, Library,
+  Loader2, Cpu, Timer, Library, BookOpen,
   CheckSquare, Square, Edit2, Save
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -11,6 +11,7 @@ import { authFetch } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import NexoraIDE from "@/components/ide/NexoraIDE";
 import type { Library as LibraryType } from "@/components/ide/NexoraIDE";
+import AIAssistant from "@/components/ai/AIAssistant";
 
 /* ── Types ───────────────────────────────────────────── */
 
@@ -57,12 +58,16 @@ interface Project {
   id: string;
   title: string;
   build_plan: { buildPlan: BuildPlan } | null;
-  ai_analysis: { skillLevel?: string } | null;
+  ai_analysis: {
+    skillLevel?: string;
+    projectSummary?: string;
+    components?: Array<{ name: string; purpose: string }>;
+  } | null;
   current_step: number;
   completed_steps: number[] | null;
   ide_code: string | null;
   instruction_checks: Record<string, boolean[]> | null;
-  components: { list?: { name: string }[] } | null;
+  components: { list?: Array<{ name: string; purpose: string }> } | null;
 }
 
 /* ── Helpers ─────────────────────────────────────────── */
@@ -318,17 +323,15 @@ export default function Workspace() {
   const [instructionChecks, setInstructionChecks] = useState<Record<string, boolean[]>>({});
   const [completingStep, setCompletingStep] = useState(false);
 
-  // AI panel
-  const [aiExpanded, setAiExpanded] = useState(true);
+  // AI explain-this bridge
+  const [explainMessage, setExplainMessage] = useState<string | undefined>(undefined);
 
   // Title editing
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState("");
 
-  // Panel widths (left panel)
+  // Panel widths (left panel only — AI manages its own height)
   const [leftWidth, setLeftWidth] = useState(320);
-  const [bottomHeight, setBottomHeight] = useState(200);
-  const draggingH = useRef(false);
   const draggingV = useRef(false);
 
   // Save status
@@ -484,15 +487,9 @@ export default function Workspace() {
         const newW = Math.max(240, Math.min(500, e.clientX));
         setLeftWidth(newW);
       }
-      if (draggingH.current) {
-        const totalH = window.innerHeight - 52;
-        const newH = Math.max(120, Math.min(400, window.innerHeight - e.clientY));
-        if (newH < totalH) setBottomHeight(newH);
-      }
     };
     const onMouseUp = () => {
       draggingV.current = false;
-      draggingH.current = false;
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
@@ -712,102 +709,41 @@ export default function Workspace() {
               highlightLines={highlightLines}
               libraries={accumulatedLibraries}
               onCodeChange={handleCodeChange}
-            />
-          </div>
-
-          {/* Horizontal resize handle */}
-          {aiExpanded && (
-            <div
-              className="panel-resize-handle-h"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                draggingH.current = true;
-                document.body.style.cursor = "row-resize";
-                document.body.style.userSelect = "none";
+              onExplainCode={(selected) => {
+                setExplainMessage(selected);
               }}
             />
-          )}
+          </div>
 
           {/* AI Assistant panel */}
-          <div
-            className="flex flex-col flex-shrink-0"
-            style={{
-              height: aiExpanded ? bottomHeight : 44,
-              borderTop: "1px solid #2A2A3E",
-              background: "#0D0D14",
-              transition: aiExpanded ? "none" : "height 0.2s ease",
-            }}
-          >
-            {/* AI Header */}
-            <div
-              className="flex items-center justify-between px-4 flex-shrink-0"
-              style={{ height: 44, borderBottom: aiExpanded ? "1px solid #2A2A3E" : "none" }}
-            >
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4" style={{ color: "#6C63FF" }} />
-                <span className="text-sm font-semibold" style={{ color: "#F0F0FF" }}>
-                  Nexora AI
-                </span>
-              </div>
-              <button
-                onClick={() => setAiExpanded((v) => !v)}
-                className="text-xs px-2 py-1 rounded transition-colors"
-                style={{ color: "#5A5A7A", background: "#1A1A2E" }}
-              >
-                {aiExpanded ? "Minimize" : "Expand"}
-              </button>
-            </div>
-
-            {aiExpanded && (
-              <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Placeholder content */}
-                <div className="flex-1 flex flex-col items-center justify-center gap-3">
-                  <Sparkles className="w-8 h-8 opacity-20" style={{ color: "#6C63FF" }} />
-                  <p className="text-xs text-center" style={{ color: "#3A3A5A" }}>
-                    AI Assistant activates when you start building
-                  </p>
-                  {/* Suggestion chips */}
-                  <div className="flex gap-2 flex-wrap justify-center">
-                    {["Explain this step", "I'm stuck on wiring", "Debug my code"].map((chip) => (
-                      <button
-                        key={chip}
-                        disabled
-                        className="text-xs px-3 py-1.5 rounded-full border opacity-30 cursor-not-allowed"
-                        style={{ borderColor: "#2A2A3E", color: "#5A5A7A" }}
-                      >
-                        {chip}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Input bar */}
-                <div
-                  className="flex gap-2 px-4 py-3 flex-shrink-0"
-                  style={{ borderTop: "1px solid #2A2A3E" }}
-                >
-                  <input
-                    disabled
-                    placeholder="Ask anything about your current step..."
-                    className="flex-1 text-sm rounded-lg px-3 py-2 outline-none"
-                    style={{
-                      background: "#1A1A2E",
-                      border: "1px solid #2A2A3E",
-                      color: "#F0F0FF",
-                      opacity: 0.4,
-                    }}
-                  />
-                  <button
-                    disabled
-                    className="p-2 rounded-lg opacity-30 cursor-not-allowed"
-                    style={{ background: "#6C63FF" }}
-                  >
-                    <Send className="w-4 h-4 text-white" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          {project && (
+            <AIAssistant
+              project={project}
+              currentStep={currentStep}
+              ideCode={ideCode}
+              libraryNames={accumulatedLibraries.map((l) => l.name)}
+              completedSteps={Array.from(completedSteps)}
+              userName={user?.user_metadata?.full_name ?? user?.email ?? ""}
+              onPushCode={(code, mode) => {
+                if (mode === "replace") {
+                  setIdeCode(code);
+                  setHighlightLines(
+                    code.split("\n").map((_, i) => i + 1)
+                  );
+                  setTimeout(() => setHighlightLines([]), 3600);
+                } else {
+                  // Insert at end for "insert at cursor" (Monaco cursor not accessible here)
+                  setIdeCode((prev) => prev + "\n" + code);
+                }
+                setSaveStatus("unsaved");
+                if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+                saveTimerRef.current = setTimeout(() => saveCode(ideCode + "\n" + code), 30000);
+                toast({ title: "Code pushed to IDE" });
+              }}
+              externalMessage={explainMessage}
+              onExternalMessageHandled={() => setExplainMessage(undefined)}
+            />
+          )}
         </div>
       </div>
     </div>

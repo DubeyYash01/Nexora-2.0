@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import Editor, { useMonaco } from "@monaco-editor/react";
-import { Copy, Download, Package, Info, Check } from "lucide-react";
+import { Copy, Download, Package, Info, Check, Sparkles } from "lucide-react";
 
 const WELCOME_CODE = `// ╔══════════════════════════════════╗
 // ║     Welcome to Nexora IDE        ║
@@ -26,6 +26,7 @@ interface NexoraIDEProps {
   highlightLines: number[];
   libraries: Library[];
   onCodeChange: (code: string) => void;
+  onExplainCode?: (selected: string) => void;
 }
 
 // Use any for editor ref since monaco-editor types are only available at runtime
@@ -39,6 +40,7 @@ export default function NexoraIDE({
   highlightLines,
   libraries,
   onCodeChange,
+  onExplainCode,
 }: NexoraIDEProps) {
   const monaco = useMonaco();
   const editorRef = useRef<EditorInstance>(null);
@@ -46,6 +48,10 @@ export default function NexoraIDE({
   const [activeTab, setActiveTab] = useState<"editor" | "libraries">("editor");
   const [copied, setCopied] = useState(false);
   const lineCount = code ? code.split("\n").length : WELCOME_CODE.split("\n").length;
+
+  // Explain this tooltip
+  const [explainTooltip, setExplainTooltip] = useState<{ top: number; left: number; text: string } | null>(null);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!monaco) return;
@@ -216,7 +222,30 @@ export default function NexoraIDE({
           </div>
 
           {/* Monaco Editor */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden relative" ref={editorContainerRef}>
+            {/* Explain this tooltip */}
+            {explainTooltip && onExplainCode && (
+              <button
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const text = explainTooltip.text;
+                  setExplainTooltip(null);
+                  onExplainCode(`Explain this code to me in simple terms:\n\`\`\`cpp\n${text}\n\`\`\``);
+                }}
+                className="absolute z-50 flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg font-semibold shadow-lg transition-all"
+                style={{
+                  top: explainTooltip.top,
+                  left: explainTooltip.left,
+                  background: "#6C63FF",
+                  color: "#fff",
+                  boxShadow: "0 4px 16px rgba(108,99,255,0.4)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <Sparkles className="w-3 h-3" />
+                Explain this
+              </button>
+            )}
             <Editor
               height="100%"
               language="cpp"
@@ -224,6 +253,27 @@ export default function NexoraIDE({
               value={code || WELCOME_CODE}
               onMount={(editor) => {
                 editorRef.current = editor;
+                // Selection listener for "Explain this" tooltip
+                editor.onDidChangeCursorSelection((e: { selection: { isEmpty(): boolean; startLineNumber: number } }) => {
+                  const selection = editor.getSelection();
+                  if (!selection || selection.isEmpty()) {
+                    setExplainTooltip(null);
+                    return;
+                  }
+                  const selectedText = editor.getModel()?.getValueInRange(selection) ?? "";
+                  if (!selectedText.trim() || selectedText.length < 5) {
+                    setExplainTooltip(null);
+                    return;
+                  }
+                  // Get position near selection
+                  const scrolledVisiblePosition = editor.getScrolledVisiblePosition({ lineNumber: e.selection.startLineNumber, column: 1 });
+                  const container = editorContainerRef.current;
+                  if (scrolledVisiblePosition && container) {
+                    const top = Math.max(0, scrolledVisiblePosition.top - 36);
+                    const left = 16;
+                    setExplainTooltip({ top, left, text: selectedText });
+                  }
+                });
               }}
               onChange={(val) => {
                 if (val !== undefined && val !== WELCOME_CODE) onCodeChange(val);

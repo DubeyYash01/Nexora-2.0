@@ -1,0 +1,691 @@
+This is Prompt 4 of 14 for building Nexora.
+Prompts 1, 2, 3 already built: foundation, auth,
+dashboard, project creation, AI analysis,
+component selection, build plan, and the 
+Nexora IDE with incremental code push.
+
+Do NOT touch or recreate anything from 
+Prompts 1, 2, or 3. Only ADD to what exists.
+
+═══════════════════════════════════════
+WHAT THIS PROMPT BUILDS
+═══════════════════════════════════════
+
+1. Full context-aware AI Assistant panel
+   (replaces the placeholder from Prompt 3)
+2. Floating AI Assistant button 
+   (accessible from every page)
+3. AI Assistant conversation memory 
+   (per project, persists across sessions)
+4. Smart context injection system
+   (AI always knows your project state)
+5. Suggested prompts engine
+   (changes based on current step and phase)
+6. Error debugging flow
+   (paste error → AI diagnoses and fixes)
+7. Code explanation mode
+   (highlight code → ask AI to explain)
+
+═══════════════════════════════════════
+THE CORE PRINCIPLE OF THIS AI ASSISTANT
+═══════════════════════════════════════
+
+This is NOT a generic chatbot.
+This is NOT a reskinned ChatGPT.
+
+Every single message the AI receives contains:
+  - The full project description
+  - The user's skill level
+  - All components being used
+  - The current build step
+  - The current step's instructions
+  - The full current IDE code
+  - The last 10 messages of conversation
+  - What the user just asked
+
+The AI never asks "what project are you 
+working on?" It already knows. It never asks 
+"what components do you have?" It already knows.
+
+This context-awareness IS the product difference.
+
+═══════════════════════════════════════
+SUPABASE CHANGES NEEDED
+═══════════════════════════════════════
+
+Add new table:
+
+TABLE: ai_conversations
+  id              uuid (gen_random_uuid(), pk)
+  project_id      uuid (references projects.id)
+  user_id         uuid (references profiles.id)
+  messages        jsonb  (array of message objects)
+  created_at      timestamp with time zone
+  updated_at      timestamp with time zone
+
+Each message object in the jsonb array:
+  {
+    id: "unique string",
+    role: "user" | "assistant",
+    content: "message text",
+    timestamp: "ISO string",
+    context: {
+      stepNumber: number,
+      phase: "string",
+      messageType: "question|error|explanation
+                    |suggestion|general"
+    }
+  }
+
+RLS: users can only read/write their own 
+conversation rows.
+
+═══════════════════════════════════════
+CONTEXT INJECTION SYSTEM
+═══════════════════════════════════════
+
+File: client/src/lib/aiContext.js
+
+This file builds the context object that 
+gets sent with EVERY AI message.
+
+Function: buildProjectContext(project, currentStep)
+
+Returns a structured context string:
+
+---CONTEXT TEMPLATE---
+=== NEXORA PROJECT CONTEXT ===
+
+PROJECT: [project.title]
+DESCRIPTION: [project.ai_analysis.projectSummary]
+PLATFORM: [buildPlan.platform]
+LANGUAGE: [buildPlan.programmingLanguage]
+SKILL LEVEL: [project skill level]
+
+COMPONENTS IN USE:
+[list each component: name — purpose]
+
+CURRENT BUILD STEP: Step [X] of [Y]
+STEP TITLE: [current step title]
+STEP PHASE: [phase]
+STEP OBJECTIVE: [objective]
+
+CURRENT STEP INSTRUCTIONS:
+[numbered list of instructions]
+
+CURRENT IDE CODE:
+```cpp
+[full current code from IDE]
+```
+
+LIBRARIES INSTALLED SO FAR:
+[list library names]
+
+COMPLETED STEPS: [X, Y, Z]
+REMAINING STEPS: [A, B, C]
+=== END CONTEXT ===
+---END TEMPLATE---
+
+This context is prepended to every 
+single Gemini API call from the assistant.
+
+═══════════════════════════════════════
+BOTTOM PANEL — FULL AI ASSISTANT
+(replaces placeholder from Prompt 3)
+═══════════════════════════════════════
+
+File: client/src/components/ai/AIAssistant.jsx
+
+Panel states:
+  Collapsed: 48px height, 
+             shows header bar only
+  Normal: 260px height (default)
+  Expanded: 480px height
+  
+  Toggle between states with 
+  chevron button in header.
+  Smooth height transition: 0.25s ease.
+
+────────────────────────────────────
+PANEL HEADER (always visible)
+────────────────────────────────────
+
+Left side:
+  Animated icon: 
+    Sparkles icon with a subtle 
+    pulse glow animation
+    Color: #6C63FF
+    Glow: 0 0 12px rgba(108,99,255,0.6)
+  
+  "Nexora AI" label (bold, #F0F0FF)
+  
+  Status indicator (small dot + text):
+    When idle: gray dot "Ready"
+    When thinking: 
+      pulsing purple dot "Thinking..."
+    When responding: 
+      pulsing cyan dot "Responding..."
+
+Right side:
+  Context badge:
+    Small pill showing current step:
+    "Step [X] · [Phase]"
+    bg: rgba(108,99,255,0.15)
+    color: #6C63FF
+  
+  Expand/collapse chevron button
+  Clear conversation button 
+  (trash icon, only visible on hover)
+
+────────────────────────────────────
+CONVERSATION AREA
+────────────────────────────────────
+
+Scrollable message list.
+Auto-scrolls to latest message.
+Max height fills panel minus header 
+and input bar.
+
+Message bubble styles:
+
+USER messages:
+  Aligned right
+  bg: #6C63FF
+  color: white
+  border-radius: 12px 12px 2px 12px
+  max-width: 80%
+  padding: 10px 14px
+  font-size: 14px
+
+ASSISTANT messages:
+  Aligned left
+  bg: #1A1A2E
+  border: 1px solid #2A2A3E
+  color: #F0F0FF
+  border-radius: 12px 12px 12px 2px
+  max-width: 85%
+  padding: 12px 16px
+  font-size: 14px
+  
+  If message contains code blocks:
+    Render with syntax highlighting
+    bg: #0D0D14
+    border: 1px solid #2A2A3E
+    border-radius: 8px
+    padding: 12px
+    font-family: JetBrains Mono
+    font-size: 13px
+    "Copy" button top-right of code block
+    
+    If code block is Arduino/C++ code:
+      Show "Push to IDE" button below 
+      code block (small, secondary style)
+      → Clicking pushes that specific 
+        code snippet to IDE at cursor position
+
+ASSISTANT message actions (appear on hover):
+  Small row below message:
+  👍 helpful  |  👎 not helpful  |  📋 copy
+
+TYPING INDICATOR (while AI is responding):
+  Assistant bubble with three animated dots
+  Dots bounce sequentially
+  color: #6C63FF
+
+WELCOME MESSAGE (shown on first open):
+  Assistant bubble showing:
+  
+  "Hi [first name] 👋 I'm your Nexora AI 
+  assistant for this project.
+  
+  I already know everything about your 
+  **[project title]** — your components, 
+  your current step, and your code.
+  
+  Ask me anything. I'm here to help you 
+  build, debug, and understand every 
+  part of your project."
+  
+  Below message: 3 quick-start chips:
+  "What should I do in Step 1?"
+  "Explain my components"
+  "What could go wrong?"
+
+────────────────────────────────────
+SMART SUGGESTED PROMPTS
+────────────────────────────────────
+
+Above the input bar: 
+horizontal scrollable row of suggestion chips.
+
+These chips change based on current step phase:
+
+SETUP phase chips:
+  "What do I need to prepare?"
+  "Explain the project overview"
+  "What tools do I need?"
+
+WIRING phase chips:
+  "Is this wiring safe?"
+  "Explain the circuit connections"
+  "What if I don't have [component]?"
+  "Show me a wiring diagram description"
+
+CODING phase chips:
+  "Explain the code for this step"
+  "Why do I need this library?"
+  "How does [function] work?"
+  "Add a comment to my code"
+
+TESTING phase chips:
+  "My sensor isn't reading correctly"
+  "How do I use Serial Monitor?"
+  "What values should I expect?"
+  "My ESP32 isn't connecting"
+
+INTEGRATION phase chips:
+  "How do I combine these features?"
+  "Debug this integration"
+  "Optimize my code"
+
+DEPLOYMENT phase chips:
+  "How do I upload to my device?"
+  "Make my device run on battery"
+  "How do I make it run on startup?"
+
+Clicking a chip fills input 
+and auto-sends the message.
+
+────────────────────────────────────
+INPUT BAR
+────────────────────────────────────
+
+Bottom of panel, always visible.
+
+Left side:
+  Attach/context button (paperclip icon):
+    Dropdown on click:
+    - "Share current code" 
+      → attaches current IDE code to message
+    - "Share error message" 
+      → opens error input modal
+    - "Ask about specific component"
+      → shows component picker
+
+Center: 
+  Text input
+  Placeholder changes by phase:
+    Setup: "Ask about setup or preparation..."
+    Wiring: "Describe your wiring question..."
+    Coding: "Ask about the code or logic..."
+    Testing: "Describe what's not working..."
+    Default: "Ask anything about your project..."
+  
+  Shift+Enter for new line
+  Enter to send
+  Max 1000 characters
+  Character counter appears at 800+
+
+Right side:
+  Send button (arrow icon)
+  bg: #6C63FF
+  Disabled + gray when input is empty
+  Shows spinner when AI is responding
+  
+  Voice input button (mic icon):
+    Uses Web Speech API
+    On click: start recording
+    On stop: transcribe to input field
+    Show recording indicator (red dot pulse)
+
+────────────────────────────────────
+ERROR DEBUGGING FLOW
+────────────────────────────────────
+
+File: client/src/components/ai/ErrorDebugger.jsx
+
+Triggered by:
+  - "Share error message" from attach menu
+  - "I'm getting an error" suggestion chip
+  - Dedicated "Debug" button in IDE top bar
+
+Opens a modal:
+
+  Heading: "Debug an Error"
+  
+  Section 1 — Error Input:
+    Label: "Paste your error message:"
+    Large textarea (monospace font)
+    Placeholder: "Paste the error from 
+    Arduino IDE Serial Monitor here..."
+  
+  Section 2 — Context (auto-filled):
+    "Current step: [step title]"  
+    "Platform: [ESP32 etc]"
+    Checkbox: "Include my current code" 
+    (checked by default)
+  
+  "Diagnose Error" button (primary, full width)
+  
+  On submit: closes modal, sends to AI with 
+  special error diagnosis prompt format:
+  
+  Message sent to AI:
+  "ERROR DIAGNOSIS REQUEST:
+   Error message: [pasted error]
+   Include code context: [yes/no]
+   Please:
+   1. Identify what caused this error
+   2. Explain it simply for my skill level
+   3. Give exact steps to fix it
+   4. Show corrected code if applicable"
+
+AI response for errors MUST follow this format:
+  
+  Enforce in system prompt:
+  "When responding to ERROR DIAGNOSIS requests,
+  always structure your response as:
+  
+  🔍 **What went wrong:**
+  [simple explanation]
+  
+  🛠️ **How to fix it:**
+  [numbered steps]
+  
+  ✅ **Corrected code:** (if applicable)
+  [code block]
+  
+  💡 **Pro tip:**
+  [one helpful tip to avoid this in future]"
+
+────────────────────────────────────
+CODE EXPLANATION MODE
+────────────────────────────────────
+
+When user selects text in Monaco Editor:
+  A floating tooltip appears near selection:
+  Small button: "✦ Explain this"
+  
+  Clicking it:
+    Gets selected text
+    Sends to AI assistant:
+    "Explain this code to me in simple terms 
+     for a [skill level] learner:
+     [selected code]"
+    
+    Expands AI panel if collapsed
+    Shows response in conversation
+
+Implement using Monaco's 
+onDidChangeCursorSelection event.
+
+────────────────────────────────────
+"PUSH TO IDE" FROM AI RESPONSES
+────────────────────────────────────
+
+When AI response contains a code block:
+  Show "Push to IDE" button below code block.
+  
+  On click:
+    If IDE is empty: replace all content
+    If IDE has code: show choice modal:
+      "Replace all code" or 
+      "Insert at cursor position"
+    
+    After push: 
+      Highlight inserted lines (same system 
+      as step completion highlights)
+      Show toast: "Code pushed to IDE"
+
+═══════════════════════════════════════
+GEMINI API CALL FOR AI ASSISTANT
+═══════════════════════════════════════
+
+Backend route: POST /api/ai/chat
+
+Body received:
+  {
+    projectId,
+    userId,
+    message,
+    conversationHistory,  
+    projectContext,
+    messageType
+  }
+
+System prompt sent to Gemini:
+
+---SYSTEM PROMPT START---
+You are Nexora AI — an expert IoT engineering 
+assistant embedded inside the Nexora platform.
+
+YOUR PERSONALITY:
+- Encouraging and patient with beginners
+- Technical and precise with advanced users
+- Adapt your language to the user's skill level
+- Never condescending, always supportive
+- Concise but complete — no unnecessary padding
+
+YOUR CAPABILITIES:
+- Deep knowledge of ESP32, Arduino, 
+  sensors, actuators, IoT protocols
+- Arduino C++ programming expert
+- Circuit design and wiring guidance
+- Debugging and error diagnosis
+- Component substitution suggestions
+- Library recommendations
+
+CRITICAL RULES:
+1. You ALWAYS have full project context.
+   Never ask the user to re-explain their project.
+2. When suggesting code: always use the SAME 
+   platform and libraries already in the project.
+3. When explaining: match the user's skill level.
+   Beginner = simple analogies, no jargon.
+   Advanced = technical depth welcome.
+4. Keep responses focused and actionable.
+5. If suggesting code changes: show the 
+   specific lines to change, not the whole file.
+6. For wiring questions: describe connections 
+   clearly (e.g. "Connect GPIO 4 on ESP32 
+   to the DATA pin of the DHT22")
+7. Never suggest components not in the 
+   user's component list unless explicitly asked.
+
+[PROJECT CONTEXT IS INJECTED HERE]
+---SYSTEM PROMPT END---
+
+Conversation is sent as the messages array 
+(last 10 messages for token efficiency):
+[
+  { role: "user", content: "..." },
+  { role: "model", content: "..." },
+  ...
+  { role: "user", content: "[current message]" }
+]
+
+Save assistant response to 
+ai_conversations table in Supabase.
+
+Return { response, messageId } to frontend.
+
+Rate limiting:
+  Max 30 messages per user per hour 
+  (track in Supabase or in-memory).
+  If limit hit: show friendly message:
+  "You've sent a lot of messages! 
+   Take a 5-minute break and come back. 
+   Free plan allows 30 messages/hour."
+
+═══════════════════════════════════════
+FLOATING AI BUTTON (outside workspace)
+═══════════════════════════════════════
+
+File: client/src/components/ai/FloatingAI.jsx
+
+On pages OTHER than /workspace 
+(dashboard, projects list, etc.):
+Show a floating action button:
+
+  Position: fixed, bottom-right, 
+            margin 24px
+  
+  Button: circular, 56px diameter
+  bg: #6C63FF
+  Shadow: 0 4px 24px rgba(108,99,255,0.4)
+  Icon: sparkles (white)
+  
+  Pulse ring animation 
+  (expanding ring every 3 seconds)
+  
+  On hover: 
+    Scale 1.08
+    Tooltip: "Ask Nexora AI"
+  
+  On click: 
+    Opens a floating chat panel
+    (not full workspace AI — 
+     smaller, more compact version)
+    
+    Panel: 380px wide, 520px tall
+    Positioned above the button
+    Slide up animation on open
+    
+    This version has NO project context 
+    (user isn't in a workspace)
+    Shows general IoT assistant mode:
+    
+    Welcome message:
+    "Hi! I'm Nexora AI. 
+    I can answer general IoT questions 
+    or help you plan your next project.
+    Open a project for full context-aware help."
+    
+    Works as a general IoT Q&A assistant.
+    Same Gemini backend but without 
+    project context injection.
+    
+    Conversation does NOT persist 
+    (session only outside workspace).
+
+═══════════════════════════════════════
+MARKDOWN RENDERING IN AI RESPONSES
+═══════════════════════════════════════
+
+Install: npm install react-markdown
+         npm install react-syntax-highlighter
+
+AI responses must render markdown properly:
+  **bold** → bold text
+  *italic* → italic text  
+  `code` → inline code (bg #1A1A2E, 
+            color #00D4FF, 
+            border-radius 4px,
+            padding 2px 6px)
+```code blocks``` → syntax highlighted 
+                      with copy button
+  Numbered lists → proper list rendering
+  Bullet lists → proper list rendering
+  Headers → slightly larger bold text
+
+Do NOT render raw markdown symbols 
+as plain text.
+
+═══════════════════════════════════════
+BACKEND ROUTES TO ADD
+═══════════════════════════════════════
+
+POST /api/ai/chat
+  Body: { projectId, userId, message,
+          conversationHistory, 
+          projectContext, messageType }
+  → Builds full system prompt 
+    with context injected
+  → Calls Gemini API
+  → Saves to ai_conversations
+  → Returns { response, messageId }
+
+POST /api/ai/rate-check
+  Body: { userId }
+  → Checks message count in last hour
+  → Returns { allowed: bool, 
+               remaining: number,
+               resetIn: minutes }
+
+GET /api/ai/conversation/:projectId
+  → Returns full conversation history 
+    for this project
+  → Ordered by timestamp asc
+
+DELETE /api/ai/conversation/:projectId
+  → Clears conversation for this project
+  → Returns { success }
+
+POST /api/ai/feedback
+  Body: { messageId, projectId, 
+          userId, feedback: 'helpful'|'not_helpful' }
+  → Saves feedback to Supabase
+    (add ai_feedback table:
+     id, message_id, project_id, 
+     user_id, feedback, created_at)
+  → Returns { success }
+
+═══════════════════════════════════════
+IMPORTANT RULES
+═══════════════════════════════════════
+
+1. Context injection is NON-NEGOTIABLE.
+   Every single message to Gemini from 
+   the workspace MUST include full 
+   project context. No exceptions.
+
+2. Conversation history must load instantly
+   when workspace opens — fetch from 
+   Supabase on mount, not on first message.
+
+3. The "Push to IDE" feature on code blocks
+   is a key differentiator. Make it 
+   prominent and smooth.
+
+4. Rate limiting must be graceful — 
+   never hard-crash, always show 
+   a friendly helpful message.
+
+5. On mobile: AI panel becomes a 
+   full-screen bottom sheet that 
+   slides up when opened.
+
+6. AI responses must NEVER show the 
+   raw context/system prompt to the user.
+   Only show the actual response content.
+
+7. Typing indicator must show immediately
+   when user sends — before API responds.
+   Never leave user staring at nothing.
+
+8. After building confirm:
+   - AI panel expands/collapses smoothly
+   - Sending a message gets a response
+   - Context is correctly injected 
+     (test: ask "what project am I working on?"
+      AI should answer correctly)
+   - Suggested chips change based on 
+     current step phase
+   - Error debugger modal works
+   - Code explanation on text selection works
+   - "Push to IDE" on AI code blocks works
+   - Floating AI button works on dashboard
+   - Conversation persists on refresh
+```
+
+---
+
+After Replit builds this, test these specifically:
+
+- Ask the AI "what project am I working on?" — it must answer correctly without you telling it
+- Ask "what step am I on?" — must answer correctly
+- Paste a fake Arduino error — must diagnose it properly
+- Select code in IDE — "Explain this" tooltip must appear
+- Check floating button works on dashboard
+
+Then come back and I give you **Prompt 5** — Component Manager, Budget Tracker, and the "Build with what you own" system.
