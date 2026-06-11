@@ -29,14 +29,17 @@ An AI-powered IoT project creation platform that turns any IoT idea into a worki
 - `lib/api-client-react/src/generated/` — generated React Query hooks
 - `lib/api-zod/src/generated/` — generated Zod schemas (used by API server)
 - `artifacts/nexora/src/` — React frontend
-  - `pages/` — Landing, Login, Signup, RoleSelect, Dashboard
+  - `pages/` — Landing, Login, Signup, RoleSelect, Dashboard, Projects, NewProject, Workspace
+  - `components/ide/NexoraIDE.tsx` — Monaco Editor IDE component (C++/Arduino, custom nexora-dark theme)
   - `context/AuthContext.tsx` — Supabase auth state (user, profile, signUp, signIn, signOut, updateProfile)
   - `lib/supabase.ts` — Supabase client + authFetch helper
   - `hooks/useAuth.ts` — hook to access AuthContext
-  - `index.css` — design system CSS variables (Nexora dark theme)
+  - `index.css` — design system CSS variables (Nexora dark theme) + workspace/IDE CSS
 - `artifacts/api-server/src/routes/` — Express route handlers
   - `profiles.ts` — GET/PATCH /api/profiles/me
   - `projects.ts` — CRUD /api/projects + /api/projects/stats
+  - `analyze.ts` — POST /api/projects/analyze (Gemini AI analysis), POST /api/projects/save-components
+  - `workspace.ts` — POST /api/projects/generate-plan, GET /api/projects/workspace/:id, POST /api/projects/complete-step, POST /api/projects/save-ide-code
 - `artifacts/api-server/src/middlewares/verifyToken.ts` — Supabase JWT verification
 
 ## Architecture decisions
@@ -76,9 +79,17 @@ CREATE TABLE projects (
   ai_analysis jsonb,
   components jsonb,
   build_plan jsonb,
+  ide_code text,
+  completed_steps integer[],
+  instruction_checks jsonb,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
+
+-- If table already exists, add new columns (Prompt 3):
+-- ALTER TABLE projects ADD COLUMN IF NOT EXISTS ide_code text;
+-- ALTER TABLE projects ADD COLUMN IF NOT EXISTS completed_steps integer[];
+-- ALTER TABLE projects ADD COLUMN IF NOT EXISTS instruction_checks jsonb;
 
 -- Project members table
 CREATE TABLE project_members (
@@ -128,16 +139,20 @@ Colors (dark purple-tinted palette):
 
 ## Product
 
-Nexora is a complete IoT project creation platform. This is Prompt 1 of 14:
-- Landing page with hero, problem section, features
-- Email/password auth via Supabase
-- Role selection (student/maker/professor/professional)
-- Dashboard placeholder with sidebar layout + project stats
+Nexora is a complete IoT project creation platform. Prompts 1–3 of 14 complete:
+- **Prompt 1**: Landing page, auth (login/signup/role-select), dashboard shell, Supabase setup
+- **Prompt 2**: Project creation (2-step: AI analysis → component selection), Gemini integration, project/stats routes
+- **Prompt 3**: Build plan generator (Gemini), Project Workspace (`/workspace/:id`) with 3-panel layout:
+  - Left panel: step-by-step build plan (locked/active/completed states, checkboxes, wiring notes, safety warnings)
+  - Right panel: Nexora IDE (Monaco Editor, custom nexora-dark theme, C++/Arduino, code push on step completion, highlight animation)
+  - Right panel tabs: Code Editor + Library Reference (auto-accumulated per completed step)
+  - Bottom panel: AI Assistant placeholder (Prompt 4 will wire this)
+  - Resizable panels, 30s auto-save, state persists across reloads
 
 ## User preferences
 
 - Design system must be consistent across every screen built in all future prompts
-- This is Prompt 1 of 14 — future prompts will build on top of this foundation
+- This is Prompt 3 of 14 — future prompts will build on top of this foundation
 
 ## Gotchas
 

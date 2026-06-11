@@ -1,0 +1,674 @@
+This is Prompt 3 of 14 for building Nexora.
+Prompts 1 and 2 already built: foundation, auth, 
+dashboard, project creation, Gemini AI analysis, 
+and component selection.
+
+Do NOT touch or recreate anything from 
+Prompts 1 or 2. Only ADD to what exists.
+
+═══════════════════════════════════════
+WHAT THIS PROMPT BUILDS
+═══════════════════════════════════════
+
+1. AI-Generated Step-by-Step Build Plan
+2. The Nexora IDE (Monaco Editor, browser-based)
+3. Incremental Code Push System
+   (step complete → code pushed to IDE automatically)
+4. Library/Package Reference Panel
+5. Project Workspace Layout
+   (the main screen users live in while building)
+
+This is the most important prompt in the 
+entire build. The IDE + incremental code push 
+IS the core product experience of Nexora.
+
+═══════════════════════════════════════
+UNDERSTANDING THE CORE MECHANIC
+═══════════════════════════════════════
+
+Here is exactly how the system works:
+
+1. User completes Step 2 (component selection)
+   and clicks "Generate Build Plan"
+
+2. Gemini generates a structured build plan:
+   - 5 to 7 steps total
+   - Each step has its OWN code block
+   - Each step has its OWN libraries list
+   - Code blocks are ADDITIVE — each step's 
+     code builds on previous steps cleanly
+
+3. User enters the Project Workspace:
+   - Left panel: Step-by-step build plan
+   - Right panel: Nexora IDE (Monaco Editor)
+   - Bottom panel: AI Assistant (Prompt 4)
+
+4. As user completes each step:
+   - That step's code is PUSHED into the IDE
+   - New code APPENDS to existing code cleanly
+   - Required libraries appear in the 
+     Library Reference Panel
+   - The IDE shows exactly which lines 
+     were just added (highlighted briefly)
+
+5. By final step: IDE contains the complete, 
+   working, structured codebase — built 
+   incrementally, step by step.
+
+═══════════════════════════════════════
+STEP 3: GENERATE BUILD PLAN
+(continuation of /projects/new flow)
+═══════════════════════════════════════
+
+When user clicks "Generate Build Plan →" 
+from Step 2:
+
+Show the same loading overlay as Step 1→2 
+with these rotating messages:
+  "✦ Designing your build plan..."
+  "✦ Structuring code by steps..."
+  "✦ Preparing your IDE..."
+  "✦ Almost ready to build..."
+
+Call POST /api/projects/generate-plan on backend.
+
+────────────────────────────────────
+GEMINI PROMPT FOR BUILD PLAN
+────────────────────────────────────
+
+Backend calls Gemini (gemini-1.5-flash) with:
+
+---SYSTEM PROMPT START---
+You are Nexora's IoT build plan generator.
+Your job is to create a detailed, step-by-step 
+build plan for an IoT project.
+
+CRITICAL RULES FOR CODE GENERATION:
+1. Generate code for Arduino/ESP32 platform 
+   using C++ (Arduino framework)
+2. Each step must have its own code block
+3. Code must be ADDITIVE — each step's code 
+   builds on top of all previous steps
+4. Step 1 code is always the foundation 
+   (includes all includes, defines, setup() 
+   and loop() skeleton)
+5. Each subsequent step ADDS to the codebase —
+   never removes or contradicts previous steps
+6. By the final step, all code combined forms 
+   a complete working program
+7. Write code as if it will be copy-pasted 
+   into Arduino IDE and uploaded directly
+8. Include helpful inline comments in code
+9. Libraries must be real, installable 
+   Arduino libraries
+
+Return ONLY a valid JSON object.
+NO markdown. NO explanation. NO code fences.
+Just raw JSON.
+
+Return this exact structure:
+{
+  "buildPlan": {
+    "totalSteps": number,
+    "estimatedTotalTime": "e.g. 2-3 hours",
+    "platform": "ESP32" or "Arduino Uno" etc,
+    "programmingLanguage": "C++ (Arduino)",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "title": "step title",
+        "objective": "what the user achieves 
+                      in this step",
+        "description": "detailed explanation 
+                        of what to do and why",
+        "duration": "e.g. 20 minutes",
+        "phase": "Setup|Wiring|Coding|
+                  Testing|Integration|Deployment",
+        "whatYouLearn": "key concept this 
+                         step teaches",
+        "instructions": [
+          "instruction 1",
+          "instruction 2",
+          "instruction 3"
+        ],
+        "wiringNotes": "important wiring or 
+          connection notes for this step 
+          (null if not applicable)",
+        "safetyWarnings": [
+          "safety warning if any (empty array 
+           if none)"
+        ],
+        "code": {
+          "filename": "main.ino",
+          "language": "cpp",
+          "content": "full cumulative code 
+                      up to and including 
+                      this step as a string.
+                      Use \\n for newlines.",
+          "newLinesAdded": "description of what 
+                            code was added in 
+                            this specific step",
+          "highlightLines": [
+            "line numbers that are NEW 
+             in this step as integers"
+          ]
+        },
+        "libraries": [
+          {
+            "name": "Library Name",
+            "installName": "exact name to search 
+                            in Arduino Library Manager",
+            "purpose": "what this library does 
+                        in one sentence",
+            "isNew": true
+          }
+        ],
+        "verificationCheck": "how user knows 
+                              this step worked 
+                              correctly"
+      }
+    ]
+  }
+}
+---SYSTEM PROMPT END---
+
+User message to Gemini:
+"Generate a complete build plan for this IoT project.
+Project: [projectTitle]
+Description: [projectSummary]  
+Components: [list component names]
+Skill Level: [skillLevel]
+Platform: [most appropriate platform based on components]
+
+Remember: code must be cumulative — each step 
+contains ALL code up to that point."
+
+Save the build plan to Supabase:
+  projects table: build_plan = parsed JSON,
+                  status = 'in_progress'
+
+Return { projectId, buildPlan } to frontend.
+
+On success: redirect to /workspace/[projectId]
+
+═══════════════════════════════════════
+PROJECT WORKSPACE — /workspace/:projectId
+═══════════════════════════════════════
+
+This is the MAIN screen where users spend 
+most of their time. It is a full-screen 
+3-panel layout.
+
+Load project data from Supabase on mount.
+If project not found or user not owner: 
+redirect to /projects.
+
+────────────────────────────────────
+WORKSPACE LAYOUT
+────────────────────────────────────
+
+Full viewport height layout (no page scroll).
+Three panels:
+
+┌─────────────────┬──────────────────────┐
+│                 │                      │
+│   LEFT PANEL    │    RIGHT PANEL       │
+│   (Steps)       │    (Nexora IDE)      │
+│   320px wide    │    flex-1            │
+│                 │                      │
+│                 ├──────────────────────┤
+│                 │  BOTTOM PANEL        │
+│                 │  (AI Assistant)      │
+│                 │  240px height        │
+└─────────────────┴──────────────────────┘
+
+All panels have resize handles 
+(draggable borders between panels).
+
+Top bar (full width, 52px height):
+  Left: "← Projects" back link
+  Center: Project title (editable on click)
+  Right: 
+    Save status indicator 
+    ("Saved" with green dot / "Saving..." spinner)
+    "Export Project" button (secondary, small)
+    User avatar
+
+Panel borders: 1px solid #2A2A3E
+Panel backgrounds: #0A0A0F
+
+────────────────────────────────────
+LEFT PANEL — BUILD STEPS
+────────────────────────────────────
+
+Header:
+  "Build Plan" title
+  Below: thin progress bar showing 
+  overall completion (steps done / total)
+  "X of Y steps complete" text
+
+Step list (scrollable):
+  For each step in buildPlan.steps:
+  
+  Step Card:
+    Padding: 16px
+    Border-bottom: 1px solid #2A2A3E
+    
+    States:
+    ── LOCKED (future step, not yet reached):
+       Opacity: 0.4
+       Lock icon visible
+       Cannot click
+    
+    ── ACTIVE (current step):
+       Left border: 3px solid #6C63FF
+       Background: rgba(108,99,255,0.06)
+       Fully interactive
+    
+    ── COMPLETED (past step):
+       Left border: 3px solid #00C896
+       Checkmark icon replacing step number
+       Opacity: 0.8
+       Can click to review (read-only)
+    
+    Content for ACTIVE step (expanded):
+      Step number badge + Phase badge
+      (phase color: Setup=purple, Wiring=yellow,
+       Coding=blue, Testing=green, 
+       Integration=cyan, Deployment=orange)
+      
+      Step title (bold, #F0F0FF)
+      Objective text (small, #9090B0)
+      Duration estimate (clock icon, small)
+      
+      Instructions list:
+        Each instruction as numbered item
+        Checkbox next to each instruction
+        User can check off individual instructions
+      
+      Wiring notes (if not null):
+        Card within card:
+        bg: rgba(255,184,77,0.08)
+        border: #FFB84D
+        Icon: zap
+        "Wiring Note:" label
+        Note text
+      
+      Safety warnings (if any):
+        Card within card:
+        bg: rgba(255,90,90,0.08)
+        border: #FF5A5A
+        Icon: alert-triangle
+        Each warning as a row
+      
+      What you learn:
+        Small section at bottom
+        Icon: book-open (color #00D4FF)
+        "You'll learn: [whatYouLearn]"
+      
+      Verification check:
+        Icon: check-circle (color #00C896)
+        "How to verify: [verificationCheck]"
+      
+      "Complete Step →" button:
+        Full width
+        Primary style
+        Only enabled when ALL instruction 
+        checkboxes are checked
+        
+        When clicked:
+          → Triggers Code Push (explained below)
+          → Marks step as completed in Supabase
+          → Unlocks next step
+          → Scrolls to next step automatically
+    
+    Content for COMPLETED step (collapsed):
+      Checkmark + Step title + Duration
+      "Review" link (re-opens read-only view)
+    
+    Content for LOCKED step (collapsed):
+      Lock icon + Step title
+      "Complete previous step to unlock"
+
+Below step list (sticky at bottom of left panel):
+  Summary card:
+    Platform: [ESP32 etc]
+    Language: C++ (Arduino)
+    Total libraries: X
+    Estimated time remaining
+
+────────────────────────────────────
+RIGHT PANEL — NEXORA IDE
+────────────────────────────────────
+
+Install Monaco Editor:
+  npm install @monaco-editor/react
+
+File: client/src/components/ide/NexoraIDE.jsx
+
+IDE Panel has two tabs at top:
+  [Code Editor] [Library Reference]
+  
+  Tab style: 
+    Active: border-bottom 2px solid #6C63FF, 
+            text #F0F0FF
+    Inactive: text #5A5A7A
+
+── CODE EDITOR TAB:
+
+  Top bar of IDE (40px):
+    Left: filename (e.g. "main.ino") 
+          with file icon
+    Center: Platform badge 
+            (e.g. "ESP32 · C++ Arduino")
+    Right: 
+      "Copy Code" button (small)
+      "Download .ino" button (small)
+      Lines of code counter: "X lines"
+  
+  Monaco Editor configuration:
+    theme: create custom dark theme called 
+           "nexora-dark" with these colors:
+      editor background: #0D0D14
+      editor foreground: #E0E0FF
+      line numbers: #3A3A5A
+      line highlight: rgba(108,99,255,0.06)
+      selection: rgba(108,99,255,0.25)
+      cursor: #6C63FF
+      
+      Syntax colors:
+        keywords: #C792EA (purple)
+        strings: #C3E88D (green)
+        numbers: #F78C6C (orange)
+        comments: #546E7A (gray-blue, italic)
+        functions: #82AAFF (blue)
+        variables: #EEFFFF (white)
+    
+    fontSize: 14
+    fontFamily: 'JetBrains Mono', monospace
+    lineNumbers: 'on'
+    minimap: { enabled: false }
+    scrollBeyondLastLine: false
+    wordWrap: 'on'
+    automaticLayout: true
+    readOnly: false
+    (user can edit code freely after it's pushed)
+  
+  Initial state (before any step is completed):
+    Editor shows this placeholder comment:
+    
+    // ╔══════════════════════════════════╗
+    // ║     Welcome to Nexora IDE        ║
+    // ║                                  ║
+    // ║  Complete Step 1 to see your     ║
+    // ║  first code appear here          ║
+    // ║  automatically.                  ║
+    // ║                                  ║
+    // ║  Your code builds step by step.  ║
+    // ╚══════════════════════════════════╝
+  
+  NEW LINE HIGHLIGHT ANIMATION:
+    When new code is pushed to IDE:
+    1. New lines flash with background 
+       rgba(108,99,255,0.3) for 1.5 seconds
+    2. Then fade to normal 
+       rgba(108,99,255,0.06)
+    3. IDE auto-scrolls to show new lines
+    
+    Implement this using Monaco's 
+    deltaDecorations API.
+
+── LIBRARY REFERENCE TAB:
+
+  Shows libraries accumulated so far 
+  (all libraries from completed steps).
+  
+  Header:
+    "Libraries & Packages"
+    Subtext: "Auto-managed for your project"
+  
+  For each library (from completed steps):
+    Library card:
+      bg: #12121A, border: #2A2A3E
+      
+      Left: package icon (color based on isNew)
+      
+      Top row:
+        Library name (bold)
+        If isNew from last step: 
+          "NEW" badge (bg #6C63FF, white text, 
+          small, rounded)
+      
+      Install name row:
+        "Arduino Library Manager:" 
+        Code pill showing installName
+        Copy button (copies installName)
+      
+      Purpose text (secondary color)
+  
+  Bottom of library tab:
+    Info card:
+    bg: rgba(0,212,255,0.06)
+    border: #00D4FF
+    Icon: info
+    Text: "These libraries are automatically 
+           tracked as you complete each step. 
+           Install them in Arduino IDE via 
+           Tools → Manage Libraries."
+
+────────────────────────────────────
+THE CODE PUSH SYSTEM
+────────────────────────────────────
+
+File: client/src/hooks/useCodePush.js
+
+This is the core mechanic of Nexora.
+
+When user clicks "Complete Step →":
+
+1. Get current step's code.content from 
+   buildPlan (the full cumulative code)
+
+2. Get highlightLines array from current step
+
+3. Call pushCodeToIDE(code, highlightLines):
+   
+   a. Set Monaco editor value to new code
+   b. Calculate which lines are new 
+      (compare with previous step's line count)
+   c. Apply highlight decorations to new lines:
+      Use Monaco deltaDecorations with 
+      inlineClassName: 'new-code-highlight'
+   d. Scroll editor to first new line:
+      editor.revealLineInCenter(firstNewLine)
+   e. After 1800ms: fade decorations 
+      (remove highlight class gradually)
+
+4. Update libraryList state:
+   Add all libraries from this step where 
+   isNew = true to the accumulated list
+
+5. Update Supabase:
+   projects table: current_step = stepNumber
+   Mark step as completed in build_plan jsonb
+
+6. Show success toast:
+   "✓ Step [X] complete — code updated in IDE"
+
+7. Auto-scroll left panel to next step
+
+State to maintain in workspace:
+  currentStep: number
+  completedSteps: array of step numbers
+  ideCode: string (current full code in IDE)
+  accumulatedLibraries: array
+  instructionChecks: object 
+    { stepNumber: [bool, bool, bool] }
+
+All state persists to Supabase on every change.
+On workspace reload: restore all state.
+
+────────────────────────────────────
+BOTTOM PANEL — AI ASSISTANT PLACEHOLDER
+────────────────────────────────────
+
+For now, show a placeholder panel 
+(full AI assistant comes in Prompt 4):
+
+  Header row:
+    Left: "✦ Nexora AI" with sparkle icon 
+          (color #6C63FF)
+    Right: minimize/expand toggle button
+
+  Content:
+    Single input bar at bottom of panel:
+      Placeholder: "Ask anything about 
+                    your current step..."
+      Send button (disabled for now)
+    
+    Above input: 
+      3 suggestion chips:
+        "Explain this step"
+        "I'm stuck on wiring"  
+        "Debug my code"
+      (all disabled/greyed out for now 
+       — will be wired in Prompt 4)
+    
+    Center of panel:
+      Icon: sparkles (large, #6C63FF, low opacity)
+      Text: "AI Assistant activates when 
+             you start building"
+
+═══════════════════════════════════════
+BACKEND ROUTES TO ADD
+═══════════════════════════════════════
+
+POST /api/projects/generate-plan
+  Body: { projectId, userId, 
+          projectTitle, projectSummary,
+          components, skillLevel }
+  → Calls Gemini with build plan prompt
+  → Saves build_plan to Supabase
+  → Updates project status to 'in_progress'
+  → Returns { buildPlan }
+
+POST /api/projects/complete-step
+  Body: { projectId, stepNumber, 
+          userId, instructionChecks }
+  → Updates current_step in Supabase
+  → Updates build_plan jsonb to mark 
+    step as completed
+  → Returns { success, nextStep }
+
+GET /api/projects/workspace/:projectId
+  → Returns full project with 
+    build_plan, components, ai_analysis,
+    current_step, ide_code
+  → Validates user owns this project
+
+POST /api/projects/save-ide-code
+  Body: { projectId, code, userId }
+  → Saves current IDE code to Supabase
+    (add ide_code text column to projects table)
+  → Returns { success }
+  → Called every 30 seconds auto-save 
+    AND on every step completion
+
+═══════════════════════════════════════
+SUPABASE CHANGES NEEDED
+═══════════════════════════════════════
+
+Add these columns to projects table:
+  ide_code          text     (stores current IDE code)
+  completed_steps   integer[] (array of completed step numbers)
+  instruction_checks jsonb   (stores checkbox states)
+
+═══════════════════════════════════════
+CSS TO ADD GLOBALLY
+═══════════════════════════════════════
+
+Add to index.css:
+
+.new-code-highlight {
+  background: rgba(108, 99, 255, 0.25) !important;
+  transition: background 1.8s ease-out;
+}
+
+.new-code-highlight-fading {
+  background: rgba(108, 99, 255, 0.06) !important;
+  transition: background 1.8s ease-out;
+}
+
+/* Resize handle between panels */
+.panel-resize-handle {
+  width: 4px;
+  background: #2A2A3E;
+  cursor: col-resize;
+  transition: background 0.2s;
+}
+.panel-resize-handle:hover {
+  background: #6C63FF;
+}
+
+/* Step phase badges */
+.phase-setup { 
+  background: rgba(108,99,255,0.15); 
+  color: #6C63FF; 
+}
+.phase-wiring { 
+  background: rgba(255,184,77,0.15); 
+  color: #FFB84D; 
+}
+.phase-coding { 
+  background: rgba(0,212,255,0.15); 
+  color: #00D4FF; 
+}
+.phase-testing { 
+  background: rgba(0,200,150,0.15); 
+  color: #00C896; 
+}
+.phase-integration { 
+  background: rgba(0,212,255,0.15); 
+  color: #00D4FF; 
+}
+.phase-deployment { 
+  background: rgba(255,140,108,0.15); 
+  color: #FF8C6C; 
+}
+
+═══════════════════════════════════════
+IMPORTANT RULES
+═══════════════════════════════════════
+
+1. The workspace is a FULL SCREEN experience.
+   Hide the main sidebar from Prompt 1 
+   when on /workspace route. 
+   The workspace has its own navigation.
+
+2. Monaco Editor MUST load without errors.
+   If it fails to load: show a fallback 
+   textarea with the same code content.
+
+3. Code push MUST be smooth — no flash of 
+   blank editor, no jarring jumps.
+
+4. Auto-save runs every 30 seconds silently.
+   Never interrupt the user with save dialogs.
+
+5. If user refreshes workspace: restore 
+   exactly where they were — same step, 
+   same IDE code, same checkboxes.
+
+6. On mobile: stack panels vertically.
+   Steps panel on top, IDE below.
+   Bottom AI panel hidden on mobile 
+   (accessible via floating button).
+
+7. After building confirm:
+   - /workspace/[id] loads with all 3 panels
+   - Build plan generates from Gemini 
+     and displays correctly
+   - Completing Step 1 pushes code to IDE
+   - New lines highlight and fade correctly
+   - Library tab updates after step completion
+   - State persists on page refresh

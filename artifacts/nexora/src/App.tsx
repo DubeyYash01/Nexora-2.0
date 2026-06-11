@@ -14,6 +14,7 @@ import RoleSelect from "@/pages/role-select";
 import Dashboard from "@/pages/dashboard";
 import Projects from "@/pages/projects";
 import NewProject from "@/pages/new-project";
+import Workspace from "@/pages/workspace";
 
 const queryClient = new QueryClient();
 
@@ -57,6 +58,9 @@ function Router() {
       </Route>
       <Route path="/projects/new">
         <ProtectedRoute component={NewProject} />
+      </Route>
+      <Route path="/workspace/:projectId">
+        <ProtectedRoute component={Workspace} />
       </Route>
       <Route component={NotFound} />
     </Switch>

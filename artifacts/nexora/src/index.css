@@ -144,3 +144,46 @@
     @apply font-sans antialiased bg-background text-foreground transition-all duration-200;
   }
 }
+
+/* ── Nexora IDE / Workspace ───────────────────────────── */
+
+.new-code-highlight {
+  background: rgba(108, 99, 255, 0.25) !important;
+  transition: background 1.8s ease-out;
+}
+
+.new-code-highlight-fading {
+  background: rgba(108, 99, 255, 0.06) !important;
+  transition: background 1.8s ease-out;
+}
+
+.panel-resize-handle {
+  width: 4px;
+  background: #2A2A3E;
+  cursor: col-resize;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.panel-resize-handle:hover,
+.panel-resize-handle.dragging {
+  background: #6C63FF;
+}
+
+.panel-resize-handle-h {
+  height: 4px;
+  background: #2A2A3E;
+  cursor: row-resize;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.panel-resize-handle-h:hover {
+  background: #6C63FF;
+}
+
+/* Phase badges */
+.phase-setup    { background: rgba(108,99,255,0.15); color: #6C63FF; }
+.phase-wiring   { background: rgba(255,184,77,0.15);  color: #FFB84D; }
+.phase-coding   { background: rgba(0,212,255,0.15);   color: #00D4FF; }
+.phase-testing  { background: rgba(0,200,150,0.15);   color: #00C896; }
+.phase-integration { background: rgba(0,212,255,0.15); color: #00D4FF; }
+.phase-deployment  { background: rgba(255,140,108,0.15); color: #FF8C6C; }

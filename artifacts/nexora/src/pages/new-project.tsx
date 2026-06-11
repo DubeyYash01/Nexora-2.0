@@ -73,13 +73,23 @@ const EXAMPLE_CHIPS = [
   },
 ];
 
-const LOADING_MESSAGES = [
+const LOADING_MESSAGES_ANALYZE = [
   "✦ Understanding your idea...",
   "✦ Identifying components...",
   "✦ Checking feasibility...",
   "✦ Calculating costs...",
   "✦ Almost ready...",
 ];
+
+const LOADING_MESSAGES_PLAN = [
+  "✦ Designing your build plan...",
+  "✦ Structuring code by steps...",
+  "✦ Preparing your IDE...",
+  "✦ Almost ready to build...",
+];
+
+// default export — updated below, keep one reference
+const LOADING_MESSAGES = LOADING_MESSAGES_ANALYZE;
 
 const TYPE_ICONS: Record<string, React.ElementType> = {
   microcontroller: Cpu,
@@ -147,18 +157,21 @@ function LoadingOverlay({
   visible,
   error,
   onRetry,
+  messages = LOADING_MESSAGES,
 }: {
   visible: boolean;
   error: string | null;
   onRetry: () => void;
+  messages?: string[];
 }) {
   const [msgIdx, setMsgIdx] = useState(0);
 
   useEffect(() => {
     if (!visible || error) return;
-    const t = setInterval(() => setMsgIdx((i) => (i + 1) % LOADING_MESSAGES.length), 1500);
+    setMsgIdx(0);
+    const t = setInterval(() => setMsgIdx((i) => (i + 1) % messages.length), 1500);
     return () => clearInterval(t);
-  }, [visible, error]);
+  }, [visible, error, messages]);
 
   if (!visible) return null;
 
@@ -185,7 +198,7 @@ function LoadingOverlay({
               <Sparkles className="w-8 h-8" style={{ color: "#6C63FF" }} />
             </div>
             <p className="text-lg font-semibold text-foreground mb-6 transition-all duration-300">
-              {LOADING_MESSAGES[msgIdx]}
+              {messages[msgIdx]}
             </p>
             <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: "#2A2A3E" }}>
               <div
@@ -367,11 +380,15 @@ function Step1({
 function Step2({
   analysis,
   projectId,
+  skillLevel,
   onBack,
+  onGeneratePlan,
 }: {
   analysis: Analysis;
   projectId: string;
+  skillLevel: string;
   onBack: () => void;
+  onGeneratePlan: (components: AiComponent[]) => void;
 }) {
   const { toast } = useToast();
   const [components, setComponents] = useState<AiComponent[]>(
@@ -402,15 +419,16 @@ function Step2({
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await authFetch("/api/projects/save-components", {
+      // Save components first
+      const saveRes = await authFetch("/api/projects/save-components", {
         method: "POST",
         body: JSON.stringify({ projectId, components }),
       });
-      if (!res.ok) throw new Error("Save failed");
-      toast({ title: "Components saved!", description: "Build plan coming soon." });
+      if (!saveRes.ok) throw new Error("Save failed");
+      // Trigger generate-plan in parent
+      onGeneratePlan(components);
     } catch {
       toast({ title: "Error saving", description: "Please try again.", variant: "destructive" });
-    } finally {
       setSaving(false);
     }
   };
@@ -632,20 +650,23 @@ function Step2({
 
 /* ─── Main page ──────────────────────────────────────────── */
 export default function NewProject() {
+  const [, navigate] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
   const blueprintTitle = searchParams.get("blueprint") ?? "";
 
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [loadingPhase, setLoadingPhase] = useState<"analyze" | "plan">("analyze");
   const [loadingError, setLoadingError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [projectId, setProjectId] = useState<string>("");
-
-  const { toast } = useToast();
+  const [skillLevel, setSkillLevel] = useState<string>("Beginner");
 
   const handleAnalyze = async (idea: string, skill: string, type: string) => {
     setLoading(true);
+    setLoadingPhase("analyze");
     setLoadingError(null);
+    setSkillLevel(skill);
     try {
       const res = await authFetch("/api/projects/analyze", {
         method: "POST",
@@ -666,10 +687,41 @@ export default function NewProject() {
     }
   };
 
+  const handleGeneratePlan = async (components: AiComponent[]) => {
+    if (!analysis) return;
+    setLoading(true);
+    setLoadingPhase("plan");
+    setLoadingError(null);
+    try {
+      const res = await authFetch("/api/projects/generate-plan", {
+        method: "POST",
+        body: JSON.stringify({
+          projectId,
+          projectTitle: analysis.projectTitle,
+          projectSummary: analysis.projectSummary,
+          components: components.map((c) => c.name),
+          skillLevel,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? "Plan generation failed");
+      }
+      // Redirect to workspace
+      navigate(`/workspace/${projectId}`);
+    } catch (err) {
+      setLoadingError(err instanceof Error ? err.message : "Unknown error");
+      setLoading(false);
+    }
+  };
+
   const handleRetry = () => {
     setLoadingError(null);
     setLoading(false);
   };
+
+  const loadingMessages =
+    loadingPhase === "plan" ? LOADING_MESSAGES_PLAN : LOADING_MESSAGES_ANALYZE;
 
   return (
     <DashboardLayout title="New Project">
@@ -686,7 +738,9 @@ export default function NewProject() {
           <Step2
             analysis={analysis}
             projectId={projectId}
+            skillLevel={skillLevel}
             onBack={() => setStep(1)}
+            onGeneratePlan={handleGeneratePlan}
           />
         )}
       </div>
@@ -695,6 +749,7 @@ export default function NewProject() {
         visible={loading || (!!loadingError)}
         error={loadingError}
         onRetry={handleRetry}
+        messages={loadingMessages}
       />
     </DashboardLayout>
   );
