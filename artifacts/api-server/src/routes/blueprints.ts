@@ -1,10 +1,12 @@
 import { Router } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
-import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { logger } from "../lib/logger";
 import { SEED_BLUEPRINTS } from "../data/seedBlueprints";
 import type { Request, Response } from "express";
+import { db } from "@workspace/db";
+import { blueprints, blueprintLikes, blueprintReviews, projects, userComponents, profiles } from "@workspace/db/schema";
+import { and, eq, desc, asc, count, inArray } from "drizzle-orm";
 
 const router = Router();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
@@ -19,20 +21,31 @@ async function callGeminiJSON(prompt: string): Promise<unknown> {
 
 // GET /api/blueprints/seed
 router.get("/blueprints/seed", async (_req: Request, res: Response) => {
-  const { count } = await supabaseAdmin
-    .from("blueprints")
-    .select("*", { count: "exact", head: true });
+  const [{ total }] = await db.select({ total: count() }).from(blueprints);
 
-  if ((count ?? 0) > 0) {
-    res.json({ seeded: false, count });
+  if ((total ?? 0) > 0) {
+    res.json({ seeded: false, count: total });
     return;
   }
 
-  const { error } = await supabaseAdmin.from("blueprints").insert(SEED_BLUEPRINTS);
-  if (error) {
-    logger.error({ err: error }, "Failed to seed blueprints");
-    res.status(500).json({ error: "Failed to seed blueprints" });
-    return;
+  for (const bp of SEED_BLUEPRINTS) {
+    await db.insert(blueprints).values({
+      id: crypto.randomUUID(),
+      title: bp.title,
+      description: bp.description,
+      difficulty: bp.difficulty,
+      category: bp.category,
+      components: bp.components,
+      buildPlan: bp.build_plan,
+      aiAnalysis: bp.ai_analysis,
+      tags: bp.tags,
+      isFeatured: bp.is_featured ?? false,
+      isPublic: true,
+      platform: bp.platform,
+      estimatedCostMin: bp.estimated_cost_min,
+      estimatedCostMax: bp.estimated_cost_max,
+      estimatedTime: bp.estimated_time,
+    });
   }
 
   res.json({ seeded: true });
@@ -42,186 +55,135 @@ router.get("/blueprints/seed", async (_req: Request, res: Response) => {
 router.get("/blueprints", async (req: AuthRequest, res: Response) => {
   const { search, difficulty, category, sort = "popular", limit = 50, offset = 0 } = req.query as Record<string, string>;
 
-  let query = supabaseAdmin
-    .from("blueprints")
-    .select("*, profiles(full_name, avatar_url)")
-    .eq("is_public", true)
-    .range(Number(offset), Number(offset) + Number(limit) - 1);
+  let query = db.select({
+    id: blueprints.id,
+    title: blueprints.title,
+    description: blueprints.description,
+    difficulty: blueprints.difficulty,
+    category: blueprints.category,
+    tags: blueprints.tags,
+    platform: blueprints.platform,
+    forkCount: blueprints.forkCount,
+    viewCount: blueprints.viewCount,
+    likeCount: blueprints.likeCount,
+    estimatedCostMin: blueprints.estimatedCostMin,
+    estimatedCostMax: blueprints.estimatedCostMax,
+    estimatedTime: blueprints.estimatedTime,
+    components: blueprints.components,
+    authorId: blueprints.authorId,
+    createdAt: blueprints.createdAt,
+  }).from(blueprints).where(eq(blueprints.isPublic, true)).$dynamic();
 
-  if (difficulty && difficulty !== "All") query = query.eq("difficulty", difficulty);
-  if (category && category !== "All Categories") query = query.eq("category", category);
+  let results = await query;
 
-  if (sort === "newest") query = query.order("created_at", { ascending: false });
-  else if (sort === "forked") query = query.order("fork_count", { ascending: false });
-  else if (sort === "cost") query = query.order("estimated_cost_min", { ascending: true });
-  else query = query.order("like_count", { ascending: false });
-
-  const { data, error } = await query;
-  if (error) { res.status(500).json({ error: "Failed to fetch blueprints" }); return; }
-
-  let results = data ?? [];
-
+  if (difficulty && difficulty !== "All") {
+    results = results.filter((b) => b.difficulty === difficulty);
+  }
+  if (category && category !== "All Categories") {
+    results = results.filter((b) => b.category === category);
+  }
   if (search) {
     const q = search.toLowerCase();
     results = results.filter((b) => {
-      const comps = (b.components?.list ?? []).map((c: { name: string }) => c.name.toLowerCase()).join(" ");
+      const comps = ((b.components as { list?: { name: string }[] })?.list ?? []).map((c) => c.name.toLowerCase()).join(" ");
       return (
         b.title.toLowerCase().includes(q) ||
         (b.description ?? "").toLowerCase().includes(q) ||
-        (b.tags ?? []).join(" ").toLowerCase().includes(q) ||
+        ((b.tags as string[]) ?? []).join(" ").toLowerCase().includes(q) ||
         comps.includes(q)
       );
     });
   }
 
-  // Get user liked IDs if authenticated
-  let likedIds = new Set<string>();
-  const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.split(" ")[1];
-    const { data: user } = await supabaseAdmin.auth.getUser(token);
-    if (user.user) {
-      const { data: likes } = await supabaseAdmin
-        .from("blueprint_likes")
-        .select("blueprint_id")
-        .eq("user_id", user.user.id);
-      likedIds = new Set((likes ?? []).map((l: { blueprint_id: string }) => l.blueprint_id));
-    }
-  }
+  if (sort === "newest") results.sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
+  else if (sort === "forked") results.sort((a, b) => (b.forkCount ?? 0) - (a.forkCount ?? 0));
+  else if (sort === "cost") results.sort((a, b) => (a.estimatedCostMin ?? 0) - (b.estimatedCostMin ?? 0));
+  else results.sort((a, b) => (b.likeCount ?? 0) - (a.likeCount ?? 0));
 
-  const enriched = results.map((b) => ({ ...b, userLiked: likedIds.has(b.id) }));
+  const paginated = results.slice(Number(offset), Number(offset) + Number(limit));
+
+  const enriched = paginated.map((b) => ({ ...b, userLiked: false }));
   res.json({ blueprints: enriched });
 });
 
-// GET /api/blueprints/:id  (must come after named routes)
+// GET /api/blueprints/:id
 router.get("/blueprints/:id", async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
 
-  const { data, error } = await supabaseAdmin
-    .from("blueprints")
-    .select("*, profiles(full_name, avatar_url)")
-    .eq("id", id)
-    .single();
+  const [data] = await db.select().from(blueprints).where(eq(blueprints.id, id));
+  if (!data) { res.status(404).json({ error: "Blueprint not found" }); return; }
 
-  if (error || !data) { res.status(404).json({ error: "Blueprint not found" }); return; }
+  db.update(blueprints).set({ viewCount: (data.viewCount ?? 0) + 1 }).where(eq(blueprints.id, id)).then(() => {});
 
-  // Increment view count (fire and forget)
-  supabaseAdmin.from("blueprints").update({ view_count: (data.view_count ?? 0) + 1 }).eq("id", id).then(() => {});
+  const reviews = await db.select({
+    id: blueprintReviews.id,
+    rating: blueprintReviews.rating,
+    reviewText: blueprintReviews.reviewText,
+    createdAt: blueprintReviews.createdAt,
+    fullName: profiles.fullName,
+    avatarUrl: profiles.avatarUrl,
+  }).from(blueprintReviews).leftJoin(profiles, eq(profiles.id, blueprintReviews.userId)).where(eq(blueprintReviews.blueprintId, id)).orderBy(desc(blueprintReviews.createdAt));
 
-  // Fetch reviews with user profiles
-  const { data: reviews } = await supabaseAdmin
-    .from("blueprint_reviews")
-    .select("*, profiles(full_name, avatar_url)")
-    .eq("blueprint_id", id)
-    .order("created_at", { ascending: false });
-
-  // Check user like
-  let userLiked = false;
-  let userForked = false;
-  const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.split(" ")[1];
-    const { data: user } = await supabaseAdmin.auth.getUser(token);
-    if (user.user) {
-      const { data: like } = await supabaseAdmin.from("blueprint_likes").select("id").eq("blueprint_id", id).eq("user_id", user.user.id).single();
-      userLiked = !!like;
-      const { data: fork } = await supabaseAdmin.from("blueprint_forks").select("id").eq("blueprint_id", id).eq("forked_by", user.user.id).single();
-      userForked = !!fork;
-    }
-  }
-
-  res.json({ blueprint: { ...data, reviews: reviews ?? [], userLiked, userForked } });
+  res.json({ blueprint: { ...data, reviews, userLiked: false, userForked: false } });
 });
 
 // POST /api/blueprints/fork
 router.post("/blueprints/fork", verifyToken, async (req: AuthRequest, res: Response) => {
   const { blueprintId, projectName, adaptToInventory } = req.body;
 
-  const { data: blueprint, error: bpErr } = await supabaseAdmin
-    .from("blueprints")
-    .select("*")
-    .eq("id", blueprintId)
-    .single();
-
-  if (bpErr || !blueprint) { res.status(404).json({ error: "Blueprint not found" }); return; }
+  const [blueprint] = await db.select().from(blueprints).where(eq(blueprints.id, blueprintId));
+  if (!blueprint) { res.status(404).json({ error: "Blueprint not found" }); return; }
 
   let adaptedComponents = blueprint.components;
   let adaptationChanges: string[] = [];
 
   if (adaptToInventory) {
     try {
-      const { data: userComps } = await supabaseAdmin
-        .from("user_components")
-        .select("name, category")
-        .eq("user_id", req.userId!);
+      const userComps = await db.select({ name: userComponents.name, category: userComponents.category }).from(userComponents).where(eq(userComponents.userId, req.userId!));
+      const inventory = userComps.map((c) => c.name);
+      const originalComps = ((blueprint.components as { list?: { name: string }[] })?.list ?? []).map((c) => c.name).join(", ");
 
-      const inventory = (userComps ?? []).map((c: { name: string }) => c.name);
-      const originalComps = (blueprint.components?.list ?? []).map((c: { name: string }) => c.name).join(", ");
-      const inventoryStr = inventory.join(", ") || "none";
-
-      const prompt = `You are adapting an IoT blueprint for a specific user.
-Blueprint: "${blueprint.title}" — ${blueprint.description}
+      const prompt = `You are adapting an IoT blueprint for a user.
+Blueprint: "${blueprint.title}"
 Original components: ${originalComps}
-User's inventory: ${inventoryStr}
-
-Adapt the component list:
-- Mark components the user already has as owned (set owned: true)
-- Suggest substitutions for missing non-essential components
-- Keep the project functional
+User's inventory: ${inventory.join(", ") || "none"}
 
 Return ONLY valid JSON:
 {
-  "adaptedComponents": [
-    {
-      "id": "c1",
-      "name": "component name",
-      "type": "type",
-      "purpose": "purpose",
-      "estimatedCost": 0,
-      "isEssential": true,
-      "alternatives": [],
-      "owned": true or false
-    }
-  ],
-  "changes": ["human-readable change 1", "change 2"],
+  "adaptedComponents": [{ "id": "c1", "name": "name", "type": "type", "purpose": "purpose", "estimatedCost": 0, "isEssential": true, "alternatives": [], "owned": true }],
+  "changes": ["change 1"],
   "totalNewCost": 0
 }`;
-
-      const result = await callGeminiJSON(prompt) as { adaptedComponents: unknown[]; changes: string[]; totalNewCost: number };
+      const result = await callGeminiJSON(prompt) as { adaptedComponents: unknown[]; changes: string[] };
       adaptedComponents = { list: result.adaptedComponents };
       adaptationChanges = result.changes ?? [];
     } catch (err) {
-      logger.error({ err }, "Gemini adaptation failed, using original components");
-      adaptedComponents = blueprint.components;
+      logger.error({ err }, "Gemini adaptation failed");
     }
   }
 
-  const { data: project, error: projErr } = await supabaseAdmin
-    .from("projects")
-    .insert({
-      user_id: req.userId!,
+  const [project] = await db
+    .insert(projects)
+    .values({
+      id: crypto.randomUUID(),
+      userId: req.userId!,
       title: projectName ?? blueprint.title,
-      description: blueprint.description,
-      idea_input: blueprint.description,
-      ai_analysis: blueprint.ai_analysis,
+      description: blueprint.description ?? "",
+      ideaInput: blueprint.description ?? "",
+      aiAnalysis: blueprint.aiAnalysis,
       components: adaptedComponents,
-      build_plan: blueprint.build_plan,
+      buildPlan: blueprint.buildPlan,
       status: "in_progress",
-      current_step: 1,
-      forked_from: blueprintId,
+      currentStep: 1,
     })
-    .select()
-    .single();
+    .returning();
 
-  if (projErr || !project) {
-    logger.error({ err: projErr }, "Failed to create forked project");
+  if (!project) {
     res.status(500).json({ error: "Failed to create project" });
     return;
   }
 
-  // Increment fork count + insert fork record (fire and forget)
-  supabaseAdmin.from("blueprints").update({ fork_count: (blueprint.fork_count ?? 0) + 1 }).eq("id", blueprintId).then(() => {});
-  supabaseAdmin.from("blueprint_forks").insert({ blueprint_id: blueprintId, forked_by: req.userId!, new_project_id: project.id }).then(() => {});
+  db.update(blueprints).set({ forkCount: (blueprint.forkCount ?? 0) + 1 }).where(eq(blueprints.id, blueprintId)).then(() => {});
 
   res.json({ projectId: project.id, adaptationChanges });
 });
@@ -230,51 +192,41 @@ Return ONLY valid JSON:
 router.post("/blueprints/publish", verifyToken, async (req: AuthRequest, res: Response) => {
   const { projectId, title, description, category, tags, difficulty, isPublic, showAuthor } = req.body;
 
-  const { data: project, error: pErr } = await supabaseAdmin
-    .from("projects")
-    .select("*")
-    .eq("id", projectId)
-    .eq("user_id", req.userId!)
-    .single();
+  const [project] = await db.select().from(projects).where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
 
-  if (pErr || !project) { res.status(404).json({ error: "Project not found" }); return; }
+  const compList = (project.components as { list?: { estimatedCost?: number }[] })?.list ?? [];
+  const totalCost = compList.reduce((s, c) => s + (c.estimatedCost ?? 0), 0);
 
-  const compList = project.components?.list ?? [];
-  const costs = compList.map((c: { estimatedCost?: number }) => c.estimatedCost ?? 0);
-  const totalCost = costs.reduce((s: number, c: number) => s + c, 0);
-
-  const { data: blueprint, error: bpErr } = await supabaseAdmin
-    .from("blueprints")
-    .insert({
-      author_id: showAuthor ? req.userId! : null,
+  const [blueprint] = await db
+    .insert(blueprints)
+    .values({
+      id: crypto.randomUUID(),
+      authorId: showAuthor ? req.userId! : null,
       title,
       description,
       category,
       tags: tags ?? [],
       difficulty,
-      is_public: isPublic ?? true,
-      is_featured: false,
-      platform: project.ai_analysis?.platform ?? "ESP32",
+      isPublic: isPublic ?? true,
+      isFeatured: false,
+      platform: (project.aiAnalysis as { platform?: string })?.platform ?? "ESP32",
       components: project.components,
-      build_plan: project.build_plan,
-      ai_analysis: project.ai_analysis,
-      source_project_id: projectId,
-      estimated_cost_min: Math.round(totalCost * 0.85),
-      estimated_cost_max: Math.round(totalCost * 1.15),
-      estimated_time: project.build_plan?.estimatedTotalTime ?? "1-2 days",
+      buildPlan: project.buildPlan,
+      aiAnalysis: project.aiAnalysis,
+      sourceProjectId: projectId,
+      estimatedCostMin: Math.round(totalCost * 0.85),
+      estimatedCostMax: Math.round(totalCost * 1.15),
+      estimatedTime: (project.buildPlan as { estimatedTotalTime?: string })?.estimatedTotalTime ?? "1-2 days",
     })
-    .select()
-    .single();
+    .returning();
 
-  if (bpErr || !blueprint) {
-    logger.error({ err: bpErr }, "Failed to publish blueprint");
+  if (!blueprint) {
     res.status(500).json({ error: "Failed to publish blueprint" });
     return;
   }
 
-  // Link project to blueprint
-  await supabaseAdmin.from("projects").update({ blueprint_id: blueprint.id }).eq("id", projectId);
-
+  await db.update(projects).set({ blueprintId: blueprint.id }).where(eq(projects.id, projectId));
   res.json({ blueprintId: blueprint.id, url: `/blueprints/${blueprint.id}` });
 });
 
@@ -282,44 +234,38 @@ router.post("/blueprints/publish", verifyToken, async (req: AuthRequest, res: Re
 router.post("/blueprints/like", verifyToken, async (req: AuthRequest, res: Response) => {
   const { blueprintId } = req.body;
 
-  const { data: existing } = await supabaseAdmin
-    .from("blueprint_likes")
-    .select("id")
-    .eq("blueprint_id", blueprintId)
-    .eq("user_id", req.userId!)
-    .single();
+  const [existing] = await db.select({ id: blueprintLikes.id }).from(blueprintLikes).where(and(eq(blueprintLikes.blueprintId, blueprintId), eq(blueprintLikes.userId, req.userId!)));
 
   let liked: boolean;
   if (existing) {
-    await supabaseAdmin.from("blueprint_likes").delete().eq("blueprint_id", blueprintId).eq("user_id", req.userId!);
+    await db.delete(blueprintLikes).where(and(eq(blueprintLikes.blueprintId, blueprintId), eq(blueprintLikes.userId, req.userId!)));
     liked = false;
   } else {
-    await supabaseAdmin.from("blueprint_likes").insert({ blueprint_id: blueprintId, user_id: req.userId! });
+    await db.insert(blueprintLikes).values({ id: crypto.randomUUID(), blueprintId, userId: req.userId! });
     liked = true;
   }
 
-  // Recount likes
-  const { count } = await supabaseAdmin
-    .from("blueprint_likes")
-    .select("*", { count: "exact", head: true })
-    .eq("blueprint_id", blueprintId);
-
-  await supabaseAdmin.from("blueprints").update({ like_count: count ?? 0 }).eq("id", blueprintId);
-  res.json({ liked, count: count ?? 0 });
+  const [{ total }] = await db.select({ total: count() }).from(blueprintLikes).where(eq(blueprintLikes.blueprintId, blueprintId));
+  await db.update(blueprints).set({ likeCount: total }).where(eq(blueprints.id, blueprintId));
+  res.json({ liked, count: total });
 });
 
 // POST /api/blueprints/review
 router.post("/blueprints/review", verifyToken, async (req: AuthRequest, res: Response) => {
   const { blueprintId, rating, reviewText } = req.body;
 
-  const { data, error } = await supabaseAdmin
-    .from("blueprint_reviews")
-    .upsert({ blueprint_id: blueprintId, user_id: req.userId!, rating, review_text: reviewText }, { onConflict: "blueprint_id,user_id" })
-    .select("*, profiles(full_name, avatar_url)")
-    .single();
+  const [existing] = await db.select({ id: blueprintReviews.id }).from(blueprintReviews).where(and(eq(blueprintReviews.blueprintId, blueprintId), eq(blueprintReviews.userId, req.userId!)));
 
-  if (error) { res.status(500).json({ error: "Failed to save review" }); return; }
-  res.json({ review: data });
+  let review;
+  if (existing) {
+    const [updated] = await db.update(blueprintReviews).set({ rating, reviewText, updatedAt: new Date() }).where(eq(blueprintReviews.id, existing.id)).returning();
+    review = updated;
+  } else {
+    const [inserted] = await db.insert(blueprintReviews).values({ id: crypto.randomUUID(), blueprintId, userId: req.userId!, rating, reviewText }).returning();
+    review = inserted;
+  }
+
+  res.json({ review });
 });
 
 export default router;

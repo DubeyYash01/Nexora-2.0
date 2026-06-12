@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
-import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { logger } from "../lib/logger";
 import type { Response } from "express";
+import { db } from "@workspace/db";
+import { classes, classMembers, assignments, assignmentSubmissions, profiles } from "@workspace/db/schema";
+import { and, eq, inArray, asc, desc } from "drizzle-orm";
 
 const router = Router();
 
@@ -19,39 +21,37 @@ router.post("/assignments/create", verifyToken, async (req: AuthRequest, res: Re
     return;
   }
 
-  const { data: cls } = await supabaseAdmin
-    .from("classes")
-    .select("professor_id")
-    .eq("id", classId)
-    .single();
+  const [cls] = await db
+    .select({ professorId: classes.professorId })
+    .from(classes)
+    .where(eq(classes.id, classId));
 
-  if (!cls || cls.professor_id !== req.userId) {
+  if (!cls || cls.professorId !== req.userId) {
     res.status(403).json({ error: "You do not own this class" });
     return;
   }
 
-  const { data, error } = await supabaseAdmin
-    .from("assignments")
-    .insert({
-      class_id: classId,
-      professor_id: req.userId!,
+  const [data] = await db
+    .insert(assignments)
+    .values({
+      id: crypto.randomUUID(),
+      classId,
+      professorId: req.userId!,
       title,
       description,
       objectives: objectives ?? [],
-      allowed_components: allowedComponents ?? null,
-      required_phases: requiredPhases ?? [],
-      deadline: deadline ?? null,
-      max_group_size: maxGroupSize ?? 4,
-      allow_any_components: allowAnyComponents ?? true,
-      grading_criteria: gradingCriteria ?? null,
+      allowedComponents: allowedComponents ?? null,
+      requiredPhases: requiredPhases ?? [],
+      deadline: deadline ? new Date(deadline) : null,
+      maxGroupSize: maxGroupSize ?? 4,
+      allowAnyComponents: allowAnyComponents ?? true,
+      gradingCriteria: gradingCriteria ?? null,
       status: status ?? "active",
-      submission_count: 0,
+      submissionCount: 0,
     })
-    .select()
-    .single();
+    .returning();
 
-  if (error) {
-    logger.error({ err: error }, "Failed to create assignment");
+  if (!data) {
     res.status(500).json({ error: "Failed to create assignment" });
     return;
   }
@@ -68,18 +68,24 @@ router.get("/assignments/professor/:professorId", verifyToken, async (req: AuthR
     return;
   }
 
-  const { data, error } = await supabaseAdmin
-    .from("assignments")
-    .select("*, classes(name, subject)")
-    .eq("professor_id", professorId)
-    .order("created_at", { ascending: false });
+  const data = await db
+    .select({
+      id: assignments.id,
+      classId: assignments.classId,
+      title: assignments.title,
+      status: assignments.status,
+      deadline: assignments.deadline,
+      submissionCount: assignments.submissionCount,
+      createdAt: assignments.createdAt,
+      className: classes.name,
+      classSubject: classes.subject,
+    })
+    .from(assignments)
+    .leftJoin(classes, eq(classes.id, assignments.classId))
+    .where(eq(assignments.professorId, professorId))
+    .orderBy(desc(assignments.createdAt));
 
-  if (error) {
-    res.status(500).json({ error: "Failed to fetch assignments" });
-    return;
-  }
-
-  res.json({ assignments: data ?? [] });
+  res.json({ assignments: data });
 });
 
 // GET /api/assignments/student/:studentId
@@ -91,40 +97,53 @@ router.get("/assignments/student/:studentId", verifyToken, async (req: AuthReque
     return;
   }
 
-  const { data: memberships } = await supabaseAdmin
-    .from("class_members")
-    .select("class_id")
-    .eq("student_id", studentId);
+  const memberships = await db
+    .select({ classId: classMembers.classId })
+    .from(classMembers)
+    .where(eq(classMembers.studentId, studentId));
 
-  if (!memberships || memberships.length === 0) {
+  if (memberships.length === 0) {
     res.json({ assignments: [] });
     return;
   }
 
-  const classIds = memberships.map((m: { class_id: string }) => m.class_id);
+  const classIds = memberships.map((m) => m.classId);
 
-  const { data: assignments, error } = await supabaseAdmin
-    .from("assignments")
-    .select("*, classes(name, subject, profiles(full_name))")
-    .in("class_id", classIds)
-    .in("status", ["active", "closed"])
-    .order("deadline", { ascending: true });
+  const assignmentData = await db
+    .select({
+      id: assignments.id,
+      classId: assignments.classId,
+      title: assignments.title,
+      description: assignments.description,
+      objectives: assignments.objectives,
+      deadline: assignments.deadline,
+      status: assignments.status,
+      maxGroupSize: assignments.maxGroupSize,
+      requiredPhases: assignments.requiredPhases,
+      createdAt: assignments.createdAt,
+      className: classes.name,
+      classSubject: classes.subject,
+    })
+    .from(assignments)
+    .leftJoin(classes, eq(classes.id, assignments.classId))
+    .where(and(inArray(assignments.classId, classIds), inArray(assignments.status, ["active", "closed"])))
+    .orderBy(asc(assignments.deadline));
 
-  if (error) {
-    res.status(500).json({ error: "Failed to fetch assignments" });
-    return;
-  }
+  const submissionData = await db
+    .select({
+      id: assignmentSubmissions.id,
+      assignmentId: assignmentSubmissions.assignmentId,
+      status: assignmentSubmissions.status,
+      grade: assignmentSubmissions.grade,
+      submittedAt: assignmentSubmissions.submittedAt,
+      projectId: assignmentSubmissions.projectId,
+    })
+    .from(assignmentSubmissions)
+    .where(eq(assignmentSubmissions.studentId, studentId));
 
-  const { data: submissions } = await supabaseAdmin
-    .from("assignment_submissions")
-    .select("id, assignment_id, status, grade, submitted_at, project_id")
-    .eq("student_id", studentId);
+  const submissionMap = new Map(submissionData.map((s) => [s.assignmentId, s]));
 
-  const submissionMap = new Map(
-    (submissions ?? []).map((s: { assignment_id: string }) => [s.assignment_id, s])
-  );
-
-  const enriched = (assignments ?? []).map((a: { id: string }) => ({
+  const enriched = assignmentData.map((a) => ({
     ...a,
     submission: submissionMap.get(a.id) ?? null,
   }));
@@ -136,37 +155,52 @@ router.get("/assignments/student/:studentId", verifyToken, async (req: AuthReque
 router.get("/assignments/:assignmentId/submissions", verifyToken, async (req: AuthRequest, res: Response) => {
   const { assignmentId } = req.params;
 
-  const { data: assignment } = await supabaseAdmin
-    .from("assignments")
-    .select("professor_id, title, deadline, status, class_id, grading_criteria, required_phases, classes(name, student_count)")
-    .eq("id", assignmentId)
-    .single();
+  const [assignment] = await db
+    .select({
+      professorId: assignments.professorId,
+      title: assignments.title,
+      deadline: assignments.deadline,
+      status: assignments.status,
+      classId: assignments.classId,
+      gradingCriteria: assignments.gradingCriteria,
+      requiredPhases: assignments.requiredPhases,
+    })
+    .from(assignments)
+    .where(eq(assignments.id, assignmentId));
 
-  if (!assignment || assignment.professor_id !== req.userId) {
+  if (!assignment || assignment.professorId !== req.userId) {
     res.status(403).json({ error: "Professor access only" });
     return;
   }
 
-  const { data: submissions, error } = await supabaseAdmin
-    .from("assignment_submissions")
-    .select("*, profiles(id, full_name, email, avatar_url)")
-    .eq("assignment_id", assignmentId)
-    .order("submitted_at", { ascending: false });
+  const submissionsData = await db
+    .select({
+      id: assignmentSubmissions.id,
+      assignmentId: assignmentSubmissions.assignmentId,
+      studentId: assignmentSubmissions.studentId,
+      projectId: assignmentSubmissions.projectId,
+      status: assignmentSubmissions.status,
+      grade: assignmentSubmissions.grade,
+      submittedAt: assignmentSubmissions.submittedAt,
+      graderFeedback: assignmentSubmissions.graderFeedback,
+      fullName: profiles.fullName,
+      email: profiles.email,
+      avatarUrl: profiles.avatarUrl,
+    })
+    .from(assignmentSubmissions)
+    .leftJoin(profiles, eq(profiles.id, assignmentSubmissions.studentId))
+    .where(eq(assignmentSubmissions.assignmentId, assignmentId))
+    .orderBy(desc(assignmentSubmissions.submittedAt));
 
-  if (error) {
-    res.status(500).json({ error: "Failed to fetch submissions" });
-    return;
-  }
-
-  const { data: members } = await supabaseAdmin
-    .from("class_members")
-    .select("*, profiles(id, full_name, email, avatar_url)")
-    .eq("class_id", assignment.class_id);
+  const members = await db
+    .select({ studentId: classMembers.studentId })
+    .from(classMembers)
+    .where(eq(classMembers.classId, assignment.classId));
 
   res.json({
     assignment,
-    submissions: submissions ?? [],
-    totalStudents: (members ?? []).length,
+    submissions: submissionsData,
+    totalStudents: members.length,
   });
 });
 
@@ -174,13 +208,12 @@ router.get("/assignments/:assignmentId/submissions", verifyToken, async (req: Au
 router.get("/assignments/:assignmentId", verifyToken, async (req: AuthRequest, res: Response) => {
   const { assignmentId } = req.params;
 
-  const { data, error } = await supabaseAdmin
-    .from("assignments")
-    .select("*, classes(name, subject, professor_id, profiles(full_name))")
-    .eq("id", assignmentId)
-    .single();
+  const [data] = await db
+    .select()
+    .from(assignments)
+    .where(eq(assignments.id, assignmentId));
 
-  if (error || !data) {
+  if (!data) {
     res.status(404).json({ error: "Assignment not found" });
     return;
   }
@@ -191,16 +224,15 @@ router.get("/assignments/:assignmentId", verifyToken, async (req: AuthRequest, r
 // PATCH /api/assignments/:assignmentId
 router.patch("/assignments/:assignmentId", verifyToken, async (req: AuthRequest, res: Response) => {
   const { assignmentId } = req.params;
+  const { title, description, deadline, status, gradingCriteria } = req.body;
 
-  const { data, error } = await supabaseAdmin
-    .from("assignments")
-    .update({ ...req.body, updated_at: new Date().toISOString() })
-    .eq("id", assignmentId)
-    .eq("professor_id", req.userId!)
-    .select()
-    .single();
+  const [data] = await db
+    .update(assignments)
+    .set({ title, description, deadline: deadline ? new Date(deadline) : undefined, status, gradingCriteria, updatedAt: new Date() })
+    .where(and(eq(assignments.id, assignmentId), eq(assignments.professorId, req.userId!)))
+    .returning();
 
-  if (error || !data) {
+  if (!data) {
     res.status(404).json({ error: "Assignment not found" });
     return;
   }
@@ -212,16 +244,9 @@ router.patch("/assignments/:assignmentId", verifyToken, async (req: AuthRequest,
 router.delete("/assignments/:assignmentId", verifyToken, async (req: AuthRequest, res: Response) => {
   const { assignmentId } = req.params;
 
-  const { error } = await supabaseAdmin
-    .from("assignments")
-    .delete()
-    .eq("id", assignmentId)
-    .eq("professor_id", req.userId!);
-
-  if (error) {
-    res.status(500).json({ error: "Failed to delete assignment" });
-    return;
-  }
+  await db
+    .delete(assignments)
+    .where(and(eq(assignments.id, assignmentId), eq(assignments.professorId, req.userId!)));
 
   res.status(204).send();
 });

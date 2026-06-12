@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
-import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { logger } from "../lib/logger";
+import { db } from "@workspace/db";
+import { aiConversations, aiFeedback } from "@workspace/db/schema";
+import { and, eq } from "drizzle-orm";
 
 const router = Router();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
@@ -56,7 +58,6 @@ When responding to ERROR DIAGNOSIS requests, always structure your response as:
 💡 **Pro tip:**
 [one helpful tip to avoid this in future]`;
 
-// In-memory rate limit store (per user, per hour)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 function checkRateLimit(userId: string): { allowed: boolean; remaining: number; resetIn: number } {
@@ -95,7 +96,6 @@ router.post("/ai/chat", verifyToken, async (req: AuthRequest, res) => {
     return;
   }
 
-  // Rate limit check
   const rl = checkRateLimit(req.userId!);
   if (!rl.allowed) {
     res.status(429).json({
@@ -111,7 +111,6 @@ router.post("/ai/chat", verifyToken, async (req: AuthRequest, res) => {
     ? `${AI_SYSTEM_PROMPT}\n\n${projectContext}`
     : AI_SYSTEM_PROMPT;
 
-  // Build conversation parts for Gemini
   const historyParts = (conversationHistory ?? []).slice(-10).map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.content }],
@@ -131,7 +130,6 @@ router.post("/ai/chat", verifyToken, async (req: AuthRequest, res) => {
     return;
   }
 
-  // Save to ai_conversations
   const msgId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   if (projectId) {
     const userMsg = {
@@ -149,30 +147,23 @@ router.post("/ai/chat", verifyToken, async (req: AuthRequest, res) => {
       context: { messageType: messageType ?? "general" },
     };
 
-    // Upsert conversation
-    const { data: existing } = await supabaseAdmin
-      .from("ai_conversations")
-      .select("id, messages")
-      .eq("project_id", projectId)
-      .eq("user_id", req.userId!)
-      .single();
+    const [existing] = await db
+      .select({ id: aiConversations.id, messages: aiConversations.messages })
+      .from(aiConversations)
+      .where(and(eq(aiConversations.projectId, projectId), eq(aiConversations.userId, req.userId!)));
 
     if (existing) {
       const msgs = (existing.messages as object[]) ?? [];
-      await supabaseAdmin
-        .from("ai_conversations")
-        .update({
-          messages: [...msgs, userMsg, asstMsg],
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existing.id);
+      await db
+        .update(aiConversations)
+        .set({ messages: [...msgs, userMsg, asstMsg], updatedAt: new Date() })
+        .where(eq(aiConversations.id, existing.id));
     } else {
-      await supabaseAdmin.from("ai_conversations").insert({
-        project_id: projectId,
-        user_id: req.userId!,
+      await db.insert(aiConversations).values({
+        id: crypto.randomUUID(),
+        projectId,
+        userId: req.userId!,
         messages: [userMsg, asstMsg],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       });
     }
   }
@@ -183,7 +174,6 @@ router.post("/ai/chat", verifyToken, async (req: AuthRequest, res) => {
 // POST /api/ai/rate-check
 router.post("/ai/rate-check", verifyToken, async (req: AuthRequest, res) => {
   const rl = checkRateLimit(req.userId!);
-  // undo the increment
   const entry = rateLimitMap.get(req.userId!);
   if (entry) entry.count = Math.max(0, entry.count - 1);
   res.json({ allowed: rl.allowed, remaining: rl.remaining, resetIn: rl.resetIn });
@@ -193,30 +183,22 @@ router.post("/ai/rate-check", verifyToken, async (req: AuthRequest, res) => {
 router.get("/ai/conversation/:projectId", verifyToken, async (req: AuthRequest, res) => {
   const { projectId } = req.params;
 
-  const { data, error } = await supabaseAdmin
-    .from("ai_conversations")
-    .select("messages")
-    .eq("project_id", projectId)
-    .eq("user_id", req.userId!)
-    .single();
+  const [data] = await db
+    .select({ messages: aiConversations.messages })
+    .from(aiConversations)
+    .where(and(eq(aiConversations.projectId, projectId), eq(aiConversations.userId, req.userId!)));
 
-  if (error || !data) {
-    res.json({ messages: [] });
-    return;
-  }
-
-  res.json({ messages: data.messages ?? [] });
+  res.json({ messages: data?.messages ?? [] });
 });
 
 // DELETE /api/ai/conversation/:projectId
 router.delete("/ai/conversation/:projectId", verifyToken, async (req: AuthRequest, res) => {
   const { projectId } = req.params;
 
-  await supabaseAdmin
-    .from("ai_conversations")
-    .update({ messages: [], updated_at: new Date().toISOString() })
-    .eq("project_id", projectId)
-    .eq("user_id", req.userId!);
+  await db
+    .update(aiConversations)
+    .set({ messages: [], updatedAt: new Date() })
+    .where(and(eq(aiConversations.projectId, projectId), eq(aiConversations.userId, req.userId!)));
 
   res.json({ success: true });
 });
@@ -229,12 +211,12 @@ router.post("/ai/feedback", verifyToken, async (req: AuthRequest, res) => {
     feedback: "helpful" | "not_helpful";
   };
 
-  await supabaseAdmin.from("ai_feedback").insert({
-    message_id: messageId,
-    project_id: projectId,
-    user_id: req.userId!,
+  await db.insert(aiFeedback).values({
+    id: crypto.randomUUID(),
+    messageId,
+    projectId,
+    userId: req.userId!,
     feedback,
-    created_at: new Date().toISOString(),
   });
 
   res.json({ success: true });

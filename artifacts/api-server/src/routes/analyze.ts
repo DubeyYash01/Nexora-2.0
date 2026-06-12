@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
-import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { logger } from "../lib/logger";
+import { db } from "@workspace/db";
+import { projects } from "@workspace/db/schema";
+import { and, eq } from "drizzle-orm";
 
 const router = Router();
 
@@ -38,43 +40,21 @@ Return this exact structure:
     }
   ],
   "feasibility": {
-    "costFeasibility": {
-      "status": "good|moderate|high",
-      "note": "one line explanation"
-    },
-    "complexityFeasibility": {
-      "status": "good|moderate|high",
-      "note": "one line explanation"
-    },
-    "availabilityFeasibility": {
-      "status": "good|moderate|high",
-      "note": "one line explanation"
-    },
-    "timelineFeasibility": {
-      "status": "good|moderate|high",
-      "note": "one line explanation"
-    }
+    "costFeasibility": { "status": "good|moderate|high", "note": "one line explanation" },
+    "complexityFeasibility": { "status": "good|moderate|high", "note": "one line explanation" },
+    "availabilityFeasibility": { "status": "good|moderate|high", "note": "one line explanation" },
+    "timelineFeasibility": { "status": "good|moderate|high", "note": "one line explanation" }
   },
-  "risks": [
-    "risk 1 in one sentence",
-    "risk 2 in one sentence"
-  ],
-  "tips": [
-    "helpful tip 1 for this skill level",
-    "helpful tip 2"
-  ]
+  "risks": ["risk 1 in one sentence", "risk 2 in one sentence"],
+  "tips": ["helpful tip 1 for this skill level", "helpful tip 2"]
 }`;
 
 async function callGemini(idea: string, skillLevel: string): Promise<object> {
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
   const prompt = `${SYSTEM_PROMPT}\n\nAnalyze this IoT project idea for a ${skillLevel} level user: ${idea}`;
-
   const result = await model.generateContent(prompt);
   const text = result.response.text().trim();
-
-  // Strip markdown fences if present
   const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-
   try {
     return JSON.parse(cleaned);
   } catch {
@@ -84,7 +64,7 @@ async function callGemini(idea: string, skillLevel: string): Promise<object> {
 
 // POST /api/projects/analyze
 router.post("/projects/analyze", verifyToken, async (req: AuthRequest, res) => {
-  const { idea, skillLevel, projectType } = req.body;
+  const { idea, skillLevel } = req.body;
 
   if (!idea || typeof idea !== "string" || idea.trim().length < 10) {
     res.status(400).json({ error: "Idea must be at least 10 characters" });
@@ -92,7 +72,6 @@ router.post("/projects/analyze", verifyToken, async (req: AuthRequest, res) => {
   }
 
   let analysis: object;
-
   try {
     analysis = await callGemini(idea.trim(), skillLevel ?? "Beginner");
   } catch (firstErr) {
@@ -109,25 +88,22 @@ router.post("/projects/analyze", verifyToken, async (req: AuthRequest, res) => {
   const analysisObj = analysis as Record<string, unknown>;
   const projectTitle = (typeof analysisObj.projectTitle === "string" ? analysisObj.projectTitle : null) ?? "Untitled Project";
 
-  // Create project in Supabase
-  const { data: project, error: projectErr } = await supabaseAdmin
-    .from("projects")
-    .insert({
-      user_id: req.userId!,
+  const [project] = await db
+    .insert(projects)
+    .values({
+      id: crypto.randomUUID(),
+      userId: req.userId!,
       title: projectTitle,
       description: (analysisObj.projectSummary as string) ?? "",
-      idea_input: idea.trim(),
+      ideaInput: idea.trim(),
       status: "draft",
-      current_step: 1,
-      ai_analysis: analysis,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      currentStep: 1,
+      aiAnalysis: analysis,
     })
-    .select()
-    .single();
+    .returning();
 
-  if (projectErr || !project) {
-    logger.error({ err: projectErr }, "Failed to create project after analysis");
+  if (!project) {
+    logger.error({}, "Failed to create project after analysis");
     res.status(500).json({ error: "Failed to save project" });
     return;
   }
@@ -144,20 +120,10 @@ router.post("/projects/save-components", verifyToken, async (req: AuthRequest, r
     return;
   }
 
-  const { error } = await supabaseAdmin
-    .from("projects")
-    .update({
-      components: { list: components },
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", projectId)
-    .eq("user_id", req.userId!);
-
-  if (error) {
-    logger.error({ err: error }, "Failed to save components");
-    res.status(500).json({ error: "Failed to save components" });
-    return;
-  }
+  await db
+    .update(projects)
+    .set({ components: { list: components }, updatedAt: new Date() })
+    .where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
 
   res.json({ success: true });
 });

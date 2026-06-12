@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
-import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { logger } from "../lib/logger";
+import { db } from "@workspace/db";
+import { projects } from "@workspace/db/schema";
+import { and, eq } from "drizzle-orm";
 
 const router = Router();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
@@ -130,21 +132,10 @@ router.post("/projects/generate-plan", verifyToken, async (req: AuthRequest, res
     }
   }
 
-  const { error } = await supabaseAdmin
-    .from("projects")
-    .update({
-      build_plan: planData,
-      status: "in_progress",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", projectId)
-    .eq("user_id", req.userId!);
-
-  if (error) {
-    logger.error({ err: error }, "Failed to save build plan");
-    res.status(500).json({ error: "Failed to save build plan" });
-    return;
-  }
+  await db
+    .update(projects)
+    .set({ buildPlan: planData, status: "in_progress", updatedAt: new Date() })
+    .where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
 
   res.json({ buildPlan: (planData as Record<string, unknown>).buildPlan });
 });
@@ -153,14 +144,12 @@ router.post("/projects/generate-plan", verifyToken, async (req: AuthRequest, res
 router.get("/projects/workspace/:projectId", verifyToken, async (req: AuthRequest, res) => {
   const { projectId } = req.params;
 
-  const { data: project, error } = await supabaseAdmin
-    .from("projects")
-    .select("*")
-    .eq("id", projectId)
-    .eq("user_id", req.userId!)
-    .single();
+  const [project] = await db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
 
-  if (error || !project) {
+  if (!project) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
@@ -181,40 +170,30 @@ router.post("/projects/complete-step", verifyToken, async (req: AuthRequest, res
     return;
   }
 
-  // Get existing completed_steps
-  const { data: project, error: fetchErr } = await supabaseAdmin
-    .from("projects")
-    .select("completed_steps, build_plan")
-    .eq("id", projectId)
-    .eq("user_id", req.userId!)
-    .single();
+  const [project] = await db
+    .select({ completedSteps: projects.completedSteps, buildPlan: projects.buildPlan })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
 
-  if (fetchErr || !project) {
+  if (!project) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
 
-  const existing: number[] = (project.completed_steps as number[]) ?? [];
+  const existing: number[] = (project.completedSteps as number[]) ?? [];
   const completedSteps = Array.from(new Set([...existing, stepNumber]));
 
-  const { error: updateErr } = await supabaseAdmin
-    .from("projects")
-    .update({
-      current_step: stepNumber + 1,
-      completed_steps: completedSteps,
-      instruction_checks: instructionChecks,
-      updated_at: new Date().toISOString(),
+  await db
+    .update(projects)
+    .set({
+      currentStep: stepNumber + 1,
+      completedSteps,
+      instructionChecks,
+      updatedAt: new Date(),
     })
-    .eq("id", projectId)
-    .eq("user_id", req.userId!);
+    .where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
 
-  if (updateErr) {
-    logger.error({ err: updateErr }, "Failed to complete step");
-    res.status(500).json({ error: "Failed to complete step" });
-    return;
-  }
-
-  const buildPlan = project.build_plan as { buildPlan?: { totalSteps?: number } } | null;
+  const buildPlan = project.buildPlan as { buildPlan?: { totalSteps?: number } } | null;
   const totalSteps = buildPlan?.buildPlan?.totalSteps ?? 0;
   const nextStep = stepNumber < totalSteps ? stepNumber + 1 : null;
 
@@ -230,20 +209,10 @@ router.post("/projects/save-ide-code", verifyToken, async (req: AuthRequest, res
     return;
   }
 
-  const { error } = await supabaseAdmin
-    .from("projects")
-    .update({
-      ide_code: code,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", projectId)
-    .eq("user_id", req.userId!);
-
-  if (error) {
-    logger.error({ err: error }, "Failed to save IDE code");
-    res.status(500).json({ error: "Failed to save IDE code" });
-    return;
-  }
+  await db
+    .update(projects)
+    .set({ ideCode: code, updatedAt: new Date() })
+    .where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
 
   res.json({ success: true });
 });

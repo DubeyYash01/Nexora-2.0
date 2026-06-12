@@ -1,1 +1,2 @@
+- [Nexora migration](nexora-migration.md) — Supabase→Replit Auth/PostgreSQL migration decisions and architecture
 - [Prompt-build patterns](prompt-build-patterns.md) — design system, auth pattern, Supabase column shapes, and gotchas for building on Nexora

@@ -1,43 +1,33 @@
 import { Router } from "express";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
-import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { UpdateMyProfileBody } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
+import { db } from "@workspace/db";
+import { profiles } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
 
 const router = Router();
 
 // GET /api/profiles/me
 router.get("/profiles/me", verifyToken, async (req: AuthRequest, res) => {
   try {
-    const { data, error } = await supabaseAdmin
-      .from("profiles")
-      .select("*")
-      .eq("id", req.userId!)
-      .single();
+    const [profile] = await db.select().from(profiles).where(eq(profiles.id, req.userId!));
 
-    if (error) {
-      if (error.code === "PGRST116") {
-        // Profile doesn't exist yet — create it
-        const { data: newProfile, error: insertError } = await supabaseAdmin
-          .from("profiles")
-          .insert({ id: req.userId!, email: req.userEmail! })
-          .select()
-          .single();
+    if (!profile) {
+      const [newProfile] = await db
+        .insert(profiles)
+        .values({ id: req.userId!, email: req.userEmail! })
+        .returning();
 
-        if (insertError) {
-          logger.error({ err: insertError }, "Failed to create profile");
-          res.status(500).json({ error: "Failed to create profile" });
-          return;
-        }
-        res.json(newProfile);
+      if (!newProfile) {
+        res.status(500).json({ error: "Failed to create profile" });
         return;
       }
-      logger.error({ err: error }, "Failed to fetch profile");
-      res.status(500).json({ error: "Failed to fetch profile" });
+      res.json(newProfile);
       return;
     }
 
-    res.json(data);
+    res.json(profile);
   } catch (err) {
     logger.error({ err }, "Unexpected error in GET /profiles/me");
     res.status(500).json({ error: "Internal server error" });
@@ -53,24 +43,29 @@ router.patch("/profiles/me", verifyToken, async (req: AuthRequest, res) => {
       return;
     }
 
-    const updateData = {
-      ...parsed.data,
-      updated_at: new Date().toISOString(),
-    };
+    const [updated] = await db
+      .insert(profiles)
+      .values({
+        id: req.userId!,
+        email: req.userEmail!,
+        ...parsed.data,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: profiles.id,
+        set: {
+          ...parsed.data,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
 
-    const { data, error } = await supabaseAdmin
-      .from("profiles")
-      .upsert({ id: req.userId!, email: req.userEmail!, ...updateData })
-      .select()
-      .single();
-
-    if (error) {
-      logger.error({ err: error }, "Failed to update profile");
+    if (!updated) {
       res.status(500).json({ error: "Failed to update profile" });
       return;
     }
 
-    res.json(data);
+    res.json(updated);
   } catch (err) {
     logger.error({ err }, "Unexpected error in PATCH /profiles/me");
     res.status(500).json({ error: "Internal server error" });

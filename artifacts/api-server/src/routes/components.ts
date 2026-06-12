@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
-import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { logger } from "../lib/logger";
+import { db } from "@workspace/db";
+import { userComponents } from "@workspace/db/schema";
+import { and, eq, desc, count } from "drizzle-orm";
 
 const router = Router();
-
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
 async function callGeminiJSON(prompt: string): Promise<unknown> {
@@ -22,34 +23,21 @@ async function callGeminiJSON(prompt: string): Promise<unknown> {
 
 // GET /api/components/me
 router.get("/components/me", verifyToken, async (req: AuthRequest, res) => {
-  const { data, error } = await supabaseAdmin
-    .from("user_components")
-    .select("*")
-    .eq("user_id", req.userId!)
-    .order("added_at", { ascending: false });
-
-  if (error) {
-    logger.error({ err: error }, "Failed to fetch components");
-    res.status(500).json({ error: "Failed to fetch components" });
-    return;
-  }
-
-  res.json({ components: data ?? [] });
+  const data = await db
+    .select()
+    .from(userComponents)
+    .where(eq(userComponents.userId, req.userId!))
+    .orderBy(desc(userComponents.addedAt));
+  res.json({ components: data });
 });
 
 // GET /api/components/count
 router.get("/components/count", verifyToken, async (req: AuthRequest, res) => {
-  const { count, error } = await supabaseAdmin
-    .from("user_components")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", req.userId!);
-
-  if (error) {
-    res.status(500).json({ error: "Failed to count components" });
-    return;
-  }
-
-  res.json({ count: count ?? 0 });
+  const [result] = await db
+    .select({ count: count() })
+    .from(userComponents)
+    .where(eq(userComponents.userId, req.userId!));
+  res.json({ count: result?.count ?? 0 });
 });
 
 // POST /api/components
@@ -61,23 +49,12 @@ router.post("/components", verifyToken, async (req: AuthRequest, res) => {
     return;
   }
 
-  const { data, error } = await supabaseAdmin
-    .from("user_components")
-    .insert({
-      user_id: req.userId!,
-      name,
-      category,
-      quantity: quantity ?? 1,
-      condition,
-      purchase_price: purchasePrice ?? null,
-      notes: notes ?? null,
-      added_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
+  const [data] = await db
+    .insert(userComponents)
+    .values({ id: crypto.randomUUID(), userId: req.userId!, name, category, quantity: quantity ?? 1, condition, purchasePrice: purchasePrice ?? null, notes: notes ?? null })
+    .returning();
 
-  if (error || !data) {
-    logger.error({ err: error }, "Failed to add component");
+  if (!data) {
     res.status(500).json({ error: "Failed to add component" });
     return;
   }
@@ -90,24 +67,14 @@ router.put("/components/:id", verifyToken, async (req: AuthRequest, res) => {
   const { id } = req.params;
   const { name, category, quantity, condition, purchasePrice, notes } = req.body;
 
-  const { data, error } = await supabaseAdmin
-    .from("user_components")
-    .update({
-      name,
-      category,
-      quantity,
-      condition,
-      purchase_price: purchasePrice ?? null,
-      notes: notes ?? null,
-    })
-    .eq("id", id)
-    .eq("user_id", req.userId!)
-    .select()
-    .single();
+  const [data] = await db
+    .update(userComponents)
+    .set({ name, category, quantity, condition, purchasePrice: purchasePrice ?? null, notes: notes ?? null })
+    .where(and(eq(userComponents.id, id), eq(userComponents.userId, req.userId!)))
+    .returning();
 
-  if (error || !data) {
-    logger.error({ err: error }, "Failed to update component");
-    res.status(500).json({ error: "Failed to update component" });
+  if (!data) {
+    res.status(404).json({ error: "Component not found" });
     return;
   }
 
@@ -118,17 +85,9 @@ router.put("/components/:id", verifyToken, async (req: AuthRequest, res) => {
 router.delete("/components/:id", verifyToken, async (req: AuthRequest, res) => {
   const { id } = req.params;
 
-  const { error } = await supabaseAdmin
-    .from("user_components")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", req.userId!);
-
-  if (error) {
-    logger.error({ err: error }, "Failed to delete component");
-    res.status(500).json({ error: "Failed to delete component" });
-    return;
-  }
+  await db
+    .delete(userComponents)
+    .where(and(eq(userComponents.id, id), eq(userComponents.userId, req.userId!)));
 
   res.json({ success: true });
 });
@@ -161,21 +120,16 @@ Return ONLY valid JSON. No markdown. No explanation. No code fences.
       "matchReason": "why these components work for this project",
       "requiredComponents": ["component names from user inventory"],
       "missingComponents": [
-        {
-          "name": "component name",
-          "estimatedCost": number in INR,
-          "optional": boolean,
-          "reason": "why needed"
-        }
+        { "name": "component name", "estimatedCost": number, "optional": boolean, "reason": "why needed" }
       ],
-      "totalExtraCost": number in INR,
+      "totalExtraCost": number,
       "estimatedTime": "e.g. 1-2 days",
       "learningValue": "what skill this project teaches"
     }
   ]
 }
 
-Sort by matchScore descending. Return exactly 6 suggestions. Prioritize projects where missingComponents is empty or has only optional items.`;
+Sort by matchScore descending. Return exactly 6 suggestions.`;
 
   const userMessage = `Suggest IoT projects for this inventory:\n${inventoryList}\nUser skill level: ${skillLevel ?? "Beginner"}`;
 
@@ -202,39 +156,20 @@ router.post("/components/shopping-list", verifyToken, async (req: AuthRequest, r
     .join("\n");
 
   const systemPrompt = `You are a helpful IoT shopping assistant for Indian students and makers.
-
-Given a list of components to purchase, provide shopping guidance optimized for India (online stores: Robu.in, Electronicscomp.com, Amazon.in, Flipkart, Robocraze, Fabtolab).
+Given components to purchase, provide shopping guidance for India (Robu.in, Amazon.in, Flipkart, Robocraze).
 
 Return ONLY valid JSON:
 {
   "shoppingList": [
-    {
-      "componentName": "name",
-      "quantity": number,
-      "estimatedPrice": number in INR,
-      "priceRange": { "min": number, "max": number },
-      "recommendedStore": "store name",
-      "searchTerm": "exact search term to use on that store",
-      "buyingTip": "one tip for buying this component in India",
-      "commonMistake": "most common wrong purchase to avoid",
-      "alternatives": [
-        {
-          "name": "alternative name",
-          "price": number,
-          "tradeoff": "what you gain/lose"
-        }
-      ]
-    }
+    { "componentName": "name", "quantity": number, "estimatedPrice": number, "priceRange": { "min": number, "max": number }, "recommendedStore": "store", "searchTerm": "search term", "buyingTip": "tip", "commonMistake": "mistake", "alternatives": [{ "name": "name", "price": number, "tradeoff": "tradeoff" }] }
   ],
   "totalEstimate": number,
-  "bulkTip": "money saving tip for buying all these together",
-  "priorityOrder": ["component names in order to buy first if on tight budget"]
+  "bulkTip": "saving tip",
+  "priorityOrder": ["component names"]
 }`;
 
-  const userMessage = `Generate shopping list for these components:\n${componentList}\nStudent budget context: trying to minimize cost.\nLocation: India.`;
-
   try {
-    const result = await callGeminiJSON(`${systemPrompt}\n\n${userMessage}`);
+    const result = await callGeminiJSON(`${systemPrompt}\n\nGenerate shopping list for:\n${componentList}`);
     res.json(result);
   } catch (err) {
     logger.error({ err }, "Failed to generate shopping list");
@@ -256,19 +191,13 @@ router.post("/components/substitutions", verifyToken, async (req: AuthRequest, r
     : "";
 
   const prompt = `For an IoT project using ${platform ?? "ESP32"}, suggest 2-3 substitutes for ${componentName}.
-User's available components: ${inventoryList || "none specified"}.
+User's available components: ${inventoryList || "none"}.
 ${projectContext ? `Project context: ${projectContext}` : ""}
 
 Return JSON only:
 {
   "substitutes": [
-    {
-      "name": "substitute name",
-      "compatibility": "Drop-in replacement|Minor code changes|Significant changes",
-      "codeChanges": "what changes needed",
-      "tradeoffs": "what you gain or lose",
-      "available": boolean
-    }
+    { "name": "name", "compatibility": "Drop-in replacement|Minor code changes|Significant changes", "codeChanges": "what changes", "tradeoffs": "gain/lose", "available": boolean }
   ]
 }`;
 

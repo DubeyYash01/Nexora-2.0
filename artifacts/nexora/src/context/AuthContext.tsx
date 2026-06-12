@@ -1,101 +1,102 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { User } from "@supabase/supabase-js";
-import { supabase, authFetch } from "@/lib/supabase";
-import { Profile, setAuthTokenGetter } from "@workspace/api-client-react";
+import { authFetch } from "@/lib/supabase";
+import { setAuthTokenGetter } from "@workspace/api-client-react";
 
-// Wire up the generated API hooks to use Supabase auth tokens automatically
-setAuthTokenGetter(async () => {
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
-});
+setAuthTokenGetter(async () => null);
+
+export interface UserProfile {
+  id: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  profileImageUrl?: string;
+  fullName?: string;
+  role?: string;
+  collegeName?: string;
+  course?: string;
+  year?: string;
+  skillLevel?: string;
+  bio?: string;
+  onboardingComplete?: boolean;
+}
 
 interface AuthContextType {
-  user: User | null;
-  profile: Profile | null;
+  user: UserProfile | null;
+  profile: UserProfile | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signOut: () => Promise<{ error: Error | null }>;
-  updateProfile: (data: Partial<Profile>) => Promise<{ error: Error | null }>;
+  signIn: () => void;
+  signOut: () => void;
+  updateProfile: (data: Partial<UserProfile>) => Promise<{ error: Error | null }>;
 }
 
 export const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   loading: true,
-  signUp: async () => ({ error: null }),
-  signIn: async () => ({ error: null }),
-  signOut: async () => ({ error: null }),
+  signIn: () => { window.location.href = "/api/login"; },
+  signOut: () => { window.location.href = "/api/logout"; },
   updateProfile: async () => ({ error: null }),
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (sessionUser: User) => {
+  const fetchUser = async () => {
+    try {
+      const res = await fetch("/api/auth/user", { credentials: "include" });
+      if (res.status === 401) {
+        setUser(null);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data);
+        await fetchProfile();
+      }
+    } catch {
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchProfile = async () => {
     try {
       const res = await authFetch("/api/profiles/me");
       if (res.ok) {
         const data = await res.json();
         setProfile(data);
       }
-    } catch (error) {
-      console.error("Error fetching profile", error);
+    } catch {
+      // ignore
     }
   };
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user);
-      if (user) fetchProfile(user);
-      else setLoading(false);
-    });
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user).finally(() => setLoading(false));
-      } else {
-        setProfile(null);
-        setLoading(false);
-      }
-    });
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
+    fetchUser();
   }, []);
 
-  const signUp = async (email: string, password: string, fullName: string) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) return { error };
-    if (data.user) {
-      await updateProfile({ full_name: fullName });
-    }
-    return { error: null };
+  const signIn = () => {
+    window.location.href = "/api/login";
   };
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error };
+  const signOut = () => {
+    window.location.href = "/api/logout";
   };
 
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    return { error };
-  };
-
-  const updateProfile = async (data: Partial<Profile>) => {
+  const updateProfile = async (data: Partial<UserProfile>) => {
     try {
       const res = await authFetch("/api/profiles/me", {
         method: "PATCH",
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error("Failed to update profile");
-      const updatedProfile = await res.json();
-      setProfile(updatedProfile);
+      const updated = await res.json();
+      setProfile(updated);
       return { error: null };
     } catch (error) {
       return { error: error as Error };
@@ -103,7 +104,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signOut, updateProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );

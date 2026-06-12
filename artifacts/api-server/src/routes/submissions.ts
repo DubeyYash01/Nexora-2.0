@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
-import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { logger } from "../lib/logger";
 import type { Response } from "express";
+import { db } from "@workspace/db";
+import { assignmentSubmissions, assignments, projects, aiConversations, profiles } from "@workspace/db/schema";
+import { and, eq, desc } from "drizzle-orm";
 
 const router = Router();
 
@@ -10,136 +12,109 @@ const router = Router();
 router.get("/submissions/:submissionId", verifyToken, async (req: AuthRequest, res: Response) => {
   const { submissionId } = req.params;
 
-  const { data: submission, error } = await supabaseAdmin
-    .from("assignment_submissions")
-    .select("*, profiles(id, full_name, email, avatar_url), projects(*), assignments(title, deadline, grading_criteria, required_phases, professor_id)")
-    .eq("id", submissionId)
-    .single();
+  const [submission] = await db
+    .select()
+    .from(assignmentSubmissions)
+    .where(eq(assignmentSubmissions.id, submissionId));
 
-  if (error || !submission) {
+  if (!submission) {
     res.status(404).json({ error: "Submission not found" });
     return;
   }
 
-  if (submission.student_id !== req.userId && submission.assignments?.professor_id !== req.userId) {
+  const [assignment] = await db
+    .select({ professorId: assignments.professorId, title: assignments.title, deadline: assignments.deadline, gradingCriteria: assignments.gradingCriteria, requiredPhases: assignments.requiredPhases })
+    .from(assignments)
+    .where(eq(assignments.id, submission.assignmentId));
+
+  if (submission.studentId !== req.userId && assignment?.professorId !== req.userId) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
 
-  const { data: aiConv } = await supabaseAdmin
-    .from("ai_conversations")
-    .select("messages")
-    .eq("project_id", submission.project_id)
-    .eq("user_id", submission.student_id)
-    .single();
+  const [aiConv] = await db
+    .select({ messages: aiConversations.messages })
+    .from(aiConversations)
+    .where(and(eq(aiConversations.projectId, submission.projectId!), eq(aiConversations.userId, submission.studentId)));
 
   const messages = (aiConv?.messages as object[]) ?? [];
-  const aiCount = messages.length;
 
-  res.json({ submission: { ...submission, aiMessageCount: aiCount, aiMessages: messages } });
+  res.json({ submission: { ...submission, assignment, aiMessageCount: messages.length, aiMessages: messages } });
 });
 
 // POST /api/submissions/submit
 router.post("/submissions/submit", verifyToken, async (req: AuthRequest, res: Response) => {
-  const {
-    projectId, assignmentId, groupMembers,
-    videoDemoUrl, studentNote,
-  } = req.body;
+  const { projectId, assignmentId, groupMembers, videoDemoUrl, studentNote } = req.body;
 
   if (!projectId || !assignmentId) {
     res.status(400).json({ error: "projectId and assignmentId required" });
     return;
   }
 
-  const { data: project } = await supabaseAdmin
-    .from("projects")
-    .select("*")
-    .eq("id", projectId)
-    .eq("user_id", req.userId!)
-    .single();
+  const [project] = await db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
 
   if (!project) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
 
-  const buildPlan = project.build_plan as { buildPlan?: { totalSteps?: number; steps?: { phase: string }[] } } | null;
+  const buildPlan = project.buildPlan as { buildPlan?: { totalSteps?: number } } | null;
   const totalSteps = buildPlan?.buildPlan?.totalSteps ?? 0;
-  const completedSteps = (project.completed_steps as number[] | null) ?? [];
+  const completedSteps = (project.completedSteps as number[] | null) ?? [];
 
-  const { data: aiConv } = await supabaseAdmin
-    .from("ai_conversations")
-    .select("messages")
-    .eq("project_id", projectId)
-    .eq("user_id", req.userId!)
-    .single();
+  const [aiConv] = await db
+    .select({ messages: aiConversations.messages })
+    .from(aiConversations)
+    .where(and(eq(aiConversations.projectId, projectId), eq(aiConversations.userId, req.userId!)));
 
   const aiMessages = (aiConv?.messages as object[]) ?? [];
-  const aiAssistanceLog = {
-    totalMessages: aiMessages.length,
-    messagesLog: aiMessages,
-  };
+  const aiAssistanceLog = { totalMessages: aiMessages.length, messagesLog: aiMessages };
 
-  const { data: existing } = await supabaseAdmin
-    .from("assignment_submissions")
-    .select("id")
-    .eq("assignment_id", assignmentId)
-    .eq("student_id", req.userId!)
-    .single();
+  const [existing] = await db
+    .select({ id: assignmentSubmissions.id })
+    .from(assignmentSubmissions)
+    .where(and(eq(assignmentSubmissions.assignmentId, assignmentId), eq(assignmentSubmissions.studentId, req.userId!)));
 
   let submission;
   if (existing) {
-    const { data } = await supabaseAdmin
-      .from("assignment_submissions")
-      .update({
-        project_id: projectId,
-        group_members: groupMembers ?? [],
-        submitted_at: new Date().toISOString(),
+    const [updated] = await db
+      .update(assignmentSubmissions)
+      .set({
+        projectId,
+        groupMembers: groupMembers ?? [],
+        submittedAt: new Date(),
         status: "submitted",
-        ai_assistance_log: aiAssistanceLog,
-        component_list: project.components,
-        build_steps_completed: completedSteps.length,
-        total_build_steps: totalSteps,
-        ...(videoDemoUrl ? { video_demo_url: videoDemoUrl } : {}),
-        ...(studentNote ? { student_note: studentNote } : {}),
+        aiAssistanceLog,
+        componentList: project.components,
+        videoDemoUrl: videoDemoUrl ?? null,
+        studentNote: studentNote ?? null,
+        updatedAt: new Date(),
       })
-      .eq("id", existing.id)
-      .select()
-      .single();
-    submission = data;
+      .where(eq(assignmentSubmissions.id, existing.id))
+      .returning();
+    submission = updated;
   } else {
-    const { data } = await supabaseAdmin
-      .from("assignment_submissions")
-      .insert({
-        assignment_id: assignmentId,
-        project_id: projectId,
-        student_id: req.userId!,
-        group_members: groupMembers ?? [],
-        submitted_at: new Date().toISOString(),
+    const [inserted] = await db
+      .insert(assignmentSubmissions)
+      .values({
+        id: crypto.randomUUID(),
+        assignmentId,
+        projectId,
+        studentId: req.userId!,
+        groupMembers: groupMembers ?? [],
+        submittedAt: new Date(),
         status: "submitted",
-        ai_assistance_log: aiAssistanceLog,
-        component_list: project.components,
-        build_steps_completed: completedSteps.length,
-        total_build_steps: totalSteps,
-        ...(videoDemoUrl ? { video_demo_url: videoDemoUrl } : {}),
-        ...(studentNote ? { student_note: studentNote } : {}),
+        aiAssistanceLog,
+        componentList: project.components,
+        videoDemoUrl: videoDemoUrl ?? null,
+        studentNote: studentNote ?? null,
       })
-      .select()
-      .single();
-    submission = data;
+      .returning();
+    submission = inserted;
   }
-
-  await supabaseAdmin
-    .from("projects")
-    .update({ submitted_for_assignment: true })
-    .eq("id", projectId);
-
-  await supabaseAdmin
-    .from("assignments")
-    .update({
-      submission_count: supabaseAdmin.rpc("increment", { row_id: assignmentId }) as unknown as number,
-    })
-    .eq("id", assignmentId);
 
   res.json({ submission });
 });
@@ -153,79 +128,73 @@ router.post("/submissions/draft", verifyToken, async (req: AuthRequest, res: Res
     return;
   }
 
-  const { data: existing } = await supabaseAdmin
-    .from("assignment_submissions")
-    .select("id")
-    .eq("assignment_id", assignmentId)
-    .eq("student_id", req.userId!)
-    .single();
+  const [existing] = await db
+    .select({ id: assignmentSubmissions.id })
+    .from(assignmentSubmissions)
+    .where(and(eq(assignmentSubmissions.assignmentId, assignmentId), eq(assignmentSubmissions.studentId, req.userId!)));
 
   if (existing) {
     res.json({ submission: existing });
     return;
   }
 
-  const { data } = await supabaseAdmin
-    .from("assignment_submissions")
-    .insert({
-      assignment_id: assignmentId,
-      project_id: projectId,
-      student_id: req.userId!,
+  const [data] = await db
+    .insert(assignmentSubmissions)
+    .values({
+      id: crypto.randomUUID(),
+      assignmentId,
+      projectId,
+      studentId: req.userId!,
       status: "draft",
     })
-    .select()
-    .single();
+    .returning();
 
   res.json({ submission: data });
 });
 
 // PUT /api/submissions/grade
 router.put("/submissions/grade", verifyToken, async (req: AuthRequest, res: Response) => {
-  const { submissionId, grade, feedback, rubricScores } = req.body;
+  const { submissionId, grade, feedback } = req.body;
 
   if (!submissionId) {
     res.status(400).json({ error: "submissionId required" });
     return;
   }
 
-  const { data: submission } = await supabaseAdmin
-    .from("assignment_submissions")
-    .select("assignment_id")
-    .eq("id", submissionId)
-    .single();
+  const [submission] = await db
+    .select({ assignmentId: assignmentSubmissions.assignmentId })
+    .from(assignmentSubmissions)
+    .where(eq(assignmentSubmissions.id, submissionId));
 
   if (!submission) {
     res.status(404).json({ error: "Submission not found" });
     return;
   }
 
-  const { data: assignment } = await supabaseAdmin
-    .from("assignments")
-    .select("professor_id")
-    .eq("id", submission.assignment_id)
-    .single();
+  const [assignment] = await db
+    .select({ professorId: assignments.professorId })
+    .from(assignments)
+    .where(eq(assignments.id, submission.assignmentId));
 
-  if (!assignment || assignment.professor_id !== req.userId) {
+  if (!assignment || assignment.professorId !== req.userId) {
     res.status(403).json({ error: "Professor access only" });
     return;
   }
 
-  const { data, error } = await supabaseAdmin
-    .from("assignment_submissions")
-    .update({
+  const [data] = await db
+    .update(assignmentSubmissions)
+    .set({
       grade,
-      professor_feedback: feedback,
-      rubric_scores: rubricScores ?? null,
+      graderFeedback: feedback,
       status: "graded",
-      graded_at: new Date().toISOString(),
-      graded_by: req.userId!,
+      gradedAt: new Date(),
+      gradedBy: req.userId!,
+      updatedAt: new Date(),
     })
-    .eq("id", submissionId)
-    .select("*, profiles(full_name)")
-    .single();
+    .where(eq(assignmentSubmissions.id, submissionId))
+    .returning();
 
-  if (error) {
-    logger.error({ err: error }, "Failed to grade submission");
+  if (!data) {
     res.status(500).json({ error: "Failed to save grade" });
     return;
   }
@@ -242,18 +211,22 @@ router.get("/submissions/student/:studentId", verifyToken, async (req: AuthReque
     return;
   }
 
-  const { data, error } = await supabaseAdmin
-    .from("assignment_submissions")
-    .select("*, assignments(title, deadline)")
-    .eq("student_id", studentId)
-    .order("submitted_at", { ascending: false });
+  const data = await db
+    .select({
+      id: assignmentSubmissions.id,
+      assignmentId: assignmentSubmissions.assignmentId,
+      status: assignmentSubmissions.status,
+      grade: assignmentSubmissions.grade,
+      submittedAt: assignmentSubmissions.submittedAt,
+      assignmentTitle: assignments.title,
+      assignmentDeadline: assignments.deadline,
+    })
+    .from(assignmentSubmissions)
+    .leftJoin(assignments, eq(assignments.id, assignmentSubmissions.assignmentId))
+    .where(eq(assignmentSubmissions.studentId, studentId))
+    .orderBy(desc(assignmentSubmissions.submittedAt));
 
-  if (error) {
-    res.status(500).json({ error: "Failed to fetch submissions" });
-    return;
-  }
-
-  res.json({ submissions: data ?? [] });
+  res.json({ submissions: data });
 });
 
 export default router;

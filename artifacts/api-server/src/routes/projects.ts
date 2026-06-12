@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
-import { supabaseAdmin } from "../lib/supabaseAdmin";
 import {
   CreateProjectBody,
   UpdateProjectBody,
@@ -9,22 +8,19 @@ import {
   DeleteProjectParams,
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
+import { db } from "@workspace/db";
+import { projects } from "@workspace/db/schema";
+import { eq, and, desc, sql } from "drizzle-orm";
 
 const router = Router();
 
 // GET /api/projects/stats — must be before /:id
 router.get("/projects/stats", verifyToken, async (req: AuthRequest, res) => {
   try {
-    const { data, error } = await supabaseAdmin
-      .from("projects")
-      .select("status")
-      .eq("user_id", req.userId!);
-
-    if (error) {
-      logger.error({ err: error }, "Failed to fetch project stats");
-      res.status(500).json({ error: "Failed to fetch project stats" });
-      return;
-    }
+    const data = await db
+      .select({ status: projects.status })
+      .from(projects)
+      .where(eq(projects.userId, req.userId!));
 
     const stats = {
       total: data.length,
@@ -43,17 +39,11 @@ router.get("/projects/stats", verifyToken, async (req: AuthRequest, res) => {
 // GET /api/projects
 router.get("/projects", verifyToken, async (req: AuthRequest, res) => {
   try {
-    const { data, error } = await supabaseAdmin
-      .from("projects")
-      .select("*")
-      .eq("user_id", req.userId!)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      logger.error({ err: error }, "Failed to fetch projects");
-      res.status(500).json({ error: "Failed to fetch projects" });
-      return;
-    }
+    const data = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.userId, req.userId!))
+      .orderBy(desc(projects.createdAt));
 
     res.json(data);
   } catch (err) {
@@ -73,22 +63,20 @@ router.post("/projects", verifyToken, async (req: AuthRequest, res) => {
 
     const assignmentId = (req.body as Record<string, unknown>).assignment_id as string | undefined;
 
-    const { data, error } = await supabaseAdmin
-      .from("projects")
-      .insert({
-        ...parsed.data,
-        user_id: req.userId!,
+    const [data] = await db
+      .insert(projects)
+      .values({
+        id: crypto.randomUUID(),
+        userId: req.userId!,
+        title: parsed.data.title,
+        description: parsed.data.description ?? "",
         status: parsed.data.status ?? "draft",
-        current_step: 0,
-        ...(assignmentId ? { assignment_id: assignmentId } : {}),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        currentStep: 0,
+        ...(assignmentId ? { assignmentId } : {}),
       })
-      .select()
-      .single();
+      .returning();
 
-    if (error) {
-      logger.error({ err: error }, "Failed to create project");
+    if (!data) {
       res.status(500).json({ error: "Failed to create project" });
       return;
     }
@@ -109,14 +97,12 @@ router.get("/projects/:id", verifyToken, async (req: AuthRequest, res) => {
       return;
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("projects")
-      .select("*")
-      .eq("id", params.data.id)
-      .eq("user_id", req.userId!)
-      .single();
+    const [data] = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, params.data.id), eq(projects.userId, req.userId!)));
 
-    if (error || !data) {
+    if (!data) {
       res.status(404).json({ error: "Project not found" });
       return;
     }
@@ -143,16 +129,13 @@ router.patch("/projects/:id", verifyToken, async (req: AuthRequest, res) => {
       return;
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("projects")
-      .update({ ...parsed.data, updated_at: new Date().toISOString() })
-      .eq("id", params.data.id)
-      .eq("user_id", req.userId!)
-      .select()
-      .single();
+    const [data] = await db
+      .update(projects)
+      .set({ ...parsed.data, updatedAt: new Date() })
+      .where(and(eq(projects.id, params.data.id), eq(projects.userId, req.userId!)))
+      .returning();
 
-    if (error || !data) {
-      logger.error({ err: error }, "Failed to update project");
+    if (!data) {
       res.status(404).json({ error: "Project not found or update failed" });
       return;
     }
@@ -173,17 +156,9 @@ router.delete("/projects/:id", verifyToken, async (req: AuthRequest, res) => {
       return;
     }
 
-    const { error } = await supabaseAdmin
-      .from("projects")
-      .delete()
-      .eq("id", params.data.id)
-      .eq("user_id", req.userId!);
-
-    if (error) {
-      logger.error({ err: error }, "Failed to delete project");
-      res.status(500).json({ error: "Failed to delete project" });
-      return;
-    }
+    await db
+      .delete(projects)
+      .where(and(eq(projects.id, params.data.id), eq(projects.userId, req.userId!)));
 
     res.status(204).send();
   } catch (err) {

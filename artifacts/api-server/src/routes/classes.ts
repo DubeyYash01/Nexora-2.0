@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
-import { supabaseAdmin } from "../lib/supabaseAdmin";
 import { logger } from "../lib/logger";
-import type { Request, Response } from "express";
+import type { Response } from "express";
+import { db } from "@workspace/db";
+import { classes, classMembers, assignments, assignmentSubmissions, profiles } from "@workspace/db/schema";
+import { and, eq, inArray, desc } from "drizzle-orm";
 
 const router = Router();
 
@@ -12,7 +14,7 @@ function generateJoinCode(): string {
 
 // POST /api/classes/create
 router.post("/classes/create", verifyToken, async (req: AuthRequest, res: Response) => {
-  const { name, subject, college, academicYear, joinCode, maxStudents } = req.body;
+  const { name, subject, college, academicYear, joinCode } = req.body;
 
   if (!name || !subject || !college) {
     res.status(400).json({ error: "name, subject, and college are required" });
@@ -21,28 +23,64 @@ router.post("/classes/create", verifyToken, async (req: AuthRequest, res: Respon
 
   const code = joinCode || generateJoinCode();
 
-  const { data, error } = await supabaseAdmin
-    .from("classes")
-    .insert({
-      professor_id: req.userId!,
+  const [data] = await db
+    .insert(classes)
+    .values({
+      id: crypto.randomUUID(),
+      professorId: req.userId!,
       name,
       subject,
       college,
-      academic_year: academicYear,
-      join_code: code,
-      student_count: 0,
-      is_active: true,
+      academicYear,
+      joinCode: code,
+      studentCount: 0,
+      isActive: true,
     })
-    .select()
-    .single();
+    .returning();
 
-  if (error) {
-    logger.error({ err: error }, "Failed to create class");
+  if (!data) {
     res.status(500).json({ error: "Failed to create class" });
     return;
   }
 
   res.status(201).json({ class: data });
+});
+
+// GET /api/classes/professor/stats
+router.get("/classes/professor/stats", verifyToken, async (req: AuthRequest, res) => {
+  const classData = await db
+    .select({ id: classes.id, studentCount: classes.studentCount })
+    .from(classes)
+    .where(eq(classes.professorId, req.userId!));
+
+  const assignmentData = await db
+    .select({ id: assignments.id, status: assignments.status })
+    .from(assignments)
+    .where(eq(assignments.professorId, req.userId!));
+
+  const assignmentIds = assignmentData.map((a) => a.id);
+  let submissionData: { status: string }[] = [];
+  if (assignmentIds.length > 0) {
+    submissionData = await db
+      .select({ status: assignmentSubmissions.status })
+      .from(assignmentSubmissions)
+      .where(inArray(assignmentSubmissions.assignmentId, assignmentIds));
+  }
+
+  const totalStudents = classData.reduce((s, c) => s + (c.studentCount ?? 0), 0);
+  const activeAssignments = assignmentData.filter((a) => a.status === "active").length;
+  const pendingReviews = submissionData.filter((s) => s.status === "submitted").length;
+  const submitted = submissionData.filter((s) => s.status === "submitted" || s.status === "graded").length;
+  const total = totalStudents * assignmentData.length;
+  const completionRate = total > 0 ? Math.round((submitted / total) * 100) : 0;
+
+  res.json({
+    totalClasses: classData.length,
+    activeAssignments,
+    totalStudents,
+    pendingReviews,
+    completionRate,
+  });
 });
 
 // GET /api/classes/professor/:professorId
@@ -54,19 +92,13 @@ router.get("/classes/professor/:professorId", verifyToken, async (req: AuthReque
     return;
   }
 
-  const { data, error } = await supabaseAdmin
-    .from("classes")
-    .select("*, class_members(count)")
-    .eq("professor_id", professorId)
-    .order("created_at", { ascending: false });
+  const data = await db
+    .select()
+    .from(classes)
+    .where(eq(classes.professorId, professorId))
+    .orderBy(desc(classes.createdAt));
 
-  if (error) {
-    logger.error({ err: error }, "Failed to fetch classes");
-    res.status(500).json({ error: "Failed to fetch classes" });
-    return;
-  }
-
-  res.json({ classes: data ?? [] });
+  res.json({ classes: data });
 });
 
 // POST /api/classes/join
@@ -78,98 +110,95 @@ router.post("/classes/join", verifyToken, async (req: AuthRequest, res: Response
     return;
   }
 
-  const { data: cls, error: clsErr } = await supabaseAdmin
-    .from("classes")
-    .select("*, profiles(full_name)")
-    .eq("join_code", joinCode.toUpperCase())
-    .eq("is_active", true)
-    .single();
+  const [cls] = await db
+    .select()
+    .from(classes)
+    .where(and(eq(classes.joinCode, joinCode.toUpperCase()), eq(classes.isActive, true)));
 
-  if (clsErr || !cls) {
+  if (!cls) {
     res.status(404).json({ error: "Invalid code. Check with your professor." });
     return;
   }
 
-  const { data: existing } = await supabaseAdmin
-    .from("class_members")
-    .select("id")
-    .eq("class_id", cls.id)
-    .eq("student_id", req.userId!)
-    .single();
+  const [existing] = await db
+    .select({ id: classMembers.id })
+    .from(classMembers)
+    .where(and(eq(classMembers.classId, cls.id), eq(classMembers.studentId, req.userId!)));
 
   if (existing) {
     res.status(409).json({ error: "You are already a member of this class" });
     return;
   }
 
-  const { error: joinErr } = await supabaseAdmin
-    .from("class_members")
-    .insert({ class_id: cls.id, student_id: req.userId! });
+  await db.insert(classMembers).values({
+    id: crypto.randomUUID(),
+    classId: cls.id,
+    studentId: req.userId!,
+  });
 
-  if (joinErr) {
-    logger.error({ err: joinErr }, "Failed to join class");
-    res.status(500).json({ error: "Failed to join class" });
-    return;
-  }
+  await db
+    .update(classes)
+    .set({ studentCount: (cls.studentCount ?? 0) + 1 })
+    .where(eq(classes.id, cls.id));
 
-  await supabaseAdmin
-    .from("classes")
-    .update({ student_count: (cls.student_count ?? 0) + 1 })
-    .eq("id", cls.id);
+  const assignmentData = await db
+    .select()
+    .from(assignments)
+    .where(and(eq(assignments.classId, cls.id), eq(assignments.status, "active")));
 
-  const { data: assignments } = await supabaseAdmin
-    .from("assignments")
-    .select("*")
-    .eq("class_id", cls.id)
-    .eq("status", "active");
-
-  res.json({ class: cls, assignments: assignments ?? [] });
+  res.json({ class: cls, assignments: assignmentData });
 });
 
 // GET /api/classes/:classId/students
 router.get("/classes/:classId/students", verifyToken, async (req: AuthRequest, res: Response) => {
   const { classId } = req.params;
 
-  const { data: cls } = await supabaseAdmin
-    .from("classes")
-    .select("professor_id")
-    .eq("id", classId)
-    .single();
+  const [cls] = await db
+    .select({ professorId: classes.professorId })
+    .from(classes)
+    .where(eq(classes.id, classId));
 
-  if (!cls || cls.professor_id !== req.userId) {
+  if (!cls || cls.professorId !== req.userId) {
     res.status(403).json({ error: "Professor access only" });
     return;
   }
 
-  const { data, error } = await supabaseAdmin
-    .from("class_members")
-    .select("*, profiles(id, full_name, email, avatar_url, role)")
-    .eq("class_id", classId)
-    .order("joined_at", { ascending: false });
+  const members = await db
+    .select({
+      id: classMembers.id,
+      studentId: classMembers.studentId,
+      joinedAt: classMembers.joinedAt,
+      fullName: profiles.fullName,
+      email: profiles.email,
+      avatarUrl: profiles.avatarUrl,
+    })
+    .from(classMembers)
+    .leftJoin(profiles, eq(profiles.id, classMembers.studentId))
+    .where(eq(classMembers.classId, classId))
+    .orderBy(desc(classMembers.joinedAt));
 
-  if (error) {
-    logger.error({ err: error }, "Failed to fetch students");
-    res.status(500).json({ error: "Failed to fetch students" });
-    return;
-  }
-
-  res.json({ students: data ?? [] });
+  res.json({ students: members });
 });
 
 // GET /api/classes/student/my
 router.get("/classes/student/my", verifyToken, async (req: AuthRequest, res: Response) => {
-  const { data, error } = await supabaseAdmin
-    .from("class_members")
-    .select("*, classes(*, profiles(full_name))")
-    .eq("student_id", req.userId!);
+  const myClasses = await db
+    .select({
+      id: classes.id,
+      name: classes.name,
+      subject: classes.subject,
+      college: classes.college,
+      academicYear: classes.academicYear,
+      joinCode: classes.joinCode,
+      studentCount: classes.studentCount,
+      isActive: classes.isActive,
+      professorId: classes.professorId,
+    })
+    .from(classMembers)
+    .innerJoin(classes, eq(classes.id, classMembers.classId))
+    .where(eq(classMembers.studentId, req.userId!));
 
-  if (error) {
-    logger.error({ err: error }, "Failed to fetch student classes");
-    res.status(500).json({ error: "Failed to fetch classes" });
-    return;
-  }
-
-  res.json({ classes: (data ?? []).map((m: Record<string, unknown>) => m.classes) });
+  res.json({ classes: myClasses });
 });
 
 // PATCH /api/classes/:classId
@@ -177,15 +206,13 @@ router.patch("/classes/:classId", verifyToken, async (req: AuthRequest, res: Res
   const { classId } = req.params;
   const { name, subject, college, academicYear, isActive } = req.body;
 
-  const { data, error } = await supabaseAdmin
-    .from("classes")
-    .update({ name, subject, college, academic_year: academicYear, is_active: isActive })
-    .eq("id", classId)
-    .eq("professor_id", req.userId!)
-    .select()
-    .single();
+  const [data] = await db
+    .update(classes)
+    .set({ name, subject, college, academicYear, isActive, updatedAt: new Date() })
+    .where(and(eq(classes.id, classId), eq(classes.professorId, req.userId!)))
+    .returning();
 
-  if (error || !data) {
+  if (!data) {
     res.status(404).json({ error: "Class not found" });
     return;
   }
@@ -197,52 +224,11 @@ router.patch("/classes/:classId", verifyToken, async (req: AuthRequest, res: Res
 router.delete("/classes/:classId", verifyToken, async (req: AuthRequest, res: Response) => {
   const { classId } = req.params;
 
-  const { error } = await supabaseAdmin
-    .from("classes")
-    .delete()
-    .eq("id", classId)
-    .eq("professor_id", req.userId!);
-
-  if (error) {
-    res.status(500).json({ error: "Failed to delete class" });
-    return;
-  }
+  await db
+    .delete(classes)
+    .where(and(eq(classes.id, classId), eq(classes.professorId, req.userId!)));
 
   res.status(204).send();
-});
-
-// GET /api/classes/professor/stats
-router.get("/classes/professor/stats", verifyToken, async (req: AuthRequest, res) => {
-  const { data: classes } = await supabaseAdmin
-    .from("classes")
-    .select("id, student_count, is_active")
-    .eq("professor_id", req.userId!);
-
-  const { data: assignments } = await supabaseAdmin
-    .from("assignments")
-    .select("id, status")
-    .eq("professor_id", req.userId!);
-
-  const { data: submissions } = await supabaseAdmin
-    .from("assignment_submissions")
-    .select("id, status, assignment_id")
-    .in("assignment_id", (assignments ?? []).map((a: { id: string }) => a.id));
-
-  const totalStudents = (classes ?? []).reduce((s: number, c: { student_count: number }) => s + (c.student_count ?? 0), 0);
-  const activeAssignments = (assignments ?? []).filter((a: { status: string }) => a.status === "active").length;
-  const pendingReviews = (submissions ?? []).filter((s: { status: string }) => s.status === "submitted").length;
-
-  const submitted = (submissions ?? []).filter((s: { status: string }) => s.status === "submitted" || s.status === "graded").length;
-  const total = totalStudents * (assignments ?? []).length;
-  const completionRate = total > 0 ? Math.round((submitted / total) * 100) : 0;
-
-  res.json({
-    totalClasses: (classes ?? []).length,
-    activeAssignments,
-    totalStudents,
-    pendingReviews,
-    completionRate,
-  });
 });
 
 export default router;
