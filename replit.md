@@ -49,7 +49,80 @@ An AI-powered IoT project creation platform that turns any IoT idea into a worki
 - OpenAPI-first: all API contracts defined in `lib/api-spec/openapi.yaml`, codegen produces typed hooks + Zod validators.
 - Design system is entirely CSS custom properties in `index.css` — dark purple/cyan palette applied globally.
 
-## Supabase Setup Required
+## Supabase Setup Required (Prompt 6 additions)
+
+Run these SQL statements in Supabase SQL Editor after the Prompt 5 tables:
+
+```sql
+CREATE TABLE IF NOT EXISTS blueprints (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  author_id uuid REFERENCES profiles(id),
+  title text NOT NULL,
+  description text,
+  difficulty text CHECK (difficulty IN ('Beginner','Intermediate','Advanced')),
+  category text,
+  components jsonb,
+  build_plan jsonb,
+  ai_analysis jsonb,
+  tags text[],
+  is_featured boolean DEFAULT false,
+  is_public boolean DEFAULT true,
+  fork_count integer DEFAULT 0,
+  view_count integer DEFAULT 0,
+  like_count integer DEFAULT 0,
+  source_project_id uuid REFERENCES projects(id),
+  estimated_cost_min integer,
+  estimated_cost_max integer,
+  estimated_time text,
+  platform text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS blueprint_likes (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  blueprint_id uuid REFERENCES blueprints(id) ON DELETE CASCADE,
+  user_id uuid REFERENCES profiles(id),
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(blueprint_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS blueprint_forks (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  blueprint_id uuid REFERENCES blueprints(id),
+  forked_by uuid REFERENCES profiles(id),
+  new_project_id uuid REFERENCES projects(id),
+  forked_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS blueprint_reviews (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  blueprint_id uuid REFERENCES blueprints(id) ON DELETE CASCADE,
+  user_id uuid REFERENCES profiles(id),
+  rating integer CHECK (rating BETWEEN 1 AND 5),
+  review_text text,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(blueprint_id, user_id)
+);
+
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS is_public boolean DEFAULT false;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS share_token text UNIQUE;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS blueprint_id uuid REFERENCES blueprints(id);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS forked_from uuid REFERENCES blueprints(id);
+
+ALTER TABLE blueprints ENABLE ROW LEVEL SECURITY;
+ALTER TABLE blueprint_likes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE blueprint_forks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE blueprint_reviews ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "public blueprints readable" ON blueprints FOR SELECT USING (is_public = true);
+CREATE POLICY "authors manage blueprints" ON blueprints FOR ALL USING (auth.uid() = author_id);
+CREATE POLICY "users manage own likes" ON blueprint_likes FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "users manage own forks" ON blueprint_forks FOR ALL USING (auth.uid() = forked_by);
+CREATE POLICY "users manage own reviews" ON blueprint_reviews FOR ALL USING (auth.uid() = user_id);
+```
+
+## Supabase Setup Required (original)
 
 Run these SQL statements in Supabase SQL Editor:
 
@@ -167,7 +240,7 @@ Colors (dark purple-tinted palette):
 
 ## Product
 
-Nexora is a complete IoT project creation platform. Prompts 1–4 of 14 complete:
+Nexora is a complete IoT project creation platform. Prompts 1–6 of 14 complete:
 - **Prompt 1**: Landing page, auth (login/signup/role-select), dashboard shell, Supabase setup
 - **Prompt 2**: Project creation (2-step: AI analysis → component selection), Gemini integration, project/stats routes
 - **Prompt 3**: Build plan generator (Gemini), Project Workspace (`/workspace/:id`) with 3-panel layout:
@@ -178,20 +251,34 @@ Nexora is a complete IoT project creation platform. Prompts 1–4 of 14 complete
 - **Prompt 4**: Full context-aware AI Assistant:
   - Bottom panel in workspace: real Gemini-powered chat with full project context injection every message
   - Conversation persists in Supabase `ai_conversations` table per project
-  - Smart suggested prompts that change by build phase (Setup/Wiring/Coding/Testing/Integration/Deployment)
-  - Markdown + syntax-highlighted code rendering in AI responses
-  - "Push to IDE" button on AI code blocks (replace or insert mode)
-  - Error debugger modal: paste Arduino error → AI diagnoses with structured response format
-  - "Explain this" tooltip: select code in Monaco → floating button → AI explains in chat panel
-  - Voice input via Web Speech API
-  - 👍/👎 feedback saved to `ai_feedback` table
-  - Rate limiting: 30 messages/hour per user (in-memory)
-  - Floating AI button on all non-workspace pages: general IoT Q&A mode (session-only, no project context)
+  - Smart suggested prompts that change by build phase
+  - Markdown + syntax-highlighted code rendering; "Push to IDE" button on code blocks
+  - Error debugger modal, "Explain this" tooltip, Voice input, 👍/👎 feedback
+  - Rate limiting: 30 messages/hour; Floating AI button on all non-workspace pages
+- **Prompt 5**: Component Inventory + Budget Tracker:
+  - `/components` page: full CRUD component inventory with autocomplete, search, filter, stats
+  - Suggest Projects panel: Gemini matches inventory → 6 ranked project ideas
+  - Shopping list generator (Gemini, India-optimized with store links)
+  - Component substitution finder
+  - Workspace Budget tab: per-component estimated vs. actual cost, progress bar
+  - Dashboard "Components Saved" stat; New Project auto-matches inventory
+- **Prompt 6**: Blueprint Library + Sharing System:
+  - `/blueprints` page: hero, sticky search/filter, featured horizontal scroll, 3-col grid
+  - 6 official seed blueprints (seeded automatically on first visit)
+  - Blueprint Detail page (`/blueprints/:id`): 4 tabs — Overview, Components, Build Plan, Reviews
+  - Fork flow: creates customized project, Gemini adapts components to user inventory
+  - Publish Blueprint modal: 3-step (Details → Visibility → Preview) with CSS confetti
+  - Project Sharing: share toggle → generates share_token → public URL
+  - Public project view (`/p/:shareToken`): no auth required, "Get Started Free" CTA
+  - Export Code tab: syntax-highlighted code viewer
+  - "Made with Nexora" card: beautiful shareable card with QR + LinkedIn/Instagram/WhatsApp captions
+  - Dashboard blueprint cards now load from real API (featured blueprints)
+  - Workspace "Export / Share" button opens the full Share modal
 
 ## User preferences
 
 - Design system must be consistent across every screen built in all future prompts
-- This is Prompt 4 of 14 — future prompts will build on top of this foundation
+- This is Prompt 6 of 14 — future prompts will build on top of this foundation
 
 ## Gotchas
 

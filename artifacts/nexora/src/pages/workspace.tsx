@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import NexoraIDE from "@/components/ide/NexoraIDE";
 import type { Library as LibraryType } from "@/components/ide/NexoraIDE";
 import AIAssistant from "@/components/ai/AIAssistant";
+import ShareProjectModal from "@/components/blueprints/ShareProjectModal";
 
 /* ── Types ───────────────────────────────────────────── */
 
@@ -338,6 +339,9 @@ export default function Workspace() {
   const [leftWidth, setLeftWidth] = useState(320);
   const draggingV = useRef(false);
 
+  // Share modal
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+
   // Save status
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -595,19 +599,13 @@ export default function Workspace() {
             </span>
           </div>
           <button
-            onClick={() => {
-              const blob = new Blob([ideCode], { type: "text/plain" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `${titleValue.replace(/\s+/g, "_")}.zip`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
-            className="text-xs px-3 py-1.5 rounded-lg border transition-colors"
+            onClick={() => setShareModalOpen(true)}
+            className="text-xs px-3 py-1.5 rounded-lg border transition-colors flex items-center gap-1.5"
             style={{ color: "#9090B0", borderColor: "#2A2A3E", background: "transparent" }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#6C63FF"; e.currentTarget.style.color = "#6C63FF"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A3E"; e.currentTarget.style.color = "#9090B0"; }}
           >
-            Export Project
+            Export / Share
           </button>
         </div>
       </div>
@@ -790,6 +788,27 @@ export default function Workspace() {
           )}
         </div>
       </div>
+
+      {/* Share / Export modal */}
+      {shareModalOpen && project && (
+        <ShareProjectModal
+          project={{
+            id: project.id,
+            title: titleValue || project.title,
+            description: project.ai_analysis?.projectSummary,
+            ai_analysis: {
+              difficultyLevel: project.ai_analysis?.skillLevel,
+              platform: "ESP32",
+            },
+            components: project.components ?? undefined,
+            build_plan: project.build_plan?.buildPlan
+              ? { steps: project.build_plan.buildPlan.steps }
+              : undefined,
+            ide_code: ideCode || undefined,
+          }}
+          onClose={() => setShareModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

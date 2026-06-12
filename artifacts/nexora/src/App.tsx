@@ -17,6 +17,9 @@ import Projects from "@/pages/projects";
 import NewProject from "@/pages/new-project";
 import Workspace from "@/pages/workspace";
 import ComponentsPage from "@/pages/components-page";
+import BlueprintsPage from "@/pages/blueprints";
+import BlueprintDetailPage from "@/pages/blueprint-detail";
+import PublicProjectPage from "@/pages/public-project";
 
 const queryClient = new QueryClient();
 
@@ -75,6 +78,13 @@ function Router() {
         <Route path="/components">
           <ProtectedRoute component={ComponentsPage} />
         </Route>
+        <Route path="/blueprints">
+          <ProtectedRoute component={BlueprintsPage} />
+        </Route>
+        <Route path="/blueprints/:id">
+          <ProtectedRoute component={BlueprintDetailPage} />
+        </Route>
+        <Route path="/p/:shareToken" component={PublicProjectPage} />
         <Route component={NotFound} />
       </Switch>
       <FloatingAIWrapper />

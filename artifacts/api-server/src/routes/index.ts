@@ -7,6 +7,8 @@ import workspaceRouter from "./workspace";
 import aiRouter from "./ai";
 import componentsRouter from "./components";
 import budgetRouter from "./budget";
+import blueprintsRouter from "./blueprints";
+import sharingRouter from "./sharing";
 
 const router: IRouter = Router();
 
@@ -17,6 +19,8 @@ router.use(workspaceRouter);
 router.use(aiRouter);
 router.use(componentsRouter);
 router.use(budgetRouter);
+router.use(blueprintsRouter);
+router.use(sharingRouter);
 router.use(projectsRouter);
 
 export default router;
