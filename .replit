@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-20", "web", "bash"]
 
 [deployment]
 router = "application"
@@ -49,8 +49,9 @@ args = "PORT=23292 BASE_PATH=/ pnpm --filter @workspace/nexora run dev"
 waitForPort = 23292
 
 [agent]
-stack = "PNPM_WORKSPACE"
+stack = "BEST_EFFORT_FALLBACK"
 expertMode = true
+integrations = ["javascript_database:1.0.0", "javascript_log_in_with_replit:2.0.0", "javascript_gemini_ai_integrations:2.0.0"]
 
 [postMerge]
 path = "scripts/post-merge.sh"
@@ -67,3 +68,6 @@ externalPort = 8081
 [[ports]]
 localPort = 23292
 externalPort = 3000
+
+[nix]
+channel = "stable-25_05"
