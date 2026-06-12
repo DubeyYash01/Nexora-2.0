@@ -1,0 +1,854 @@
+This is Prompt 5 of 14 for building Nexora.
+Prompts 1-4 already built: foundation, auth,
+dashboard, project creation, AI analysis,
+component selection, build plan, Nexora IDE
+with incremental code push, and the full
+context-aware AI assistant.
+
+Do NOT touch or recreate anything from
+Prompts 1, 2, 3, or 4. Only ADD to what exists.
+
+═══════════════════════════════════════
+WHAT THIS PROMPT BUILDS
+═══════════════════════════════════════
+
+1. My Components Page 
+   (personal hardware inventory)
+2. Budget Tracker 
+   (live cost management per project)
+3. "Build With What You Own" System
+   (AI suggests projects using 
+    components user already has)
+4. Component Substitution Engine
+   (AI suggests alternatives when 
+    user doesn't have a component)
+5. Shopping List Generator
+   (what to buy, where to buy, 
+    best price in India)
+6. Component Detail Cards
+   (pinouts, specs, common mistakes)
+
+═══════════════════════════════════════
+UNDERSTANDING THE CORE VALUE HERE
+═══════════════════════════════════════
+
+This is the feature that saves students 
+money and prevents wasted purchases.
+
+The problem it solves:
+  Student buys wrong component → ₹200 wasted
+  Student buys duplicate → ₹300 wasted
+  Student doesn't know alternatives → 
+    waits 3 days for delivery
+  
+  Nexora solves all three.
+
+The "Build With What You Own" feature is 
+also a powerful acquisition hook:
+  User adds their components → 
+  Nexora suggests 5 projects they can 
+  build TODAY with zero extra spending →
+  User feels immediate value →
+  User upgrades to paid tier
+
+═══════════════════════════════════════
+SUPABASE CHANGES NEEDED
+═══════════════════════════════════════
+
+New table: user_components
+  id              uuid (gen_random_uuid(), pk)
+  user_id         uuid (references profiles.id)
+  name            text
+  category        text 
+    (values: 'microcontroller' | 'sensor' | 
+     'actuator' | 'display' | 'communication' |
+     'power' | 'passive' | 'module' | 'other')
+  quantity        integer (default 1)
+  condition       text 
+    (values: 'new' | 'working' | 
+     'untested' | 'faulty')
+  purchase_price  numeric (nullable)
+  notes           text (nullable)
+  added_at        timestamp with time zone
+  last_used_at    timestamp with time zone (nullable)
+
+New table: project_budget
+  id              uuid (gen_random_uuid(), pk)
+  project_id      uuid (references projects.id)
+  user_id         uuid (references profiles.id)
+  budget_limit    numeric (nullable)
+  components      jsonb
+    (array of:
+     {
+       componentId: string,
+       name: string,
+       estimatedCost: number,
+       actualCost: number (nullable),
+       owned: boolean,
+       quantity: number,
+       purchaseLink: string (nullable),
+       purchased: boolean
+     }
+    )
+  total_estimated numeric
+  total_actual    numeric (default 0)
+  created_at      timestamp with time zone
+  updated_at      timestamp with time zone
+
+RLS on both tables:
+  Users can only access their own rows.
+
+═══════════════════════════════════════
+MY COMPONENTS PAGE — /components
+═══════════════════════════════════════
+
+Route: /components
+Sidebar nav item already exists from Prompt 1.
+Activate it to point to this page.
+
+────────────────────────────────────
+PAGE HEADER
+────────────────────────────────────
+
+Left:
+  Title: "My Components"
+  Subtext: "Your personal hardware inventory"
+
+Right:
+  "+ Add Component" button (primary)
+  "Scan & Suggest Projects" button 
+  (secondary, sparkles icon, #6C63FF)
+  → This triggers "Build With What You Own"
+
+Stats row (3 small stat cards):
+  Card 1: Total Components 
+          (count of unique components)
+  Card 2: Total Value 
+          "~₹[sum of purchase_price]"
+          subtext: "Estimated inventory value"
+  Card 3: Used in Projects
+          count of components that appear 
+          in at least one project
+
+────────────────────────────────────
+COMPONENT SEARCH & FILTER BAR
+────────────────────────────────────
+
+Search input:
+  Placeholder: "Search components..."
+  Searches name and notes fields
+  Real-time filter (no submit needed)
+
+Filter pills (horizontal scroll on mobile):
+  All | Microcontrollers | Sensors | 
+  Actuators | Displays | Communication | 
+  Power | Passive | Modules
+
+Sort dropdown:
+  Recently Added | Name A-Z | 
+  Category | Most Used
+
+────────────────────────────────────
+COMPONENTS GRID
+────────────────────────────────────
+
+2 columns desktop, 1 column mobile.
+Each component as a ComponentCard.
+
+File: client/src/components/ui/ComponentCard.jsx
+
+ComponentCard design:
+  bg: #12121A
+  border: 1px solid #2A2A3E
+  border-radius: 12px
+  padding: 20px
+  hover: border #6C63FF, 
+         shadow rgba(108,99,255,0.1)
+
+  Top row:
+    Left:
+      Category icon (lucide, color #6C63FF)
+      Component name (bold, #F0F0FF)
+    Right:
+      Condition badge:
+        'new' → cyan bg+text
+        'working' → green bg+text
+        'untested' → yellow bg+text
+        'faulty' → red bg+text
+      
+      Three-dot menu (on hover):
+        Edit | Duplicate | Delete
+
+  Middle row:
+    Category pill (small, muted)
+    Quantity: "×[number]" 
+    
+    If purchase_price set:
+      "₹[price]" (small, secondary)
+    
+    If notes:
+      Notes text (2 lines max, 
+      italic, muted, text-sm)
+
+  Bottom row:
+    Left:
+      If used in projects:
+        "Used in [X] project(s)" 
+        (small, color #00D4FF)
+      Else:
+        "Not used in any project yet"
+        (small, muted)
+    
+    Right:
+      "Find Projects" button 
+      (small, secondary, ghost style)
+      → Triggers project suggestion 
+        for this single component
+
+EMPTY STATE (no components yet):
+  Centered illustration placeholder
+  Icon: cpu (large, #6C63FF, opacity 0.4)
+  Heading: "No components added yet"
+  Subtext: "Add your hardware inventory 
+            and Nexora will suggest 
+            projects you can build today."
+  Button: "+ Add Your First Component"
+
+────────────────────────────────────
+ADD COMPONENT MODAL
+────────────────────────────────────
+
+File: client/src/components/ui/AddComponentModal.jsx
+
+Triggered by "+ Add Component" button.
+
+Slide-in modal from right (drawer style):
+  Width: 420px on desktop
+  Full screen on mobile
+  Overlay: semi-transparent dark bg
+
+Header:
+  "Add Component" title
+  Close button (X)
+
+Form fields:
+
+  1. Component Name *
+     Text input
+     Placeholder: "e.g. ESP32 DevKit V1"
+     
+     AS USER TYPES: show autocomplete 
+     suggestions from a hardcoded list 
+     of 50 common IoT components:
+     
+     Common components list to include:
+     ESP32 DevKit V1, ESP8266 NodeMCU,
+     Arduino Uno R3, Arduino Nano,
+     DHT11 Temperature Sensor,
+     DHT22 Temperature Sensor,
+     HC-SR04 Ultrasonic Sensor,
+     PIR Motion Sensor,
+     Soil Moisture Sensor,
+     MQ-2 Gas Sensor, MQ-135 Air Quality,
+     BMP280 Pressure Sensor,
+     MPU6050 Gyroscope,
+     DS18B20 Temperature Sensor,
+     OLED Display 0.96",
+     LCD 16x2 Display,
+     7 Segment Display,
+     Servo Motor SG90,
+     DC Motor, Stepper Motor 28BYJ-48,
+     L298N Motor Driver,
+     Relay Module 1 Channel,
+     Relay Module 2 Channel,
+     LED (various colors),
+     RGB LED, Buzzer Active,
+     Buzzer Passive, Push Button,
+     Potentiometer, LDR Sensor,
+     IR Sensor, Flame Sensor,
+     Water Level Sensor,
+     Rain Sensor, Touch Sensor,
+     Ultrasonic Sensor HC-SR05,
+     NRF24L01 RF Module,
+     HC-05 Bluetooth Module,
+     HC-06 Bluetooth Module,
+     SIM800L GSM Module,
+     Neo-6M GPS Module,
+     SD Card Module,
+     Real Time Clock DS3231,
+     RFID RC522 Module,
+     Fingerprint Sensor,
+     18650 Li-ion Battery,
+     TP4056 Battery Charger,
+     Buck Converter,
+     Breadboard, Jumper Wires,
+     Resistor Kit, Capacitor Kit
+     
+     Autocomplete dropdown:
+       bg: #1A1A2E
+       border: #2A2A3E
+       Shows matching items
+       Click to fill input
+
+  2. Category *
+     Dropdown select
+     Options: all category values listed above
+     Auto-selects based on component name 
+     if matched from autocomplete list
+
+  3. Quantity *
+     Number input, min 1, default 1
+     +/- stepper buttons on sides
+
+  4. Condition *
+     4 toggle buttons:
+     New | Working | Untested | Faulty
+     Selected: bg #6C63FF
+
+  5. Purchase Price (optional)
+     Number input
+     Left addon: "₹"
+     Placeholder: "0"
+
+  6. Notes (optional)
+     Textarea, 3 rows
+     Placeholder: "Any notes about this 
+     component — model number, bought from, 
+     issues noticed..."
+
+  Bottom:
+    "Add to Inventory" primary button (full width)
+    "Add Another" secondary button
+      → Saves and clears form for next entry
+      → Perfect for bulk adding after 
+        shopping trip
+
+  On success: 
+    Toast: "✓ [Component name] added 
+            to your inventory"
+    Close modal (or clear if "Add Another")
+    Update component grid instantly
+
+────────────────────────────────────
+EDIT COMPONENT
+────────────────────────────────────
+
+Same modal, pre-filled with existing data.
+"Save Changes" instead of "Add to Inventory".
+Changes save to Supabase immediately.
+
+────────────────────────────────────
+DELETE COMPONENT
+────────────────────────────────────
+
+Confirmation dialog (small modal):
+  "Remove [component name] from inventory?"
+  "This won't affect existing projects."
+  "Cancel" | "Remove" (red button)
+
+═══════════════════════════════════════
+BUILD WITH WHAT YOU OWN SYSTEM
+═══════════════════════════════════════
+
+File: client/src/components/components/
+      SuggestProjectsPanel.jsx
+
+Triggered by:
+  "Scan & Suggest Projects" button 
+  (on components page header)
+  "Find Projects" on individual component card
+
+Opens a full-width panel sliding up 
+from bottom (like a bottom sheet):
+  Height: 70vh
+  bg: #12121A
+  border-top: 1px solid #2A2A3E
+  border-radius: 20px 20px 0 0
+
+Panel header:
+  "✦ Projects You Can Build Today"
+  Subtext: "Based on [X] components 
+            in your inventory"
+  Close button
+
+Loading state:
+  Animated sparkles icon
+  Rotating messages:
+    "✦ Scanning your inventory..."
+    "✦ Matching components to projects..."
+    "✦ Finding the best matches..."
+
+Calls POST /api/components/suggest-projects
+
+────────────────────────────────────
+GEMINI PROMPT FOR PROJECT SUGGESTIONS
+────────────────────────────────────
+
+Backend calls Gemini with:
+
+---SYSTEM PROMPT START---
+You are Nexora's project suggestion AI.
+Given a user's component inventory, suggest 
+IoT projects they can build.
+
+Return ONLY valid JSON. No markdown. 
+No explanation. No code fences.
+
+{
+  "suggestions": [
+    {
+      "title": "project name",
+      "description": "what it does 
+                      in 2 sentences",
+      "difficulty": "Beginner|Intermediate
+                     |Advanced",
+      "matchScore": number 0-100,
+      "matchReason": "why these components 
+                      work for this project",
+      "requiredComponents": ["component names 
+                              from user inventory"],
+      "missingComponents": [
+        {
+          "name": "component name",
+          "estimatedCost": number in INR,
+          "optional": boolean,
+          "reason": "why needed"
+        }
+      ],
+      "totalExtraCost": number in INR,
+      "estimatedTime": "e.g. 1-2 days",
+      "learningValue": "what skill 
+                        this project teaches"
+    }
+  ]
+}
+
+Sort by matchScore descending.
+Return exactly 6 suggestions.
+Prioritize projects where missingComponents 
+is empty or has only optional items.
+---SYSTEM PROMPT END---
+
+User message:
+"Suggest IoT projects for this inventory:
+[list all component names and quantities]
+User skill level: [from profile]"
+
+────────────────────────────────────
+SUGGESTION RESULTS UI
+────────────────────────────────────
+
+6 project suggestion cards in a 
+scrollable grid (2 columns):
+
+Each card:
+  bg: #12121A
+  border: 1px solid #2A2A3E
+  border-radius: 12px
+  padding: 20px
+
+  Top row:
+    Match score badge:
+      90-100%: bg green, "Perfect Match ✓"
+      70-89%: bg purple, "[X]% Match"
+      50-69%: bg yellow, "[X]% Match"
+      Below 50%: bg gray, "[X]% Match"
+    
+    Difficulty badge (right aligned)
+
+  Title (bold, #F0F0FF)
+  Description (secondary, 2 lines)
+
+  "Components you have:" section:
+    Green checkmark pills for each 
+    required component from inventory
+
+  "Still need:" section (if any):
+    Shows missing components as 
+    red/orange pills with cost
+    "~₹[totalExtraCost] more needed"
+    If totalExtraCost = 0: 
+      Show "Build for free!" 
+      in bright green
+
+  Bottom row:
+    Left: Time estimate
+    Right: "Start This Project →" button
+      → Pre-fills /projects/new 
+        with this project as the idea
+      → Also pre-marks owned components
+
+═══════════════════════════════════════
+BUDGET TRACKER
+═══════════════════════════════════════
+
+File: client/src/components/budget/
+      BudgetTracker.jsx
+
+Integrated into the Project Workspace 
+(left panel, below step list).
+
+Also accessible as standalone tab 
+in workspace left panel:
+  Tabs: [Build Steps] [Budget]
+
+────────────────────────────────────
+BUDGET TRACKER UI
+────────────────────────────────────
+
+Header:
+  "Project Budget"
+  Edit budget limit button (pencil icon)
+
+Budget limit bar:
+  If user set a limit:
+    Shows: "₹[spent] of ₹[limit]"
+    Progress bar:
+      Under 70%: green fill
+      70-90%: yellow fill  
+      Over 90%: red fill
+      Animated fill on load
+  
+  If no limit set:
+    "Set a budget limit" link
+    → Opens small inline input
+
+Component cost breakdown table:
+  For each component in project:
+  
+  Row:
+    Left: Component name
+    Middle: 
+      Quantity
+      "Own" badge (green) or "Buy" badge (orange)
+    Right:
+      Estimated cost (from AI analysis)
+      Actual cost input (editable inline)
+      Small edit pencil on hover
+  
+  Toggle: "Show owned components"
+  (by default hide owned — 
+   only show what needs purchasing)
+
+Totals row:
+  Estimated total: ₹[sum]
+  Actual total: ₹[sum of entered actuals]
+  Difference: ₹[+/- variance]
+    Green if under estimate
+    Red if over estimate
+
+Shopping List button:
+  "Generate Shopping List" (secondary)
+  → Triggers shopping list generator below
+
+────────────────────────────────────
+SHOPPING LIST GENERATOR
+────────────────────────────────────
+
+File: client/src/components/budget/
+      ShoppingList.jsx
+
+Triggered from budget tracker or 
+from Step 2 component screen.
+
+Calls POST /api/components/shopping-list
+
+Backend Gemini prompt:
+
+---SYSTEM PROMPT START---
+You are a helpful IoT shopping assistant 
+for Indian students and makers.
+
+Given a list of components to purchase,
+provide shopping guidance optimized for 
+India (online stores: Robu.in, 
+Electronicscomp.com, Amazon.in, 
+Flipkart, Robocraze, Fabtolab).
+
+Return ONLY valid JSON:
+{
+  "shoppingList": [
+    {
+      "componentName": "name",
+      "quantity": number,
+      "estimatedPrice": number in INR,
+      "priceRange": { "min": number, 
+                      "max": number },
+      "recommendedStore": "store name",
+      "searchTerm": "exact search term 
+                     to use on that store",
+      "buyingTip": "one tip for buying 
+                    this component in India",
+      "commonMistake": "most common wrong 
+                        purchase to avoid",
+      "alternatives": [
+        {
+          "name": "alternative name",
+          "price": number,
+          "tradeoff": "what you gain/lose"
+        }
+      ]
+    }
+  ],
+  "totalEstimate": number,
+  "bulkTip": "money saving tip for 
+              buying all these together",
+  "priorityOrder": ["component names in 
+                     order to buy first 
+                     if on tight budget"]
+}
+---SYSTEM PROMPT END---
+
+User message:
+"Generate shopping list for these components:
+[list components with quantities]
+Student budget context: trying to minimize cost.
+Location: India."
+
+────────────────────────────────────
+SHOPPING LIST UI
+────────────────────────────────────
+
+Opens as a modal (full width, 600px max):
+
+Header:
+  "Shopping List"
+  "Estimated Total: ₹[total]" (large)
+  
+  Action buttons:
+    "Copy List" (copies plain text version)
+    "Download PDF" (simple print/save)
+
+Priority note (if applicable):
+  Info card: "On a tight budget? 
+  Buy these first: [priority components]"
+
+Component rows:
+  For each component:
+    
+    Row header:
+      Component name (bold)
+      Quantity badge
+      Price range "₹[min]–₹[max]"
+    
+    Recommended store row:
+      Store name badge (color coded:
+        Robu.in → orange
+        Amazon.in → yellow  
+        Electronicscomp → blue
+        Robocraze → green)
+      Search term in code-style pill
+      "Search Now" button → 
+        opens store search in new tab
+        URL format:
+        Robu: robu.in/search?q=[searchTerm]
+        Amazon: amazon.in/s?k=[searchTerm]
+    
+    Buying tip (small, green, 
+                lightbulb icon)
+    Common mistake (small, red, 
+                    alert icon)
+    
+    Alternatives section (collapsible):
+      "Cheaper alternatives:" 
+      Each alternative as a row
+
+Footer:
+  Bulk buying tip card 
+  (highlighted, full width)
+  
+  Total breakdown:
+    If user set budget: 
+      show vs budget comparison
+    "This is [X]% of a typical 
+     student project budget"
+
+═══════════════════════════════════════
+COMPONENT SUBSTITUTION ENGINE
+═══════════════════════════════════════
+
+Triggered from:
+  1. Build step wiring notes 
+     (when AI mentions a component)
+  2. "I don't have this" button on 
+     any component in a project
+  3. Asking AI assistant 
+     "What if I don't have [component]?"
+
+For cases 1 and 2, a dedicated UI:
+
+Small inline card that appears below 
+the component in question:
+
+  Heading: "Don't have [component name]?"
+  
+  Loading: calls Gemini for substitutions
+  
+  Gemini prompt (fast, targeted):
+  "For an IoT project using [platform], 
+   suggest 2-3 substitutes for [component].
+   User's available components: 
+   [user inventory list].
+   Return JSON only:
+   {
+     'substitutes': [
+       {
+         'name': 'substitute name',
+         'compatibility': 'Drop-in replacement|
+                           Minor code changes|
+                           Significant changes',
+         'codeChanges': 'what changes needed',
+         'tradeoffs': 'what you gain or lose',
+         'available': boolean (is it in 
+                      user inventory)
+       }
+     ]
+   }"
+
+  Results shown as 3 substitution cards:
+    
+    If 'available' = true:
+      Green border + "In your inventory!" badge
+      "Use This Instead" button
+        → Updates project component
+        → Triggers AI to update 
+          affected code in IDE
+
+    If 'available' = false:
+      Normal card
+      Component name + compatibility level
+      Code change note
+      Tradeoffs text
+
+  Compatibility color coding:
+    Drop-in: green ("No code changes")
+    Minor: yellow ("Small code changes")  
+    Significant: orange ("Significant changes")
+
+═══════════════════════════════════════
+BACKEND ROUTES TO ADD
+═══════════════════════════════════════
+
+POST /api/components/add
+  Body: { userId, name, category, 
+          quantity, condition,
+          purchasePrice, notes }
+  → Inserts into user_components
+  → Returns { component }
+
+GET /api/components/:userId
+  → Returns all user components
+  → Ordered by added_at desc
+
+PUT /api/components/:componentId
+  Body: { updates }
+  → Updates component row
+  → Validates ownership
+
+DELETE /api/components/:componentId
+  Body: { userId }
+  → Deletes if owned by user
+
+POST /api/components/suggest-projects
+  Body: { userId, components }
+  → Calls Gemini suggestion prompt
+  → Returns { suggestions }
+
+POST /api/components/shopping-list
+  Body: { projectId, userId, 
+          components }
+  → Calls Gemini shopping list prompt
+  → Returns { shoppingList }
+
+POST /api/components/substitutions
+  Body: { componentName, platform,
+          userInventory, projectContext }
+  → Calls Gemini substitution prompt
+  → Returns { substitutes }
+
+POST /api/budget/save
+  Body: { projectId, userId, 
+          budgetLimit, components }
+  → Upserts project_budget row
+  → Returns { budget }
+
+GET /api/budget/:projectId
+  → Returns budget for project
+  → Validates user owns project
+
+PUT /api/budget/actual-cost
+  Body: { projectId, componentId, 
+          actualCost, userId }
+  → Updates specific component 
+    actual cost in budget jsonb
+  → Returns { success }
+
+═══════════════════════════════════════
+CONNECT TO EXISTING FLOWS
+═══════════════════════════════════════
+
+1. In Step 2 (AI Analysis Results from Prompt 2):
+   When user has components in inventory,
+   auto-match owned components:
+     Load user_components on page mount
+     For each project component:
+       If name fuzzy-matches an inventory item:
+         Auto-toggle "I own this" to ON
+         Show small "From inventory" badge
+
+2. In Project Workspace left panel:
+   Add "Budget" tab alongside "Build Steps"
+   Budget tracker renders in this tab
+
+3. In Dashboard (Prompt 2):
+   Add "Components" stat card already 
+   exists — wire it to actual count from 
+   user_components table
+
+4. In Sidebar navigation:
+   "My Components" link was already created 
+   in Prompt 1 — make sure it routes to 
+   /components correctly
+
+═══════════════════════════════════════
+IMPORTANT RULES
+═══════════════════════════════════════
+
+1. The autocomplete for component names 
+   must be fast — it's from a hardcoded 
+   local list, not an API call.
+
+2. Fuzzy matching for inventory 
+   auto-detection must be forgiving:
+   "ESP32" should match "ESP32 DevKit V1"
+   "DHT11" should match "DHT11 Temperature Sensor"
+   Use simple includes() or 
+   a basic fuzzy match function.
+
+3. Shopping list store links must 
+   open in new tab. Never navigate 
+   away from Nexora.
+
+4. Budget tracker saves automatically 
+   on every change — no save button needed.
+
+5. All Gemini calls in this prompt 
+   must go through the Express backend.
+   Never expose API key to frontend.
+
+6. On mobile: My Components page 
+   shows 1 column grid.
+   Add Component modal is full screen.
+   Shopping list modal is full screen.
+
+7. After building confirm:
+   - /components page loads correctly
+   - Adding a component saves to Supabase
+   - "Scan & Suggest Projects" calls 
+     Gemini and shows 6 suggestions
+   - "Start This Project" pre-fills 
+     /projects/new correctly
+   - Budget tracker shows in workspace
+   - Shopping list generates correctly
+   - Substitution suggestions work
+   - Auto-match inventory in Step 2 works
