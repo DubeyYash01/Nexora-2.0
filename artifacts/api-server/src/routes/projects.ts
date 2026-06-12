@@ -71,6 +71,8 @@ router.post("/projects", verifyToken, async (req: AuthRequest, res) => {
       return;
     }
 
+    const assignmentId = (req.body as Record<string, unknown>).assignment_id as string | undefined;
+
     const { data, error } = await supabaseAdmin
       .from("projects")
       .insert({
@@ -78,6 +80,7 @@ router.post("/projects", verifyToken, async (req: AuthRequest, res) => {
         user_id: req.userId!,
         status: parsed.data.status ?? "draft",
         current_step: 0,
+        ...(assignmentId ? { assignment_id: assignmentId } : {}),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -90,7 +93,7 @@ router.post("/projects", verifyToken, async (req: AuthRequest, res) => {
       return;
     }
 
-    res.status(201).json(data);
+    res.status(201).json({ project: data });
   } catch (err) {
     logger.error({ err }, "Unexpected error in POST /projects");
     res.status(500).json({ error: "Internal server error" });

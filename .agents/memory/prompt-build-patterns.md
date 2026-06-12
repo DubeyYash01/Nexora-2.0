@@ -27,3 +27,13 @@ description: Design system, auth, Supabase column shapes, and route conventions 
 - Access as `project.components?.list ?? []` in workspace
 
 **Why:** Consistent pattern across all 14 prompts prevents bugs when workspace reads project data.
+
+## POST /api/projects — assignment_id
+- `CreateProjectBody` Zod schema doesn't include `assignment_id`; the POST route reads it raw from `req.body` and spreads it separately into the Supabase insert
+- `projects` table has `assignment_id uuid REFERENCES assignments(id)` and `submitted_for_assignment boolean` columns (added in Prompt 7)
+
+## ProjectCard local Project interface
+- `artifacts/nexora/src/components/ui/ProjectCard.tsx` defines its own local `Project` interface — must include all fields used in sort/filter (including `updated_at`) or TS errors appear in pages that use `Parameters<typeof ProjectCard>[0]["project"]`
+
+## Supabase Node.js ws fix
+- `supabaseAdmin` and `verifyToken` must import `ws` from `"ws"` and pass `{ realtime: { transport: ws } }` to createClient — required on Node.js 20+ where WebSocket is not global

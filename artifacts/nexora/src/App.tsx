@@ -20,6 +20,16 @@ import ComponentsPage from "@/pages/components-page";
 import BlueprintsPage from "@/pages/blueprints";
 import BlueprintDetailPage from "@/pages/blueprint-detail";
 import PublicProjectPage from "@/pages/public-project";
+import StudentAssignments from "@/pages/assignments";
+
+import ProfessorOverview from "@/pages/professor/index";
+import ProfessorClasses from "@/pages/professor/classes";
+import ProfessorAssignments from "@/pages/professor/assignments";
+import ProfessorSubmissions from "@/pages/professor/submissions";
+import ProfessorReview from "@/pages/professor/review";
+import ProfessorAnalytics from "@/pages/professor/analytics";
+import ProfessorStudents from "@/pages/professor/students";
+import { ProtectedProfessorRoute } from "@/components/professor/ProfessorLayout";
 
 const queryClient = new QueryClient();
 
@@ -48,8 +58,9 @@ function ProtectedRoute({ component: Component }: { component: () => ReactNode }
 
 function FloatingAIWrapper() {
   const [location] = useLocation();
+  const isProfessor = location.startsWith("/professor");
   const isWorkspace = location.startsWith("/workspace/");
-  if (isWorkspace) return null;
+  if (isWorkspace || isProfessor) return null;
   return <FloatingAI />;
 }
 
@@ -84,7 +95,37 @@ function Router() {
         <Route path="/blueprints/:id">
           <ProtectedRoute component={BlueprintDetailPage} />
         </Route>
+        <Route path="/assignments">
+          <ProtectedRoute component={StudentAssignments} />
+        </Route>
         <Route path="/p/:shareToken" component={PublicProjectPage} />
+
+        {/* Professor routes */}
+        <Route path="/professor">
+          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorOverview} />} />
+        </Route>
+        <Route path="/professor/classes">
+          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorClasses} />} />
+        </Route>
+        <Route path="/professor/assignments">
+          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorAssignments} />} />
+        </Route>
+        <Route path="/professor/submissions/:assignmentId">
+          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorSubmissions} />} />
+        </Route>
+        <Route path="/professor/submissions">
+          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorAssignments} />} />
+        </Route>
+        <Route path="/professor/review/:submissionId">
+          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorReview} />} />
+        </Route>
+        <Route path="/professor/analytics">
+          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorAnalytics} />} />
+        </Route>
+        <Route path="/professor/students">
+          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorStudents} />} />
+        </Route>
+
         <Route component={NotFound} />
       </Switch>
       <FloatingAIWrapper />

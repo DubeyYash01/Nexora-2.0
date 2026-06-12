@@ -1,10 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Request, Response, NextFunction } from "express";
+import ws from "ws";
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL ?? "";
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY ?? "";
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  realtime: { transport: ws as unknown as typeof WebSocket },
+});
 
 export interface AuthRequest extends Request {
   userId?: string;

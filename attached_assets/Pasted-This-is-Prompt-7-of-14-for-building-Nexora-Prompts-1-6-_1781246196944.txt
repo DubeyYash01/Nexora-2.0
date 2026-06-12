@@ -1,0 +1,1237 @@
+This is Prompt 7 of 14 for building Nexora.
+Prompts 1-6 already built: foundation, auth,
+dashboard, project creation, AI analysis,
+component selection, build plan, Nexora IDE,
+incremental code push, AI assistant,
+component inventory, budget tracker,
+shopping list, blueprint library, project
+sharing, and "Made with Nexora" export.
+
+Do NOT touch or recreate anything from
+Prompts 1 through 6. Only ADD to what exists.
+
+═══════════════════════════════════════
+WHAT THIS PROMPT BUILDS
+═══════════════════════════════════════
+
+1. Professor Dashboard (/professor)
+2. Create Assignment Template flow
+3. Student Assignment View
+4. Assignment Submission System
+5. Professor Review & Grading View
+6. Class Management (create/manage classes)
+7. Student Join via Code flow
+8. Assignment Analytics
+
+This is Nexora's B2B revenue engine.
+Colleges pay for this feature.
+Build it to feel institutional and
+trustworthy — not like a student tool.
+
+═══════════════════════════════════════
+SUPABASE CHANGES NEEDED
+═══════════════════════════════════════
+
+Run in Supabase SQL Editor:
+
+CREATE TABLE IF NOT EXISTS classes (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  professor_id uuid 
+    REFERENCES profiles(id),
+  name text NOT NULL,
+  subject text,
+  college text,
+  academic_year text,
+  join_code text UNIQUE NOT NULL,
+  student_count integer DEFAULT 0,
+  is_active boolean DEFAULT true,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS class_members (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  class_id uuid REFERENCES classes(id)
+    ON DELETE CASCADE,
+  student_id uuid REFERENCES profiles(id),
+  joined_at timestamptz DEFAULT now(),
+  UNIQUE(class_id, student_id)
+);
+
+CREATE TABLE IF NOT EXISTS assignments (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  class_id uuid REFERENCES classes(id),
+  professor_id uuid 
+    REFERENCES profiles(id),
+  title text NOT NULL,
+  description text,
+  objectives text[],
+  allowed_components jsonb,
+  required_phases text[],
+  deadline timestamptz,
+  max_group_size integer DEFAULT 4,
+  allow_any_components boolean 
+    DEFAULT true,
+  grading_criteria jsonb,
+  status text DEFAULT 'active'
+    CHECK (status IN (
+      'draft','active','closed'
+    )),
+  submission_count integer DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS 
+  assignment_submissions (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  assignment_id uuid 
+    REFERENCES assignments(id),
+  project_id uuid 
+    REFERENCES projects(id),
+  student_id uuid 
+    REFERENCES profiles(id),
+  group_members jsonb,
+  submitted_at timestamptz,
+  status text DEFAULT 'draft'
+    CHECK (status IN (
+      'draft','submitted','graded'
+    )),
+  grade text,
+  professor_feedback text,
+  ai_assistance_log jsonb,
+  component_list jsonb,
+  build_steps_completed integer,
+  total_build_steps integer,
+  graded_at timestamptz,
+  graded_by uuid 
+    REFERENCES profiles(id)
+);
+
+ALTER TABLE projects
+  ADD COLUMN IF NOT EXISTS
+  assignment_id uuid 
+  REFERENCES assignments(id) NULLABLE;
+
+ALTER TABLE projects
+  ADD COLUMN IF NOT EXISTS
+  submitted_for_assignment 
+  boolean DEFAULT false;
+
+-- RLS
+ALTER TABLE classes 
+  ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "professors manage classes"
+  ON classes FOR ALL
+  USING (auth.uid() = professor_id);
+CREATE POLICY "students view joined classes"
+  ON classes FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM class_members
+      WHERE class_id = classes.id
+      AND student_id = auth.uid()
+    )
+  );
+
+ALTER TABLE assignments
+  ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "professors manage assignments"
+  ON assignments FOR ALL
+  USING (auth.uid() = professor_id);
+CREATE POLICY "students view assignments"
+  ON assignments FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM class_members cm
+      JOIN classes c ON c.id = cm.class_id
+      WHERE c.id = assignments.class_id
+      AND cm.student_id = auth.uid()
+    )
+  );
+
+ALTER TABLE assignment_submissions
+  ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "students manage own submissions"
+  ON assignment_submissions FOR ALL
+  USING (auth.uid() = student_id);
+CREATE POLICY "professors view submissions"
+  ON assignment_submissions FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM assignments a
+      WHERE a.id = assignment_id
+      AND a.professor_id = auth.uid()
+    )
+  );
+CREATE POLICY "professors update submissions"
+  ON assignment_submissions FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM assignments a
+      WHERE a.id = assignment_id
+      AND a.professor_id = auth.uid()
+    )
+  );
+
+ALTER TABLE class_members
+  ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "members manage own membership"
+  ON class_members FOR ALL
+  USING (auth.uid() = student_id);
+CREATE POLICY "professors view class members"
+  ON class_members FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM classes c
+      WHERE c.id = class_id
+      AND c.professor_id = auth.uid()
+    )
+  );
+
+═══════════════════════════════════════
+PROFESSOR ROLE GATE
+═══════════════════════════════════════
+
+The professor dashboard is ONLY accessible
+to users whose profile role = 'professor'.
+
+If a non-professor tries to access
+/professor/* routes:
+  Show a clean error page:
+  Icon: lock (large, #FF5A5A)
+  Heading: "Professor Access Only"
+  Subtext: "This area is for educators.
+            If you're a professor, update
+            your role in Settings."
+  Button: "Go to Dashboard"
+
+Add a ProtectedProfessorRoute wrapper
+component that checks role before rendering.
+
+═══════════════════════════════════════
+PROFESSOR DASHBOARD — /professor
+═══════════════════════════════════════
+
+Different layout from student dashboard.
+More structured, data-focused, 
+institutional feel.
+
+Keep the same color system but use
+slightly more formal typography:
+  Headings slightly larger
+  More whitespace between sections
+  Tables instead of card grids where
+  appropriate
+
+────────────────────────────────────
+TOP NAVBAR (professor version)
+────────────────────────────────────
+
+Replace student sidebar with 
+professor-specific navigation:
+
+Sidebar items:
+  Overview (home icon)
+  My Classes (users icon)
+  Assignments (clipboard icon)
+  Submissions (inbox icon)
+  Students (graduation-cap icon)
+  Analytics (bar-chart icon)
+  Settings (settings icon)
+
+Top bar right side:
+  "Professor" role badge 
+  (gold/yellow color: #FFB84D)
+  Notification bell
+  Avatar + name
+
+────────────────────────────────────
+OVERVIEW PAGE
+────────────────────────────────────
+
+Greeting: "Welcome, Prof. [last name]"
+Subtext: "Here's your teaching overview"
+
+Stats row (5 cards):
+  Total Classes
+  Active Assignments
+  Total Students
+  Pending Reviews 
+    (submissions not yet graded)
+  Average Completion Rate
+    (% of students completing assignments)
+
+Each stat card:
+  Same style as student dashboard cards
+  But "Pending Reviews" card:
+    If count > 0: 
+      red/orange border pulse
+      "Needs attention" subtext
+
+Recent Activity Feed:
+  Right side of page (30% width)
+  Shows last 10 events:
+    "[Student] submitted [Assignment]"
+    "[Student] joined [Class]"
+    "[Assignment] deadline in 2 days"
+  Each with timestamp
+  Color coded by type
+
+Active Assignments Section:
+  Left side (70% width)
+  Table view:
+  
+  Columns:
+    Assignment Title
+    Class
+    Submitted / Total Students
+    Deadline
+    Status
+    Actions
+  
+  Each row:
+    Title (bold, clickable → detail)
+    Class name (small, secondary)
+    Progress: "X/Y submitted"
+      Progress bar (thin, below text)
+    Deadline: 
+      If > 3 days: green
+      If 1-3 days: yellow + "Soon"
+      If overdue: red + "Overdue"
+    Status badge: 
+      active/draft/closed
+    Actions: 
+      "View Submissions" button
+      Three-dot: Edit | Close | Delete
+
+────────────────────────────────────
+MY CLASSES PAGE — /professor/classes
+────────────────────────────────────
+
+Header:
+  "My Classes"
+  "+ Create New Class" button (primary)
+
+Classes grid (2 columns):
+
+Class card:
+  bg: #12121A, border: #2A2A3E
+  border-radius: 12px, padding: 24px
+  
+  Top row:
+    Class name (bold, large)
+    Active/Inactive toggle badge
+  
+  Details:
+    Subject (secondary)
+    College name
+    Academic year
+    Student count with people icon
+  
+  Join code section:
+    Label: "Class Join Code"
+    Large monospace code display:
+      bg: #0A0A0F
+      border: 1px solid #2A2A3E
+      border-radius: 8px
+      padding: 12px 16px
+      font-family: JetBrains Mono
+      font-size: 20px
+      letter-spacing: 4px
+      color: #6C63FF
+      text: [JOIN CODE]
+    
+    Copy button next to code
+    On copy: tooltip "Copied!"
+  
+  Bottom row:
+    "View Students" link
+    "Manage Assignments" link
+    Three-dot menu:
+      Edit Class | 
+      Deactivate | 
+      Delete Class
+
+EMPTY STATE:
+  Icon: users (large, muted)
+  "No classes yet"
+  "Create your first class and 
+   share the join code with students."
+  "+ Create First Class" button
+
+────────────────────────────────────
+CREATE CLASS MODAL
+────────────────────────────────────
+
+Slide-in drawer from right, 420px wide.
+
+Fields:
+  Class Name * 
+    e.g. "IoT Lab — Semester 6"
+  Subject *
+    e.g. "Internet of Things"
+  College/Institution *
+    e.g. "MIT College of Engineering"
+  Academic Year *
+    Dropdown: 2024-25 | 2025-26 | 2026-27
+  Max Students
+    Number input, default 60
+
+Join Code:
+  Auto-generated on modal open:
+  6 character alphanumeric uppercase
+  e.g. "NXR4A2"
+  
+  Show preview:
+  "Students will join using code: NXR4A2"
+  
+  Regenerate button (refresh icon)
+  → Generates new random code
+
+"Create Class" button (primary)
+
+On success:
+  Toast: "Class created! 
+          Share code [CODE] with students"
+  Close modal
+  Add to classes grid
+
+────────────────────────────────────
+ASSIGNMENTS PAGE — /professor/assignments
+────────────────────────────────────
+
+Header:
+  "Assignments"
+  "+ Create Assignment" button
+
+Filter bar:
+  All Classes dropdown
+  Status: All | Active | Draft | Closed
+  Sort: Newest | Deadline | Most Submissions
+
+Assignments table:
+  Full width table
+  
+  Columns:
+    Title + Class (stacked)
+    Created date
+    Deadline
+    Submissions
+    Completion %
+    Status
+    Actions
+
+────────────────────────────────────
+CREATE ASSIGNMENT FLOW
+────────────────────────────────────
+
+Multi-step modal (3 steps):
+
+STEP 1 — Basic Info:
+
+  Assignment Title *
+    e.g. "Smart Home Automation Project"
+  
+  Select Class *
+    Dropdown of professor's classes
+  
+  Description *
+    Textarea, 500 char max
+    "Describe what students should build"
+  
+  Learning Objectives
+    Dynamic list input:
+    Type objective + press Enter to add
+    Shows as removable pills
+    e.g. "Understand sensor integration"
+  
+  Deadline *
+    Date + time picker
+  
+  Max Group Size
+    Number stepper: 1-6, default 3
+
+STEP 2 — Project Requirements:
+
+  Allowed Components:
+    Toggle: "Allow any components" (default ON)
+    
+    If OFF: shows component selector
+    Search + add from common components list
+    (same autocomplete list from Prompt 5)
+    Added components show as removable pills
+  
+  Required Build Phases:
+    Multi-select checkboxes:
+    ☐ Setup & Planning
+    ☐ Circuit Wiring
+    ☐ Code Development
+    ☐ Testing & Debugging
+    ☐ Final Integration
+    ☐ Documentation
+    
+    Students must complete these phases
+    before submitting.
+  
+  Submission Requirements:
+    Checkboxes (what professor wants to see):
+    ☑ Project Plan (AI-generated)
+    ☑ Component List
+    ☑ Complete Build Steps
+    ☑ Working Code in IDE
+    ☐ Video Demo Link (optional)
+    ☐ Report Document (optional)
+
+STEP 3 — Grading (Optional):
+
+  Toggle: "Use structured grading rubric"
+  
+  If ON: shows rubric builder
+  
+  Rubric criteria (dynamic, add/remove rows):
+  
+  Default criteria rows:
+  | Criteria          | Max Points |
+  | Project Complexity| 20         |
+  | Code Quality      | 25         |
+  | Documentation     | 20         |
+  | Functionality     | 25         |
+  | Presentation      | 10         |
+  
+  Each row editable inline.
+  Total shows at bottom: "Total: 100 points"
+  
+  If OFF:
+  "You can give qualitative feedback 
+   without a point system"
+
+  Bottom:
+  "Publish Assignment" (primary)
+  "Save as Draft" (secondary)
+
+On publish:
+  Creates assignment in Supabase
+  Shows success with assignment details
+  "Share with students" section:
+    "Students in [class] will see this 
+     assignment automatically"
+
+═══════════════════════════════════════
+STUDENT ASSIGNMENT VIEW
+═══════════════════════════════════════
+
+Students see assignments from classes
+they've joined.
+
+────────────────────────────────────
+MY ASSIGNMENTS — /assignments
+────────────────────────────────────
+
+New sidebar nav item for STUDENTS:
+"Assignments" (clipboard icon)
+Only visible when role = 'student'
+
+Page header:
+  "My Assignments"
+  
+  If not in any class:
+    Info banner:
+    "Join a class to see assignments.
+     Ask your professor for the join code."
+    "Join a Class" button → 
+    triggers join class modal
+
+Assignment cards (list view):
+
+Each card:
+  Left border color:
+    Active + not submitted: #6C63FF
+    Submitted: #00C896
+    Overdue + not submitted: #FF5A5A
+    Closed: #2A2A3E
+  
+  Top row:
+    Assignment title (bold)
+    Class name + professor name (small)
+    Status badge:
+      "Not Started" | "In Progress" | 
+      "Submitted" | "Graded"
+  
+  Middle:
+    Description (2 lines)
+    Required phases (small pills)
+  
+  Deadline row:
+    Clock icon
+    If future: "Due [date]" 
+               + days remaining
+               (green if >3 days,
+                yellow if 1-3,
+                red if <1 day)
+    If past: "Deadline passed"
+  
+  Bottom:
+    If not started:
+      "Start Assignment" button (primary)
+      → Opens start assignment flow
+    
+    If in progress:
+      Progress bar (steps completed)
+      "Continue Building" button
+      → Goes to /workspace/[projectId]
+    
+    If submitted:
+      "View Submission" button
+      If graded: show grade badge
+
+────────────────────────────────────
+JOIN CLASS FLOW
+────────────────────────────────────
+
+Modal triggered by "Join a Class" button
+or from student dashboard banner.
+
+Simple centered modal:
+
+  Icon: users (large, #6C63FF)
+  Heading: "Join a Class"
+  Subtext: "Enter the code your 
+            professor gave you"
+  
+  Code input:
+    Large, centered text
+    font-family: JetBrains Mono
+    font-size: 24px
+    letter-spacing: 8px
+    text-transform: uppercase
+    max-length: 6
+    Auto-uppercase as user types
+    Placeholder: "NXR4A2"
+  
+  "Join Class" button (primary, full width)
+  
+  On submit:
+    POST /api/classes/join
+    Validates code exists
+    Checks not already member
+    
+    On success:
+      Shows class details preview:
+        Class name, subject, professor name
+        "You've joined [Class Name]!"
+      
+      Then shows assignments for that class
+      immediately below
+      
+      Toast: "Welcome to [Class Name]!"
+    
+    On error:
+      "Invalid code. Check with 
+       your professor."
+      Input border turns red
+
+────────────────────────────────────
+START ASSIGNMENT FLOW
+────────────────────────────────────
+
+When student clicks "Start Assignment":
+
+Modal:
+  Assignment title (heading)
+  Description shown
+  
+  Section: "Project Setup"
+  
+  Field 1: Project Name
+    Pre-filled: "[Assignment Title] — 
+                 [student first name]"
+    Editable
+  
+  Field 2: Group Members (if allowed)
+    If max_group_size > 1:
+      "Add group members (optional)"
+      Email inputs (up to max_group_size - 1)
+      "+ Add member" button
+      
+      Note: "Group members must have 
+             Nexora accounts"
+  
+  Field 3: Your Idea
+    Textarea
+    "Describe your specific approach 
+     to this assignment:"
+    Placeholder: "e.g. I'll build a 
+    smart irrigation system that uses 
+    soil moisture sensors to automate 
+    watering and display data on an 
+    OLED screen."
+    
+    Note below: "Your idea will be 
+    analyzed by Nexora AI to generate 
+    a personalized build plan within 
+    the assignment requirements."
+  
+  "Start Building" button (primary)
+  
+  On submit:
+    Creates project linked to assignment
+    (assignment_id set on project)
+    Goes through normal AI analysis flow
+    (Prompts 2-3 flow)
+    But with assignment context injected
+    into Gemini prompt:
+    
+    Additional context for Gemini:
+    "This project is for a college 
+     assignment with these requirements:
+     [assignment description]
+     Required phases: [phases]
+     Allowed components: [if restricted]
+     Generate a plan that meets these 
+     academic requirements."
+    
+    Redirects to /workspace/[projectId]
+    with assignment context shown
+
+════════════════════════════════
+ASSIGNMENT SUBMISSION FLOW
+════════════════════════════════
+
+In the Project Workspace (Prompt 3):
+When project has an assignment_id AND
+all required phases are completed:
+
+Show submission banner at top of 
+workspace (full width, above panels):
+  bg: rgba(0,200,150,0.08)
+  border: 1px solid #00C896
+  
+  Left: checkmark icon + 
+    "All required phases complete!"
+  Right: "Submit Assignment" button 
+    (green primary button)
+
+Clicking "Submit Assignment":
+
+Opens submission review modal:
+
+  Heading: "Submit Assignment"
+  Subtext: "[Assignment title] — 
+            Due [deadline]"
+  
+  Submission summary (read-only):
+  
+  Card 1 — Project Overview:
+    Title, description (from AI analysis)
+    Platform, difficulty
+  
+  Card 2 — Components Used:
+    List of all components
+    Owned vs purchased breakdown
+  
+  Card 3 — Build Progress:
+    Steps completed: X of Y
+    Phases completed: list with checkmarks
+    Time spent: (tracked since start)
+  
+  Card 4 — Code:
+    Line count
+    Libraries used
+    "View Code" expandable
+  
+  Optional fields:
+    Video demo URL (if required by assignment)
+    Text input: "Anything to note for 
+    your professor?" (optional message)
+  
+  Checkbox:
+    ☑ "I confirm this is my own work"
+  
+  "Submit Now" button (primary, full width)
+  "Save Draft & Submit Later" (secondary)
+  
+  On submit:
+    Creates/updates assignment_submissions row
+    Sets status = 'submitted'
+    Sets submitted_at = now()
+    Saves ai_assistance_log 
+      (count of AI messages used)
+    Updates project: 
+      submitted_for_assignment = true
+    
+    Success screen:
+      Checkmark animation (CSS)
+      "Assignment Submitted!"
+      "Submitted on [date time]"
+      "Your professor will review 
+       your work and provide feedback."
+      
+      Button: "Back to Dashboard"
+
+═══════════════════════════════════════
+PROFESSOR SUBMISSION REVIEW
+═══════════════════════════════════════
+
+Route: /professor/submissions/:assignmentId
+
+────────────────────────────────────
+SUBMISSIONS LIST VIEW
+────────────────────────────────────
+
+Header:
+  Assignment title (large)
+  Class name | Deadline | Status
+  
+  Stats row:
+    Submitted: X
+    Not Started: Y
+    In Progress: Z
+    Graded: W
+  
+  Export button: 
+    "Export to CSV" (downloads submission
+    data as CSV — name, submission time,
+    grade if given)
+
+Filter bar:
+  Status: All | Submitted | Graded | 
+          In Progress | Not Started
+  Sort: Submission Time | Student Name | 
+        Grade
+
+Submissions table:
+  
+  Columns:
+    Student Name + Avatar
+    Submission Time
+    Components Used (count)
+    Steps Completed (X/Y)
+    AI Usage (messages count)
+    Status
+    Grade (if given)
+    Actions
+
+  Each row:
+    Student avatar (circle, initials 
+    if no photo) + full name
+    
+    Submission time:
+      "X hours ago" or date
+      If submitted on time: green dot
+      If late: red dot + "Late"
+    
+    Progress cell:
+      "X of Y steps" 
+      Thin progress bar
+    
+    AI Usage:
+      Message count with sparkles icon
+      Color: 
+        Low (0-10): green "Low AI use"
+        Med (11-30): yellow "Moderate"
+        High (30+): orange "Heavy AI use"
+      (Professor can see how much 
+       students relied on AI)
+    
+    Grade cell:
+      If graded: show grade
+      If not: "—" (dash)
+    
+    Actions:
+      "Review" button → detail view
+      If graded: "Edit Grade" button
+
+────────────────────────────────────
+INDIVIDUAL SUBMISSION REVIEW
+────────────────────────────────────
+
+Route: /professor/review/:submissionId
+
+Full page layout, max-width 1000px.
+
+Top bar:
+  "← Back to Submissions"
+  Student name + avatar (large)
+  Submission timestamp
+  Navigation: "← Previous" "Next →"
+    (navigate between submissions)
+
+Tabs:
+  [Overview] [Build Plan] 
+  [Code] [Components] [AI Usage]
+
+── OVERVIEW TAB:
+
+  Two columns:
+  
+  Left column:
+    Project Summary card:
+      Title, description
+      Platform, difficulty
+      Estimated complexity
+    
+    Student's note (if submitted):
+      Shown in quote style card
+    
+    Group Members (if group project):
+      List of member names
+  
+  Right column:
+    Submission Timeline card:
+      "Project started: [date]"
+      "Last active: [date]"
+      "Submitted: [date]"
+      Time between start and submit
+    
+    Quick Stats:
+      Steps completed: X/Y
+      Libraries used: X
+      AI messages used: X
+      Components owned: X/Y
+
+── BUILD PLAN TAB:
+
+  Shows all build steps
+  Each step shows:
+    Completed (checkmark) or 
+    Not completed (dash)
+    Completion timestamp
+  
+  Professor sees the complete 
+  guided journey the student took.
+
+── CODE TAB:
+
+  Monaco Editor (read-only mode)
+  Full code the student wrote
+  Same syntax highlighting as IDE
+  Line count shown
+  
+  "Download .ino" button
+  "Copy Code" button
+  
+  Note: "This is the student's 
+         final IDE code at submission"
+
+── COMPONENTS TAB:
+
+  Full component list
+  For each:
+    Name, type, purpose
+    Owned vs purchased indicator
+    Estimated cost
+  
+  Total project cost estimate
+  Budget summary if student used 
+  budget tracker
+
+── AI USAGE TAB:
+
+  This is unique — no other 
+  tool shows professors this.
+  
+  Heading: "AI Assistance Summary"
+  Subtext: "How this student used 
+            Nexora AI during the project"
+  
+  Summary stats:
+    Total AI messages: X
+    Most asked about: 
+      (top 3 topics from conversations)
+    Error debugging sessions: X
+    Code explanations requested: X
+  
+  Usage timeline:
+    Bar chart (simple CSS bars):
+    Shows AI usage per day
+    Peaks indicate where student 
+    struggled most
+  
+  Note card (for professor):
+    bg: rgba(0,212,255,0.06)
+    border: #00D4FF
+    "AI usage shows learning engagement,
+     not academic dishonesty. Students 
+     who ask more questions are often 
+     more engaged learners."
+
+────────────────────────────────────
+GRADING PANEL (right side drawer)
+────────────────────────────────────
+
+Visible on all tabs as a 
+fixed right panel (280px wide) 
+OR collapsible side drawer.
+
+Panel header: "Grade Submission"
+
+If assignment has rubric:
+  Shows each rubric criterion:
+  Criterion name
+  Max points
+  Input field: earned points
+  Running total updates live
+  
+  Total: "[earned] / [max] points"
+
+If no rubric:
+  Grade input:
+    Large text input
+    "Enter grade (e.g. A+, 85/100, 
+     Excellent)"
+  
+Feedback textarea:
+  Label: "Feedback to student"
+  Placeholder: "Write personalized 
+  feedback for this student..."
+  500 char max with counter
+
+"Save Grade & Feedback" button (primary)
+"Save Draft" button (secondary)
+
+On save:
+  Updates assignment_submissions:
+    grade = entered grade
+    professor_feedback = feedback text
+    status = 'graded'
+    graded_at = now()
+    graded_by = professor user id
+  
+  Student will see grade next time 
+  they view the assignment.
+  
+  Toast: "Grade saved for [student name]"
+
+═══════════════════════════════════════
+STUDENT GRADE VIEW
+═══════════════════════════════════════
+
+When student views a graded submission:
+
+In the assignment card 
+(on /assignments page):
+  Grade badge appears prominently
+  
+Clicking "View Submission":
+  Shows submitted project overview
+  
+  Bottom section: "Professor Feedback"
+  Card with:
+    bg: rgba(0,200,150,0.06)
+    border: #00C896
+    Professor avatar + name
+    "Graded on [date]"
+    Grade displayed large
+    Feedback text below
+
+═══════════════════════════════════════
+ANALYTICS PAGE — /professor/analytics
+═══════════════════════════════════════
+
+Simple analytics dashboard.
+Use CSS/div based charts 
+(no external chart library needed).
+
+Section 1 — Class Overview:
+  Select class dropdown at top
+  
+  Stats:
+    Enrollment rate
+    Assignment completion rate
+    Average grade (if using rubric)
+    Most used components across class
+
+Section 2 — Assignment Performance:
+  For each assignment:
+    Completion rate bar
+    Submission timeline 
+    (how many submitted per day)
+
+Section 3 — Student Engagement:
+  Table: Student name | 
+         Assignments completed |
+         Avg AI usage | 
+         Last active
+
+Section 4 — Component Insights:
+  "Most popular components in your class"
+  Horizontal bar chart (CSS)
+  Shows which sensors/modules students 
+  use most — useful for lab procurement.
+
+═══════════════════════════════════════
+BACKEND ROUTES TO ADD
+═══════════════════════════════════════
+
+POST /api/classes/create
+  Body: { professorId, name, subject,
+          college, academicYear, 
+          joinCode, maxStudents }
+  → Creates class in Supabase
+  → Returns { class }
+
+GET /api/classes/professor/:professorId
+  → Returns all classes for professor
+  → Includes student count
+
+POST /api/classes/join
+  Body: { studentId, joinCode }
+  → Finds class by join code
+  → Validates not already member
+  → Inserts class_member row
+  → Updates student_count
+  → Returns { class, assignments }
+
+GET /api/classes/:classId/students
+  → Returns all students in class
+  → Professor only
+
+POST /api/assignments/create
+  Body: { professorId, classId, title,
+          description, objectives,
+          allowedComponents,
+          requiredPhases, deadline,
+          maxGroupSize, gradingCriteria,
+          status }
+  → Creates assignment
+  → Returns { assignment }
+
+GET /api/assignments/student/:studentId
+  → Returns all assignments for 
+    classes student has joined
+  → Includes submission status
+    for each assignment
+
+GET /api/assignments/:assignmentId/
+    submissions
+  → Professor only
+  → Returns all submissions with 
+    student profile data
+  → Ordered by submitted_at
+
+GET /api/submissions/:submissionId
+  → Returns full submission data
+  → Includes project, student profile,
+    ai conversation summary
+
+POST /api/submissions/submit
+  Body: { projectId, assignmentId,
+          studentId, groupMembers,
+          videoDemoUrl, studentNote }
+  → Creates/updates submission
+  → Sets status = 'submitted'
+  → Saves ai_assistance_log summary
+  → Updates assignment submission_count
+  → Returns { submission }
+
+PUT /api/submissions/grade
+  Body: { submissionId, professorId,
+          grade, feedback, 
+          rubricScores }
+  → Updates submission with grade
+  → Sets status = 'graded'
+  → Returns { submission }
+
+GET /api/analytics/:professorId
+  Query: classId (optional)
+  → Returns aggregated analytics data
+  → Completion rates, usage stats
+
+═══════════════════════════════════════
+CONNECT TO EXISTING FLOWS
+═══════════════════════════════════════
+
+1. Role selection (Prompt 1):
+   When professor role selected →
+   redirect to /professor instead 
+   of /dashboard
+
+2. Sidebar navigation:
+   Students see "Assignments" nav item
+   Professors see professor sidebar
+   The sidebar component must check role
+   and render accordingly
+
+3. Project Workspace (Prompt 3):
+   When project has assignment_id:
+     Show assignment context banner 
+     at top of left panel:
+     "📋 Assignment: [title]"
+     "Due: [deadline]"
+     "Required phases: [list]"
+   
+   Show submission button when 
+   all required phases complete.
+
+4. AI Assistant (Prompt 4):
+   When project has assignment context:
+     Inject assignment requirements 
+     into AI context:
+     "This project is for assignment: 
+      [title]. Required phases: [list].
+      Help student meet these requirements."
+
+5. New Project flow (Prompt 2):
+   When started from assignment:
+     Step 1 shows assignment brief 
+     at top (read-only card)
+     Idea input pre-filled with 
+     assignment description as hint
+
+═══════════════════════════════════════
+IMPORTANT RULES
+═══════════════════════════════════════
+
+1. Join code must be exactly 6 chars,
+   uppercase alphanumeric.
+   Generate with:
+   Math.random().toString(36)
+     .substring(2,8).toUpperCase()
+
+2. Professor dashboard must feel 
+   different from student dashboard.
+   More structured, table-based,
+   less colorful/playful.
+   This is a professional tool.
+
+3. AI Usage tab in submission review
+   is a key differentiator.
+   No other platform shows this.
+   Make sure it renders clearly.
+
+4. Grade privacy: students only see
+   their OWN grade. Never show 
+   classmate grades to students.
+
+5. The submission confirmation screen
+   must feel final and trustworthy.
+   Students are submitting academic work.
+   Treat it seriously.
+
+6. On mobile: professor dashboard 
+   is desktop-first. Show a banner
+   on mobile: "Professor dashboard 
+   works best on desktop."
+   Still functional but optimized 
+   for desktop.
+
+7. After building confirm:
+   - Professor signup → 
+     redirects to /professor
+   - Create class with join code works
+   - Student joins class with code
+   - Assignment creation (all 3 steps)
+   - Student sees assignment on 
+     /assignments page
+   - Start assignment → creates project
+     with assignment context
+   - Workspace shows assignment banner
+   - Submit assignment flow works
+   - Professor sees submission in 
+     review view
+   - Grade saves and student sees it
+   - Analytics page loads

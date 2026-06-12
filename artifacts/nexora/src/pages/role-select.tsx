@@ -31,7 +31,7 @@ export default function RoleSelect() {
     }
 
     await updateProfile(updateData);
-    setLocation("/dashboard");
+    setLocation(selectedRole === "professor" ? "/professor" : "/dashboard");
   };
 
   return (

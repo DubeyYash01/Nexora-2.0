@@ -18,9 +18,10 @@ export default function Projects() {
     query: { queryKey: getGetProjectsQueryKey() },
   });
 
-  const filtered = (projects ?? [])
-    .filter((p) => filter === "all" || p.status === filter)
-    .sort((a, b) => {
+  type ProjItem = Parameters<typeof ProjectCard>[0]["project"];
+  const filtered = (projects ?? [] as ProjItem[])
+    .filter((p: ProjItem) => filter === "all" || p.status === filter)
+    .sort((a: ProjItem, b: ProjItem) => {
       if (sort === "newest") return new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime();
       if (sort === "oldest") return new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime();
       return new Date(b.updated_at ?? 0).getTime() - new Date(a.updated_at ?? 0).getTime();
@@ -92,8 +93,8 @@ export default function Projects() {
           </div>
         ) : filtered.length > 0 ? (
           <div className="grid sm:grid-cols-2 gap-4">
-            {filtered.map((p) => (
-              <ProjectCard key={p.id} project={p as Parameters<typeof ProjectCard>[0]["project"]} />
+            {filtered.map((p: Parameters<typeof ProjectCard>[0]["project"]) => (
+              <ProjectCard key={p.id} project={p} />
             ))}
           </div>
         ) : (

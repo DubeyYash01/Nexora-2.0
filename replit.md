@@ -122,6 +122,108 @@ CREATE POLICY "users manage own forks" ON blueprint_forks FOR ALL USING (auth.ui
 CREATE POLICY "users manage own reviews" ON blueprint_reviews FOR ALL USING (auth.uid() = user_id);
 ```
 
+## Supabase Setup Required (Prompt 7 additions)
+
+Run these SQL statements in Supabase SQL Editor after the Prompt 6 tables:
+
+```sql
+-- Classes table
+CREATE TABLE IF NOT EXISTS classes (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  professor_id uuid REFERENCES profiles(id),
+  name text NOT NULL,
+  description text,
+  join_code text UNIQUE NOT NULL,
+  subject text,
+  academic_year text,
+  semester text,
+  is_active boolean DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Class members table
+CREATE TABLE IF NOT EXISTS class_members (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  class_id uuid REFERENCES classes(id) ON DELETE CASCADE,
+  student_id uuid REFERENCES profiles(id),
+  joined_at timestamptz DEFAULT now(),
+  UNIQUE(class_id, student_id)
+);
+
+-- Assignments table
+CREATE TABLE IF NOT EXISTS assignments (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  class_id uuid REFERENCES classes(id) ON DELETE CASCADE,
+  professor_id uuid REFERENCES profiles(id),
+  title text NOT NULL,
+  description text,
+  instructions text,
+  due_date timestamptz,
+  max_score integer DEFAULT 100,
+  difficulty text CHECK (difficulty IN ('Beginner','Intermediate','Advanced')),
+  required_components text[],
+  starter_code text,
+  is_published boolean DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Assignment submissions table
+CREATE TABLE IF NOT EXISTS assignment_submissions (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  assignment_id uuid REFERENCES assignments(id) ON DELETE CASCADE,
+  student_id uuid REFERENCES profiles(id),
+  project_id uuid REFERENCES projects(id),
+  status text DEFAULT 'submitted' CHECK (status IN ('submitted','under_review','approved','rejected','resubmit')),
+  score integer,
+  feedback text,
+  ai_feedback text,
+  submitted_at timestamptz DEFAULT now(),
+  reviewed_at timestamptz,
+  reviewed_by uuid REFERENCES profiles(id),
+  UNIQUE(assignment_id, student_id)
+);
+
+-- Add assignment columns to projects
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS assignment_id uuid REFERENCES assignments(id);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS submitted_for_assignment boolean DEFAULT false;
+
+-- Enable RLS
+ALTER TABLE classes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE class_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assignment_submissions ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies for classes
+CREATE POLICY "professors manage own classes" ON classes FOR ALL USING (auth.uid() = professor_id);
+CREATE POLICY "students view enrolled classes" ON classes FOR SELECT USING (
+  EXISTS (SELECT 1 FROM class_members WHERE class_id = classes.id AND student_id = auth.uid())
+);
+
+-- RLS Policies for class_members
+CREATE POLICY "professors view class members" ON class_members FOR SELECT USING (
+  EXISTS (SELECT 1 FROM classes WHERE id = class_members.class_id AND professor_id = auth.uid())
+);
+CREATE POLICY "students manage own membership" ON class_members FOR ALL USING (auth.uid() = student_id);
+
+-- RLS Policies for assignments
+CREATE POLICY "professors manage own assignments" ON assignments FOR ALL USING (auth.uid() = professor_id);
+CREATE POLICY "students view published assignments" ON assignments FOR SELECT USING (
+  is_published = true AND
+  EXISTS (SELECT 1 FROM class_members WHERE class_id = assignments.class_id AND student_id = auth.uid())
+);
+
+-- RLS Policies for assignment_submissions
+CREATE POLICY "students manage own submissions" ON assignment_submissions FOR ALL USING (auth.uid() = student_id);
+CREATE POLICY "professors view class submissions" ON assignment_submissions FOR SELECT USING (
+  EXISTS (SELECT 1 FROM assignments WHERE id = assignment_submissions.assignment_id AND professor_id = auth.uid())
+);
+CREATE POLICY "professors update submissions" ON assignment_submissions FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM assignments WHERE id = assignment_submissions.assignment_id AND professor_id = auth.uid())
+);
+```
+
 ## Supabase Setup Required (original)
 
 Run these SQL statements in Supabase SQL Editor:
@@ -274,11 +376,27 @@ Nexora is a complete IoT project creation platform. Prompts 1–6 of 14 complete
   - "Made with Nexora" card: beautiful shareable card with QR + LinkedIn/Instagram/WhatsApp captions
   - Dashboard blueprint cards now load from real API (featured blueprints)
   - Workspace "Export / Share" button opens the full Share modal
+- **Prompt 7**: Professor Dashboard + Assignment System:
+  - Professor role redirect on login → `/professor` overview dashboard
+  - `ProfessorLayout` sidebar with: Overview, My Classes, Assignments, Submissions, Analytics, Students
+  - Classes: create/delete classes with join codes, view enrolled student count
+  - Assignments: create assignments with title, description, due date, max score, difficulty, linked class
+  - Submissions: list + filter student submissions by class/assignment/status, with review link
+  - Review page: approve/reject submission, add feedback, set score, trigger Gemini AI feedback
+  - Analytics: class + assignment performance charts (submissions by status, avg score, activity timeline)
+  - Students: list all enrolled students across professor's classes, search, view per-class breakdown
+  - Student side: `/assignments` page — join class by code, view active/completed assignments
+  - StartAssignment modal: creates a linked project from the assignment
+  - Workspace banner: shows assignment context; Submit button opens SubmitAssignment modal
+  - GradeView inline: shows received grade + professor feedback after submission review
+  - Backend routes: `/api/classes`, `/api/assignments`, `/api/submissions`, `/api/analytics`
+  - Supabase tables: `classes`, `class_members`, `assignments`, `assignment_submissions`
+  - `projects` table: added `assignment_id uuid` and `submitted_for_assignment boolean` columns
 
 ## User preferences
 
 - Design system must be consistent across every screen built in all future prompts
-- This is Prompt 6 of 14 — future prompts will build on top of this foundation
+- This is Prompt 7 of 14 — future prompts will build on top of this foundation
 
 ## Gotchas
 

@@ -22,6 +22,7 @@ interface Project {
   status: string;
   current_step: number;
   created_at?: string | null;
+  updated_at?: string | null;
   ai_analysis?: AiAnalysis | null;
   components?: { list?: Component[] } | null;
 }

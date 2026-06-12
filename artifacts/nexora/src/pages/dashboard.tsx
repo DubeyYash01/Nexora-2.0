@@ -13,6 +13,7 @@ import {
   Sparkles, Settings, Bell, LogOut, Loader2,
   FolderOpen, Zap, CheckCircle2, Package,
   Lightbulb, ThermometerSun, ParkingSquare, Droplets,
+  ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ProjectCard from "@/components/ui/ProjectCard";
@@ -32,12 +33,16 @@ export function DashboardLayout({
     setLocation("/login");
   };
 
+  const isStudentOrProfessor = profile?.role === "student" || profile?.role === "professor";
+
   const navItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
     { icon: Folder, label: "My Projects", href: "/projects" },
     { icon: Plus, label: "New Project", href: "/projects/new" },
     { icon: Grid2x2, label: "Blueprints", href: "/blueprints" },
     { icon: Cpu, label: "My Components", href: "/components" },
+    ...(profile?.role === "student" ? [{ icon: ClipboardList, label: "Assignments", href: "/assignments" }] : []),
+    ...(profile?.role === "professor" ? [{ icon: ClipboardList, label: "Professor Portal", href: "/professor" }] : []),
     { icon: Sparkles, label: "AI Assistant", href: "/assistant" },
     { icon: Settings, label: "Settings", href: "/settings" },
   ];
@@ -56,7 +61,7 @@ export function DashboardLayout({
   const initials =
     profile?.full_name
       ?.split(" ")
-      .map((n) => n[0])
+      .map((n: string) => n[0])
       .slice(0, 2)
       .join("")
       .toUpperCase() ||
@@ -266,8 +271,8 @@ export default function Dashboard() {
             </div>
           ) : recentProjects.length > 0 ? (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {recentProjects.map((p) => (
-                <ProjectCard key={p.id} project={p as Parameters<typeof ProjectCard>[0]["project"]} />
+              {recentProjects.map((p: Parameters<typeof ProjectCard>[0]["project"]) => (
+                <ProjectCard key={p.id} project={p} />
               ))}
             </div>
           ) : (

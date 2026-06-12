@@ -4,7 +4,8 @@ import {
   ArrowLeft, CheckCircle, Lock, Clock,
   AlertTriangle, Zap, ChevronDown, ChevronRight,
   Loader2, Cpu, Timer, Library, BookOpen,
-  CheckSquare, Square, Edit2, Save, DollarSign
+  CheckSquare, Square, Edit2, Save, DollarSign,
+  ClipboardList, Send, X,
 } from "lucide-react";
 import BudgetTracker from "@/components/budget/BudgetTracker";
 import { useAuth } from "@/hooks/useAuth";
@@ -70,6 +71,16 @@ interface Project {
   ide_code: string | null;
   instruction_checks: Record<string, boolean[]> | null;
   components: { list?: Array<{ name: string; purpose: string }> } | null;
+  assignment_id?: string | null;
+  submitted_for_assignment?: boolean;
+}
+
+interface AssignmentContext {
+  id: string;
+  title: string;
+  deadline?: string;
+  required_phases?: string[];
+  description?: string;
 }
 
 /* ── Helpers ─────────────────────────────────────────── */
@@ -342,6 +353,12 @@ export default function Workspace() {
   // Share modal
   const [shareModalOpen, setShareModalOpen] = useState(false);
 
+  // Assignment context
+  const [assignment, setAssignment] = useState<AssignmentContext | null>(null);
+  const [submitModalOpen, setSubmitModalOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+
   // Save status
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -361,6 +378,18 @@ export default function Workspace() {
         const { project: p } = await res.json() as { project: Project };
         setProject(p);
         setTitleValue(p.title);
+        if (p.submitted_for_assignment) setAlreadySubmitted(true);
+
+        // Load assignment context if applicable
+        if (p.assignment_id) {
+          try {
+            const ar = await authFetch(`/api/assignments/${p.assignment_id}`);
+            if (ar.ok) {
+              const { assignment: a } = await ar.json();
+              setAssignment(a ?? null);
+            }
+          } catch { /* non-fatal */ }
+        }
 
         // Restore state
         const done = new Set<number>(p.completed_steps ?? []);
@@ -620,6 +649,34 @@ export default function Workspace() {
         >
           {/* Header */}
           <div className="px-4 pt-4 pb-3 flex-shrink-0" style={{ borderBottom: "1px solid #2A2A3E" }}>
+            {/* Assignment banner */}
+            {assignment && (
+              <div
+                className="mb-3 rounded-xl p-3 space-y-1"
+                style={{ background: "rgba(108,99,255,0.08)", border: "1px solid rgba(108,99,255,0.25)" }}
+              >
+                <div className="flex items-start gap-2">
+                  <ClipboardList className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: "#6C63FF" }} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold" style={{ color: "#6C63FF" }}>📋 Assignment</p>
+                    <p className="text-xs text-foreground font-medium truncate">{assignment.title}</p>
+                    {assignment.deadline && (
+                      <p className="text-xs flex items-center gap-1 mt-0.5" style={{ color: "#FFB84D" }}>
+                        <Clock className="w-3 h-3" />
+                        Due {new Date(assignment.deadline).toLocaleDateString("en-IN", { month: "short", day: "numeric" })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {(assignment.required_phases ?? []).length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {(assignment.required_phases ?? []).map(p => (
+                      <span key={p} className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(0,212,255,0.08)", color: "#00D4FF" }}>{p}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {/* Tabs */}
             <div className="flex gap-1 mb-3 p-1 rounded-xl" style={{ background: "#0A0A0F" }}>
               <button
@@ -698,6 +755,25 @@ export default function Workspace() {
               />
             )}
           </div>
+
+          {/* Submit assignment button */}
+          {assignment && leftTab === "steps" && (
+            <div className="px-3 py-2 flex-shrink-0" style={{ borderTop: "1px solid #2A2A3E" }}>
+              {alreadySubmitted ? (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium" style={{ background: "rgba(0,200,150,0.1)", color: "#00C896" }}>
+                  <CheckCircle className="w-3.5 h-3.5" /> Assignment Submitted
+                </div>
+              ) : (
+                <button
+                  onClick={() => setSubmitModalOpen(true)}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold"
+                  style={{ background: "rgba(0,200,150,0.12)", color: "#00C896", border: "1px solid rgba(0,200,150,0.3)" }}
+                >
+                  <Send className="w-3.5 h-3.5" /> Submit Assignment
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Summary footer — only on steps tab */}
           {leftTab === "steps" && (
@@ -788,6 +864,84 @@ export default function Workspace() {
           )}
         </div>
       </div>
+
+      {/* Submit assignment modal */}
+      {submitModalOpen && assignment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setSubmitModalOpen(false)} />
+          <div
+            className="relative w-full max-w-md rounded-2xl border p-6 space-y-5"
+            style={{ background: "#12121A", borderColor: "#2A2A3E" }}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-foreground text-lg">Submit Assignment</h2>
+              <button onClick={() => setSubmitModalOpen(false)}>
+                <X className="w-4 h-4" style={{ color: "#6A6A8A" }} />
+              </button>
+            </div>
+            <div
+              className="rounded-xl p-4 space-y-1"
+              style={{ background: "rgba(0,200,150,0.05)", border: "1px solid rgba(0,200,150,0.2)" }}
+            >
+              <p className="font-medium text-foreground text-sm">{assignment.title}</p>
+              <p className="text-xs text-muted-foreground">
+                {completedCount} / {totalSteps} steps completed
+              </p>
+            </div>
+            <div
+              className="rounded-xl p-3"
+              style={{ background: "rgba(255,184,77,0.06)", border: "1px solid rgba(255,184,77,0.15)" }}
+            >
+              <p className="text-xs" style={{ color: "#FFB84D" }}>
+                Once submitted, your professor can view your project, code, and AI chat history.
+                This action is final.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setSubmitModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium border"
+                style={{ borderColor: "#2A2A3E", color: "#9090B0" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!project || !user) return;
+                  setSubmitting(true);
+                  try {
+                    const res = await authFetch("/api/submissions/submit", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        projectId: project.id,
+                        assignmentId: assignment.id,
+                        studentId: user.id,
+                      }),
+                    });
+                    if (res.ok) {
+                      toast({ title: "Assignment submitted!", description: "Your professor will be notified." });
+                      setAlreadySubmitted(true);
+                      setSubmitModalOpen(false);
+                    } else {
+                      toast({ title: "Submission failed", variant: "destructive" });
+                    }
+                  } catch {
+                    toast({ title: "Submission failed", variant: "destructive" });
+                  } finally {
+                    setSubmitting(false);
+                  }
+                }}
+                disabled={submitting}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+                style={{ background: "#00C896", color: "#fff" }}
+              >
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                Submit Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Share / Export modal */}
       {shareModalOpen && project && (

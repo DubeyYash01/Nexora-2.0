@@ -9,6 +9,10 @@ import componentsRouter from "./components";
 import budgetRouter from "./budget";
 import blueprintsRouter from "./blueprints";
 import sharingRouter from "./sharing";
+import classesRouter from "./classes";
+import assignmentsRouter from "./assignments";
+import submissionsRouter from "./submissions";
+import analyticsRouter from "./analytics";
 
 const router: IRouter = Router();
 
@@ -21,6 +25,10 @@ router.use(componentsRouter);
 router.use(budgetRouter);
 router.use(blueprintsRouter);
 router.use(sharingRouter);
+router.use(classesRouter);
+router.use(assignmentsRouter);
+router.use(submissionsRouter);
+router.use(analyticsRouter);
 router.use(projectsRouter);
 
 export default router;
