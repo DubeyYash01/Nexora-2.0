@@ -23,6 +23,7 @@ interface AiComponent {
   isEssential: boolean;
   alternatives: string[];
   owned?: boolean;
+  fromInventory?: boolean;
 }
 
 interface FeasibilityItem {
@@ -397,6 +398,24 @@ function Step2({
   const [saving, setSaving] = useState(false);
   const [expandedAlts, setExpandedAlts] = useState<Set<string>>(new Set());
 
+  // Auto-match inventory
+  useEffect(() => {
+    authFetch("/api/components/me")
+      .then((r) => r.json())
+      .then((data: { components?: Array<{ name: string }> }) => {
+        if (!data.components?.length) return;
+        const inventory = data.components.map((c) => c.name.toLowerCase());
+        setComponents((prev) =>
+          prev.map((c) => {
+            const cLow = c.name.toLowerCase();
+            const matched = inventory.some((inv) => inv.includes(cLow) || cLow.includes(inv));
+            return matched ? { ...c, owned: true, fromInventory: true } : c;
+          })
+        );
+      })
+      .catch(() => {});
+  }, []);
+
   const purchaseTotal = components
     .filter((c) => !c.owned)
     .reduce((sum, c) => sum + (c.estimatedCost ?? 0), 0);
@@ -515,6 +534,12 @@ function Step2({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-sm text-foreground">{c.name}</span>
+                    {c.fromInventory && c.owned && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded border flex items-center gap-1"
+                        style={{ color: "#00D4FF", borderColor: "rgba(0,212,255,0.3)", background: "rgba(0,212,255,0.08)" }}>
+                        ✓ From inventory
+                      </span>
+                    )}
                     {!c.isEssential && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded border"
                         style={{ color: "#9090B0", borderColor: "#2A2A3E", background: "#1A1A2E" }}>

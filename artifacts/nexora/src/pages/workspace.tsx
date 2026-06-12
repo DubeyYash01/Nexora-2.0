@@ -4,8 +4,9 @@ import {
   ArrowLeft, CheckCircle, Lock, Clock,
   AlertTriangle, Zap, ChevronDown, ChevronRight,
   Loader2, Cpu, Timer, Library, BookOpen,
-  CheckSquare, Square, Edit2, Save
+  CheckSquare, Square, Edit2, Save, DollarSign
 } from "lucide-react";
+import BudgetTracker from "@/components/budget/BudgetTracker";
 import { useAuth } from "@/hooks/useAuth";
 import { authFetch } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
@@ -323,6 +324,9 @@ export default function Workspace() {
   const [instructionChecks, setInstructionChecks] = useState<Record<string, boolean[]>>({});
   const [completingStep, setCompletingStep] = useState(false);
 
+  // Left panel tab
+  const [leftTab, setLeftTab] = useState<"steps" | "budget">("steps");
+
   // AI explain-this bridge
   const [explainMessage, setExplainMessage] = useState<string | undefined>(undefined);
 
@@ -618,72 +622,112 @@ export default function Workspace() {
         >
           {/* Header */}
           <div className="px-4 pt-4 pb-3 flex-shrink-0" style={{ borderBottom: "1px solid #2A2A3E" }}>
-            <h2 className="font-bold text-sm text-foreground mb-2">Build Plan</h2>
-            <div className="w-full rounded-full overflow-hidden" style={{ background: "#1A1A2E", height: 4 }}>
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{ width: `${progressPct}%`, background: "#6C63FF" }}
-              />
+            {/* Tabs */}
+            <div className="flex gap-1 mb-3 p-1 rounded-xl" style={{ background: "#0A0A0F" }}>
+              <button
+                onClick={() => setLeftTab("steps")}
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all"
+                style={{
+                  background: leftTab === "steps" ? "#6C63FF" : "transparent",
+                  color: leftTab === "steps" ? "#fff" : "#5A5A7A",
+                }}
+              >
+                <CheckCircle className="w-3 h-3" /> Build Steps
+              </button>
+              <button
+                onClick={() => setLeftTab("budget")}
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all"
+                style={{
+                  background: leftTab === "budget" ? "#6C63FF" : "transparent",
+                  color: leftTab === "budget" ? "#fff" : "#5A5A7A",
+                }}
+              >
+                <DollarSign className="w-3 h-3" /> Budget
+              </button>
             </div>
-            <p className="text-xs mt-1.5" style={{ color: "#5A5A7A" }}>
-              {completedCount} of {totalSteps} steps complete
-            </p>
-          </div>
-
-          {/* Steps */}
-          <div className="flex-1 overflow-y-auto">
-            {steps.map((step) => {
-              const state =
-                completedSteps.has(step.stepNumber)
-                  ? "completed"
-                  : step.stepNumber === currentStep
-                  ? "active"
-                  : "locked";
-              const checks = getStepChecks(step.stepNumber, step.instructions.length);
-              return (
-                <div
-                  key={step.stepNumber}
-                  ref={(el) => { stepRefs.current[step.stepNumber] = el; }}
-                >
-                  <StepCard
-                    step={step}
-                    state={state}
-                    checks={checks}
-                    onToggleCheck={(i) => handleToggleCheck(step.stepNumber, i)}
-                    onComplete={() => handleCompleteStep(step)}
-                    completing={completingStep}
+            {leftTab === "steps" && (
+              <>
+                <div className="w-full rounded-full overflow-hidden" style={{ background: "#1A1A2E", height: 4 }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${progressPct}%`, background: "#6C63FF" }}
                   />
                 </div>
-              );
-            })}
-            <div ref={stepsEndRef} />
+                <p className="text-xs mt-1.5" style={{ color: "#5A5A7A" }}>
+                  {completedCount} of {totalSteps} steps complete
+                </p>
+              </>
+            )}
           </div>
 
-          {/* Summary footer */}
-          <div
-            className="p-3 flex-shrink-0 space-y-1"
-            style={{ borderTop: "1px solid #2A2A3E", background: "#0D0D14" }}
-          >
-            <div className="flex items-center gap-2">
-              <Cpu className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#6C63FF" }} />
-              <span className="text-xs" style={{ color: "#7070A0" }}>
-                Platform: <span style={{ color: "#F0F0FF" }}>{platform}</span>
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Library className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#00D4FF" }} />
-              <span className="text-xs" style={{ color: "#7070A0" }}>
-                Libraries: <span style={{ color: "#F0F0FF" }}>{accumulatedLibraries.length}</span>
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Timer className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#00C896" }} />
-              <span className="text-xs" style={{ color: "#7070A0" }}>
-                Est. time:{" "}
-                <span style={{ color: "#F0F0FF" }}>{buildPlan?.estimatedTotalTime ?? "—"}</span>
-              </span>
-            </div>
+          {/* Steps or Budget */}
+          <div className="flex-1 overflow-y-auto">
+            {leftTab === "steps" ? (
+              <>
+                {steps.map((step) => {
+                  const state =
+                    completedSteps.has(step.stepNumber)
+                      ? "completed"
+                      : step.stepNumber === currentStep
+                      ? "active"
+                      : "locked";
+                  const checks = getStepChecks(step.stepNumber, step.instructions.length);
+                  return (
+                    <div
+                      key={step.stepNumber}
+                      ref={(el) => { stepRefs.current[step.stepNumber] = el; }}
+                    >
+                      <StepCard
+                        step={step}
+                        state={state}
+                        checks={checks}
+                        onToggleCheck={(i) => handleToggleCheck(step.stepNumber, i)}
+                        onComplete={() => handleCompleteStep(step)}
+                        completing={completingStep}
+                      />
+                    </div>
+                  );
+                })}
+                <div ref={stepsEndRef} />
+              </>
+            ) : (
+              <BudgetTracker
+                projectId={projectId}
+                projectComponents={project.components?.list?.map((c) => ({
+                  name: c.name,
+                  purpose: c.purpose,
+                })) ?? []}
+              />
+            )}
           </div>
+
+          {/* Summary footer — only on steps tab */}
+          {leftTab === "steps" && (
+            <div
+              className="p-3 flex-shrink-0 space-y-1"
+              style={{ borderTop: "1px solid #2A2A3E", background: "#0D0D14" }}
+            >
+              <div className="flex items-center gap-2">
+                <Cpu className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#6C63FF" }} />
+                <span className="text-xs" style={{ color: "#7070A0" }}>
+                  Platform: <span style={{ color: "#F0F0FF" }}>{platform}</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Library className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#00D4FF" }} />
+                <span className="text-xs" style={{ color: "#7070A0" }}>
+                  Libraries: <span style={{ color: "#F0F0FF" }}>{accumulatedLibraries.length}</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Timer className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#00C896" }} />
+                <span className="text-xs" style={{ color: "#7070A0" }}>
+                  Est. time:{" "}
+                  <span style={{ color: "#F0F0FF" }}>{buildPlan?.estimatedTotalTime ?? "—"}</span>
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Vertical resize handle ── */}

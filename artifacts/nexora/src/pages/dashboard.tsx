@@ -1,5 +1,7 @@
 import { useLocation } from "wouter";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { authFetch } from "@/lib/supabase";
 import {
   useGetProjectStats,
   useGetProjects,
@@ -205,6 +207,14 @@ export default function Dashboard() {
     query: { queryKey: getGetProjectsQueryKey() },
   });
 
+  const [componentCount, setComponentCount] = useState(0);
+  useEffect(() => {
+    authFetch("/api/components/count")
+      .then((r) => r.json())
+      .then((d: { count?: number }) => setComponentCount(d.count ?? 0))
+      .catch(() => {});
+  }, []);
+
   const firstName = profile?.full_name?.split(" ")[0] || "Builder";
   const recentProjects = (projects ?? []).slice(0, 3);
 
@@ -212,7 +222,7 @@ export default function Dashboard() {
     { icon: FolderOpen, label: "Total Projects", value: stats?.total ?? 0 },
     { icon: Zap, label: "In Progress", value: stats?.in_progress ?? 0 },
     { icon: CheckCircle2, label: "Completed", value: stats?.completed ?? 0 },
-    { icon: Package, label: "Components Saved", value: 0 },
+    { icon: Package, label: "Components Saved", value: componentCount },
   ];
 
   return (

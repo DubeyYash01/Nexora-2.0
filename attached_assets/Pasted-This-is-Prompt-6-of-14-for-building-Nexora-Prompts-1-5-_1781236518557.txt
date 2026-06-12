@@ -1,0 +1,1073 @@
+This is Prompt 6 of 14 for building Nexora.
+Prompts 1-5 already built: foundation, auth,
+dashboard, project creation, AI analysis,
+component selection, build plan, Nexora IDE,
+incremental code push, AI assistant,
+component inventory, budget tracker,
+and shopping list generator.
+
+Do NOT touch or recreate anything from
+Prompts 1, 2, 3, 4, or 5. Only ADD.
+
+═══════════════════════════════════════
+WHAT THIS PROMPT BUILDS
+═══════════════════════════════════════
+
+1. Blueprint Library (/blueprints)
+   Public, browsable, forkable project 
+   templates
+2. Create & Publish Blueprint flow
+   (any completed project → blueprint)
+3. Fork a Blueprint
+   (copy → customize → build)
+4. Project Sharing System
+   (public shareable project links)
+5. "Made with Nexora" Export Card
+   (viral sharing mechanic)
+6. Featured & Community blueprints
+7. Blueprint search and filtering
+
+═══════════════════════════════════════
+UNDERSTANDING THE STRATEGIC VALUE
+═══════════════════════════════════════
+
+Blueprints are Nexora's growth engine.
+
+Every blueprint published = 
+  free content that attracts new users
+
+Every "Made with Nexora" share = 
+  free marketing to other students/makers
+
+Every fork = 
+  new project started = 
+  user deeper in Nexora ecosystem
+
+This is how you reach 3,000 users 
+without a marketing budget.
+
+═══════════════════════════════════════
+SUPABASE CHANGES NEEDED
+═══════════════════════════════════════
+
+Run these in Supabase SQL Editor:
+
+CREATE TABLE IF NOT EXISTS blueprints (
+  id uuid DEFAULT gen_random_uuid() 
+     PRIMARY KEY,
+  author_id uuid REFERENCES profiles(id),
+  title text NOT NULL,
+  description text,
+  difficulty text CHECK (
+    difficulty IN (
+      'Beginner','Intermediate','Advanced'
+    )
+  ),
+  category text,
+  components jsonb,
+  build_plan jsonb,
+  ai_analysis jsonb,
+  tags text[],
+  is_featured boolean DEFAULT false,
+  is_public boolean DEFAULT true,
+  fork_count integer DEFAULT 0,
+  view_count integer DEFAULT 0,
+  like_count integer DEFAULT 0,
+  source_project_id uuid 
+    REFERENCES projects(id) 
+    NULLABLE,
+  estimated_cost_min integer,
+  estimated_cost_max integer,
+  estimated_time text,
+  platform text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS blueprint_likes (
+  id uuid DEFAULT gen_random_uuid() 
+     PRIMARY KEY,
+  blueprint_id uuid 
+    REFERENCES blueprints(id) 
+    ON DELETE CASCADE,
+  user_id uuid REFERENCES profiles(id),
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(blueprint_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS blueprint_forks (
+  id uuid DEFAULT gen_random_uuid() 
+     PRIMARY KEY,
+  blueprint_id uuid 
+    REFERENCES blueprints(id),
+  forked_by uuid REFERENCES profiles(id),
+  new_project_id uuid 
+    REFERENCES projects(id),
+  forked_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE projects 
+  ADD COLUMN IF NOT EXISTS 
+  is_public boolean DEFAULT false;
+
+ALTER TABLE projects 
+  ADD COLUMN IF NOT EXISTS 
+  share_token text UNIQUE;
+
+ALTER TABLE projects 
+  ADD COLUMN IF NOT EXISTS 
+  blueprint_id uuid 
+  REFERENCES blueprints(id) NULLABLE;
+
+ALTER TABLE projects
+  ADD COLUMN IF NOT EXISTS
+  forked_from uuid 
+  REFERENCES blueprints(id) NULLABLE;
+
+-- RLS policies
+ALTER TABLE blueprints 
+  ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "public blueprints readable" 
+  ON blueprints FOR SELECT 
+  USING (is_public = true);
+
+CREATE POLICY "authors manage blueprints" 
+  ON blueprints FOR ALL 
+  USING (auth.uid() = author_id);
+
+ALTER TABLE blueprint_likes 
+  ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "users manage own likes" 
+  ON blueprint_likes FOR ALL 
+  USING (auth.uid() = user_id);
+
+ALTER TABLE blueprint_forks 
+  ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "users manage own forks" 
+  ON blueprint_forks FOR ALL 
+  USING (auth.uid() = forked_by);
+
+-- Insert 6 seed blueprints
+-- (these are the featured ones)
+-- Author_id can be null for 
+-- official Nexora blueprints
+-- We'll insert via backend on first load
+
+═══════════════════════════════════════
+SEED BLUEPRINTS DATA
+═══════════════════════════════════════
+
+File: server/data/seedBlueprints.js
+
+Create this file with 6 hardcoded 
+official blueprints:
+
+Blueprint 1:
+  title: "Smart Plant Monitor"
+  description: "Monitors soil moisture 
+    and automatically waters your plant 
+    when dry. Sends phone notifications."
+  difficulty: "Beginner"
+  category: "Agriculture"
+  tags: ["ESP32", "Sensors", 
+         "Automation", "Beginner"]
+  platform: "ESP32"
+  estimatedCostMin: 750
+  estimatedCostMax: 950
+  estimatedTime: "1-2 days"
+  components: [
+    { name: "ESP32 DevKit V1", 
+      type: "microcontroller", 
+      estimatedCost: 350 },
+    { name: "Soil Moisture Sensor", 
+      type: "sensor", 
+      estimatedCost: 80 },
+    { name: "Water Pump (5V)", 
+      type: "actuator", 
+      estimatedCost: 150 },
+    { name: "Relay Module", 
+      type: "module", 
+      estimatedCost: 80 },
+    { name: "Jumper Wires", 
+      type: "passive", 
+      estimatedCost: 50 }
+  ]
+
+Blueprint 2:
+  title: "Home Temperature Logger"
+  description: "Logs temperature and 
+    humidity every 10 minutes. Displays 
+    on OLED and sends alerts above 35°C."
+  difficulty: "Beginner"
+  category: "Home Automation"
+  tags: ["ESP32", "DHT22", 
+         "OLED", "Monitoring"]
+  platform: "ESP32"
+  estimatedCostMin: 580
+  estimatedCostMax: 750
+  estimatedTime: "1 day"
+  components: [
+    { name: "ESP32 DevKit V1", 
+      type: "microcontroller", 
+      estimatedCost: 350 },
+    { name: "DHT22 Temperature Sensor", 
+      type: "sensor", 
+      estimatedCost: 120 },
+    { name: "OLED Display 0.96\"", 
+      type: "display", 
+      estimatedCost: 150 }
+  ]
+
+Blueprint 3:
+  title: "Motion Security Alert"
+  description: "Detects motion using PIR 
+    sensor and sends instant notification. 
+    Logs all events with timestamps."
+  difficulty: "Beginner"
+  category: "Security"
+  tags: ["ESP32", "PIR", 
+         "Security", "Notifications"]
+  platform: "ESP32"
+  estimatedCostMin: 480
+  estimatedCostMax: 620
+  estimatedTime: "1 day"
+  components: [
+    { name: "ESP32 DevKit V1", 
+      type: "microcontroller", 
+      estimatedCost: 350 },
+    { name: "PIR Motion Sensor", 
+      type: "sensor", 
+      estimatedCost: 80 },
+    { name: "Buzzer Active", 
+      type: "actuator", 
+      estimatedCost: 30 },
+    { name: "LED", 
+      type: "passive", 
+      estimatedCost: 10 }
+  ]
+
+Blueprint 4:
+  title: "Smart Parking System"
+  description: "Detects parking spot 
+    occupancy with ultrasonic sensors. 
+    Shows availability on LED matrix."
+  difficulty: "Intermediate"
+  category: "Smart City"
+  tags: ["ESP32", "Ultrasonic", 
+         "LED", "Smart City"]
+  platform: "ESP32"
+  estimatedCostMin: 650
+  estimatedCostMax: 850
+  estimatedTime: "2-3 days"
+  components: [
+    { name: "ESP32 DevKit V1", 
+      type: "microcontroller", 
+      estimatedCost: 350 },
+    { name: "HC-SR04 Ultrasonic Sensor", 
+      type: "sensor", 
+      estimatedCost: 80 },
+    { name: "RGB LED", 
+      type: "actuator", 
+      estimatedCost: 30 },
+    { name: "OLED Display 0.96\"", 
+      type: "display", 
+      estimatedCost: 150 }
+  ]
+
+Blueprint 5:
+  title: "Air Quality Monitor"
+  description: "Monitors CO2 and air 
+    quality index in real time. Alerts 
+    when air quality drops below safe levels."
+  difficulty: "Intermediate"
+  category: "Environment"
+  tags: ["ESP32", "MQ135", 
+         "Air Quality", "Health"]
+  platform: "ESP32"
+  estimatedCostMin: 700
+  estimatedCostMax: 900
+  estimatedTime: "2 days"
+  components: [
+    { name: "ESP32 DevKit V1", 
+      type: "microcontroller", 
+      estimatedCost: 350 },
+    { name: "MQ-135 Air Quality Sensor", 
+      type: "sensor", 
+      estimatedCost: 120 },
+    { name: "OLED Display 0.96\"", 
+      type: "display", 
+      estimatedCost: 150 },
+    { name: "Buzzer Active", 
+      type: "actuator", 
+      estimatedCost: 30 }
+  ]
+
+Blueprint 6:
+  title: "GPS Vehicle Tracker"
+  description: "Tracks vehicle location 
+    in real time using GPS. Sends location 
+    updates to your phone every minute."
+  difficulty: "Advanced"
+  category: "Tracking"
+  tags: ["ESP32", "GPS", 
+         "GSM", "Tracking"]
+  platform: "ESP32"
+  estimatedCostMin: 1200
+  estimatedCostMax: 1600
+  estimatedTime: "3-5 days"
+  components: [
+    { name: "ESP32 DevKit V1", 
+      type: "microcontroller", 
+      estimatedCost: 350 },
+    { name: "Neo-6M GPS Module", 
+      type: "module", 
+      estimatedCost: 350 },
+    { name: "SIM800L GSM Module", 
+      type: "communication", 
+      estimatedCost: 450 },
+    { name: "18650 Li-ion Battery", 
+      type: "power", 
+      estimatedCost: 150 }
+  ]
+
+Create a backend route that seeds these 
+on first load if blueprints table is empty:
+GET /api/blueprints/seed
+→ Checks if blueprints count = 0
+→ If yes: inserts all 6 seed blueprints
+  with author_id = null, 
+  is_featured = true
+→ Returns { seeded: true/false }
+
+Call this route automatically when 
+/blueprints page loads for first time.
+
+═══════════════════════════════════════
+BLUEPRINT LIBRARY — /blueprints
+═══════════════════════════════════════
+
+Route: /blueprints
+Sidebar nav "Blueprints" already exists.
+Wire it to this route.
+
+────────────────────────────────────
+PAGE HEADER
+────────────────────────────────────
+
+Full-width hero section at top:
+  bg: linear gradient from #12121A to #0A0A0F
+  border-bottom: 1px solid #2A2A3E
+  padding: 48px 0
+
+  Left content:
+    Badge: "✦ Community Library"
+    Heading: "IoT Project Blueprints"
+    Subtext: "Start from a proven template. 
+              Customize to your components. 
+              Build faster."
+    
+    Stats row (inline, small):
+      "[X] blueprints" · 
+      "[Y] projects built" · 
+      "[Z] makers"
+
+  Right content:
+    If user has a completed project:
+      "Publish Your Blueprint" button 
+      (primary, sparkles icon)
+    Else:
+      "Share your project as a blueprint 
+       after completing it"
+      (muted text)
+
+────────────────────────────────────
+SEARCH AND FILTER BAR
+────────────────────────────────────
+
+Sticky below header on scroll.
+bg: #0A0A0F
+border-bottom: 1px solid #2A2A3E
+padding: 16px 0
+
+Left: Search input
+  Placeholder: "Search blueprints, 
+                components, categories..."
+  Real-time search (300ms debounce)
+  Searches: title, description, tags, 
+            component names
+
+Center: Filter pills (horizontal scroll):
+  All | Beginner | Intermediate | Advanced
+
+Right: 
+  Category dropdown:
+    All Categories | Home Automation | 
+    Agriculture | Security | Smart City |
+    Environment | Tracking | Health | Other
+  
+  Sort dropdown:
+    Most Popular | Newest | 
+    Most Forked | Lowest Cost
+
+────────────────────────────────────
+FEATURED BLUEPRINTS SECTION
+────────────────────────────────────
+
+Only shown when no search/filter active.
+
+Heading: "⭐ Featured Blueprints"
+Horizontal scrollable row of 
+featured blueprint cards (larger cards).
+
+Featured card (wider, 340px):
+  Gradient header area (top of card):
+    Category-based gradient:
+      Home Automation: purple→blue
+      Agriculture: green→teal
+      Security: red→orange
+      Smart City: blue→cyan
+      Environment: green→yellow
+      Tracking: orange→red
+    
+    Difficulty badge (top-left of gradient)
+    "Official" or "Community" badge 
+    (top-right)
+  
+  Card body:
+    Title (bold, large)
+    Description (2 lines)
+    
+    Component pills (first 3):
+      Small, bg #1A1A2E, 
+      text secondary, rounded-full
+    
+    Stats row:
+      Fork icon + count
+      Heart icon + count  
+      Eye icon + count
+    
+    Cost range: "₹[min]–₹[max]"
+    Time estimate
+  
+  Card footer:
+    Author info:
+      If author_id null: 
+        "✦ Official Nexora Blueprint"
+        (purple text, small)
+      Else:
+        Avatar circle + "@username"
+    
+    "Fork This Blueprint" button 
+    (primary, full width)
+
+────────────────────────────────────
+ALL BLUEPRINTS GRID
+────────────────────────────────────
+
+Heading: "All Blueprints"
+3 column grid desktop, 
+2 column tablet, 
+1 column mobile.
+
+Standard blueprint card (smaller than featured):
+  Same structure but more compact.
+  No gradient header.
+  Category color as left border accent 
+  (3px solid left border).
+
+  Top: Title + difficulty badge
+  Middle: Description (2 lines)
+          Component count + cost range
+  Bottom: Fork count + like button + 
+          "Fork" button (secondary, small)
+
+Like button behavior:
+  Heart icon
+  Filled red if user liked it
+  Toggle on click
+  Optimistic UI update 
+  (update count immediately, 
+   then sync to Supabase)
+
+═══════════════════════════════════════
+BLUEPRINT DETAIL PAGE — /blueprints/:id
+═══════════════════════════════════════
+
+Full detail view when blueprint card clicked.
+
+Layout: max-width 900px, centered.
+
+────────────────────────────────────
+HERO SECTION
+────────────────────────────────────
+
+Breadcrumb: Blueprints → [Title]
+
+Title (large, bold)
+Description (larger text, secondary)
+
+Row of badges:
+  Difficulty | Platform | Time | 
+  Cost range | Fork count
+
+Author row:
+  If official: "✦ Official Nexora Blueprint"
+  If community: avatar + name + 
+                "Published [date]"
+
+Action buttons:
+  "Fork This Blueprint" (primary, large)
+  "Like" (secondary, heart icon)
+  "Share" (secondary, share icon)
+
+────────────────────────────────────
+TABS: Overview | Components | 
+      Build Plan | Reviews
+────────────────────────────────────
+
+── OVERVIEW TAB:
+
+  "What you'll build" section:
+    Full description
+    Learning outcomes list
+    (bullet points of what user learns)
+  
+  "What it does" section:
+    How the project works explanation
+  
+  "Who is this for" section:
+    Skill level explanation
+    Prerequisites if any
+
+── COMPONENTS TAB:
+
+  Same component list UI from Prompt 2
+  But read-only view.
+  
+  "Check what you own" row:
+    Button: "Match with my inventory"
+    → Loads user's components
+    → Auto-highlights owned ones
+    → Shows: "You own X of Y components"
+    → Shows: "You need ~₹[amount] more"
+  
+  Below: "Generate Shopping List" button
+
+── BUILD PLAN TAB:
+
+  Shows all steps from buildPlan
+  Read-only preview (can't complete steps)
+  
+  For each step:
+    Step number + title + phase badge
+    Objective text
+    Duration
+    Collapsed by default
+    Click to expand and see instructions
+  
+  At bottom:
+    "Fork to start building →" CTA button
+
+── REVIEWS TAB:
+
+  Simple review section:
+  
+  Average rating display 
+  (stars, 1-5, show average)
+  
+  Write a review (only if user forked this):
+    Star selector (1-5)
+    Text area: "Share your experience..."
+    Submit button
+  
+  Review cards:
+    Avatar + name + stars + date
+    Review text
+  
+  Add reviews table to Supabase:
+  
+  CREATE TABLE IF NOT EXISTS 
+    blueprint_reviews (
+    id uuid DEFAULT gen_random_uuid() 
+       PRIMARY KEY,
+    blueprint_id uuid 
+      REFERENCES blueprints(id) 
+      ON DELETE CASCADE,
+    user_id uuid 
+      REFERENCES profiles(id),
+    rating integer CHECK 
+      (rating BETWEEN 1 AND 5),
+    review_text text,
+    created_at timestamptz DEFAULT now(),
+    UNIQUE(blueprint_id, user_id)
+  );
+
+═══════════════════════════════════════
+FORK A BLUEPRINT FLOW
+═══════════════════════════════════════
+
+When user clicks "Fork This Blueprint":
+
+1. Show fork modal:
+   
+   Heading: "Fork: [Blueprint Title]"
+   
+   Field 1: Project Name
+     Pre-filled: "[Blueprint Title] — 
+                  [user's first name]'s version"
+     Editable
+   
+   Field 2: Customize for my components
+     Toggle: ON by default
+     "Nexora will adapt this blueprint 
+      to your component inventory"
+   
+   Field 3: Skill level confirmation
+     Shows detected skill level from profile
+     Allow override
+   
+   "Start Building" button (primary)
+   "Cancel" button
+
+2. On confirm:
+   
+   POST /api/blueprints/fork
+   
+   Backend:
+   a. Creates new project row in projects:
+      - title = customized name
+      - idea_input = blueprint description
+      - ai_analysis = blueprint ai_analysis
+      - components = blueprint components
+        (with owned flags from user inventory)
+      - build_plan = blueprint build_plan
+      - status = 'in_progress'
+      - forked_from = blueprint id
+   
+   b. If "customize for my components":
+      Call Gemini to adapt:
+      
+      Prompt:
+      "A user is forking this IoT blueprint:
+      [blueprint title and description]
+      
+      Original components: [list]
+      User's inventory: [list]
+      
+      Adapt the component list:
+      - Mark components as owned if in inventory
+      - Suggest substitutions for missing ones
+      - Keep the project functional
+      
+      Return JSON:
+      {
+        'adaptedComponents': [...],
+        'changes': ['change 1', 'change 2'],
+        'totalNewCost': number
+      }"
+   
+   c. Increments fork_count in blueprints
+   
+   d. Inserts row in blueprint_forks
+   
+   e. Returns { projectId }
+   
+   f. Redirects to /workspace/[projectId]
+   
+   Show adaptation changes summary 
+   as first AI assistant message:
+   "I've adapted this blueprint for 
+    your components. Here's what changed:
+    [list of changes]"
+
+3. Toast on redirect:
+   "Blueprint forked! Your customized 
+    project is ready to build."
+
+═══════════════════════════════════════
+PUBLISH YOUR BLUEPRINT FLOW
+═══════════════════════════════════════
+
+Available for projects with 
+status = 'completed' OR 
+that have a full build_plan generated.
+
+Triggered from:
+  - Blueprint library header button
+  - Project card three-dot menu 
+    "Publish as Blueprint"
+  - Workspace top bar 
+    "Share" → "Publish as Blueprint"
+
+Opens a multi-step modal:
+
+STEP 1 — Details:
+  Title (pre-filled from project)
+  Description (pre-filled, editable, 
+               max 300 chars, 
+               char counter)
+  Category dropdown
+  Tags input 
+    (type and press Enter to add, 
+     show as removable pills,
+     max 5 tags)
+  Difficulty (pre-selected from AI analysis)
+
+STEP 2 — Visibility:
+  "Who can see this blueprint?"
+  
+  Two options as large toggle cards:
+  
+  Public: 
+    Globe icon
+    "Anyone can find and fork this"
+    "Helps the community grow"
+  
+  Private:
+    Lock icon  
+    "Only people with the link"
+    "Good for sharing with your class"
+  
+  Attribution:
+    "Show my name as author" toggle
+    ON by default
+
+STEP 3 — Preview:
+  Shows exactly how the blueprint card 
+  will look in the library
+  (render the BlueprintCard component 
+   with their data)
+  
+  "Looks good! Publish" button (primary)
+  "← Back" button
+
+On publish:
+  POST /api/blueprints/publish
+  Creates row in blueprints table
+  Updates project with blueprint_id
+  
+  Success state (replaces modal):
+    Confetti animation (CSS only, 
+    colored dots falling)
+    
+    "🎉 Blueprint Published!"
+    
+    Share section:
+      "Share your blueprint:"
+      Blueprint URL copied to clipboard button
+      
+      Share text preview:
+        "I just published an IoT blueprint 
+         on Nexora — [title]. 
+         Build it yourself: [url]"
+      
+      Share buttons:
+        WhatsApp (wa.me link)
+        Twitter/X (twitter.com/intent/tweet)
+        Copy link button
+    
+    "View in Library" button
+    "Back to Project" button
+
+═══════════════════════════════════════
+PROJECT SHARING SYSTEM
+═══════════════════════════════════════
+
+Every project can generate a public 
+shareable link — even if not published 
+as a blueprint.
+
+File: client/src/components/sharing/
+      ShareProject.jsx
+
+Triggered from workspace top bar 
+"Export/Share" button.
+
+Opens share modal:
+
+Tabs: [Share Project] [Export Code] 
+      [Made with Nexora]
+
+── SHARE PROJECT TAB:
+
+  Toggle: "Make project publicly viewable"
+    OFF: "Only you can see this project"
+    ON: Generates share token, 
+        creates public URL:
+        nexora.app/p/[share_token]
+  
+  When ON:
+    Public URL shown with copy button
+    
+    What viewers can see:
+    ✓ Project overview and plan
+    ✓ Component list
+    ✓ Build steps (read-only)
+    ✗ Your AI conversations (private)
+    ✗ Your budget details (private)
+    
+    QR code for the URL
+    (use a QR code library or 
+     API: api.qrserver.com/v1/
+     create-qr-code/?size=150x150
+     &data=[url])
+
+Public project view (/p/:shareToken):
+  Read-only version of the project.
+  No sidebar, no auth required.
+  
+  Shows:
+    Project title and description
+    Component list (no ownership data)
+    Build plan steps (collapsed, 
+    expandable, read-only)
+    Platform and difficulty info
+    
+  Bottom sticky bar:
+    "Want to build this? Fork it on Nexora"
+    "Get Started Free" button
+    → This is your acquisition hook
+    → Non-logged-in visitors see this
+    → Clicking goes to /signup
+
+── EXPORT CODE TAB:
+
+  Current IDE code shown 
+  (read-only, syntax highlighted)
+  
+  Download options:
+    "Download .ino file" button
+    "Copy all code" button
+  
+  Free tier:
+    Code shown but download disabled
+    "Upgrade to Pro to download code"
+    Lock icon on download button
+  
+  Pro tier:
+    Full download enabled
+    Also: "Download full project 
+           as ZIP" (includes code + 
+           component list as PDF + 
+           build plan as PDF)
+
+── MADE WITH NEXORA TAB:
+
+  This is the viral sharing mechanic.
+  
+  Generates a beautiful shareable 
+  project card image (rendered as HTML, 
+  user screenshots or we render it).
+  
+  Card design (400px × 500px):
+    bg: gradient #0A0A0F → #1A1A2E
+    border: 1px solid #6C63FF
+    border-radius: 16px
+    padding: 32px
+    
+    Top: Nexora logo + "Made with Nexora"
+         (small, muted)
+    
+    Middle:
+      Project title (large, bold, #F0F0FF)
+      Short description (secondary)
+      
+      Component pills 
+      (first 4, purple style)
+      
+      Stats row:
+        Platform badge
+        Difficulty badge
+        Cost range
+      
+      Thin divider
+      
+      Build steps preview 
+      (just titles, small, 
+       numbered 1-5)
+    
+    Bottom:
+      "nexora.app" watermark
+      QR code (small, bottom right)
+      Share link
+    
+  Below the card preview:
+    Share instructions:
+      "Screenshot this card and share 
+       it on LinkedIn, Instagram, 
+       or WhatsApp to show off 
+       what you built!"
+    
+    Pre-written captions for each platform:
+    
+    LinkedIn caption (copy button):
+    "Just completed my IoT project 
+     using Nexora — [project title]! 
+     Built with [component 1], 
+     [component 2], and [component 3].
+     The AI-guided build experience 
+     was incredible. 
+     Try Nexora free: nexora.app
+     #IoT #MadeWithNexora #Engineering"
+    
+    Instagram caption (copy button):
+    "New IoT project done! 🔧⚡
+     [project title]
+     Built on Nexora — the AI IoT platform
+     Link in bio | nexora.app
+     #IoT #MadeWithNexora #ESP32 
+     #StudentProject"
+    
+    WhatsApp message (copy button):
+    "Hey! I just built [project title] 
+     using this AI IoT platform called 
+     Nexora. It guided me step by step.
+     Check it out free: nexora.app"
+
+═══════════════════════════════════════
+BACKEND ROUTES TO ADD
+═══════════════════════════════════════
+
+GET /api/blueprints
+  Query params: 
+    search, difficulty, category, 
+    sort, limit, offset
+  → Returns filtered blueprints
+  → Includes author profile data
+  → Includes user's like status
+    if authenticated
+
+GET /api/blueprints/:id
+  → Returns full blueprint data
+  → Increments view_count
+  → Includes reviews with user data
+
+GET /api/blueprints/seed
+  → Seeds 6 official blueprints 
+    if table empty
+
+POST /api/blueprints/fork
+  Body: { blueprintId, userId, 
+          projectName, adaptToInventory }
+  → Creates project from blueprint
+  → Calls Gemini if adaptToInventory
+  → Increments fork_count
+  → Returns { projectId }
+
+POST /api/blueprints/publish
+  Body: { projectId, userId, title,
+          description, category, tags,
+          difficulty, isPublic, 
+          showAuthor }
+  → Creates blueprint row
+  → Links to project
+  → Returns { blueprintId, url }
+
+POST /api/blueprints/like
+  Body: { blueprintId, userId }
+  → Toggles like in blueprint_likes
+  → Updates like_count in blueprints
+  → Returns { liked: boolean, count }
+
+POST /api/blueprints/review
+  Body: { blueprintId, userId, 
+          rating, reviewText }
+  → Upserts in blueprint_reviews
+  → Returns { review }
+
+POST /api/projects/share
+  Body: { projectId, userId, 
+          makePublic }
+  → Generates share_token 
+    (random 8 char alphanumeric)
+  → Sets is_public flag
+  → Returns { shareUrl, shareToken }
+
+GET /api/projects/public/:shareToken
+  → Returns project data for 
+    public view (no auth required)
+  → Excludes private fields
+  → Returns { project }
+
+═══════════════════════════════════════
+CONNECT TO EXISTING FLOWS
+═══════════════════════════════════════
+
+1. Dashboard (Prompt 2):
+   The 3 hardcoded blueprint cards 
+   already shown — replace them with 
+   real data from /api/blueprints
+   (featured ones, limit 3)
+
+2. /projects/new (Prompt 2):
+   "Start from a Blueprint" option 
+   → now goes to /blueprints
+
+3. Workspace top bar (Prompt 3):
+   "Export Project" button → 
+   opens Share modal built here
+
+4. Suggest Projects panel (Prompt 5):
+   "Start This Project" button → 
+   if the suggestion matches a blueprint,
+   use the fork flow instead of 
+   plain /projects/new
+
+5. Sidebar nav:
+   "Blueprints" link → /blueprints ✓
+
+═══════════════════════════════════════
+IMPORTANT RULES
+═══════════════════════════════════════
+
+1. The public project view (/p/:token) 
+   must work WITHOUT authentication.
+   This is your acquisition page.
+   It must be fast, beautiful, and have 
+   a clear "Get Started Free" CTA.
+
+2. Like button must be optimistic UI — 
+   update count instantly on click, 
+   don't wait for API response.
+
+3. Fork flow must handle the case 
+   where user is NOT logged in:
+   Redirect to /signup with 
+   blueprint ID as query param.
+   After signup: auto-redirect 
+   back to fork that blueprint.
+
+4. Confetti animation on blueprint 
+   publish must be CSS only — 
+   no external library needed.
+   Use keyframe animations with 
+   colored divs positioned absolutely.
+
+5. The "Made with Nexora" card 
+   MUST look genuinely beautiful.
+   This is your marketing material.
+   Dark theme, purple accents, 
+   clean typography. 
+   Students will screenshot this 
+   for their LinkedIn posts.
+
+6. All blueprint images / category icons 
+   use lucide icons — no external 
+   image hosting needed.
+
+7. After building confirm:
+   - /blueprints loads with 6 seed cards
+   - Search and filter works
+   - Blueprint detail page opens
+   - Fork flow creates a new project
+   - Workspace redirects correctly 
+     after fork
+   - Publish flow works end to end
+   - Share link generates and 
+     public view works without login
+   - "Made with Nexora" card 
+     renders correctly
+   - Like button toggles correctly

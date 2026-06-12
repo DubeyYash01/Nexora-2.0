@@ -16,6 +16,7 @@ import Dashboard from "@/pages/dashboard";
 import Projects from "@/pages/projects";
 import NewProject from "@/pages/new-project";
 import Workspace from "@/pages/workspace";
+import ComponentsPage from "@/pages/components-page";
 
 const queryClient = new QueryClient();
 
@@ -70,6 +71,9 @@ function Router() {
         </Route>
         <Route path="/workspace/:projectId">
           <ProtectedRoute component={Workspace} />
+        </Route>
+        <Route path="/components">
+          <ProtectedRoute component={ComponentsPage} />
         </Route>
         <Route component={NotFound} />
       </Switch>
