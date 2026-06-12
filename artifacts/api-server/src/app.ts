@@ -3,7 +3,6 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { setupAuth } from "./lib/replitAuth";
 
 const app: Express = express();
 
@@ -26,12 +25,10 @@ app.use(
     },
   }),
 );
+
 app.use(cors({ credentials: true, origin: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-await setupAuth(app);
-
 app.use("/api", router);
 
 export default app;

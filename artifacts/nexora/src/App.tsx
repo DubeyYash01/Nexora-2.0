@@ -21,6 +21,8 @@ import BlueprintsPage from "@/pages/blueprints";
 import BlueprintDetailPage from "@/pages/blueprint-detail";
 import PublicProjectPage from "@/pages/public-project";
 import StudentAssignments from "@/pages/assignments";
+import PricingPage from "@/pages/pricing";
+import BillingPage from "@/pages/billing";
 
 import ProfessorOverview from "@/pages/professor/index";
 import ProfessorClasses from "@/pages/professor/classes";
@@ -60,7 +62,8 @@ function FloatingAIWrapper() {
   const [location] = useLocation();
   const isProfessor = location.startsWith("/professor");
   const isWorkspace = location.startsWith("/workspace/");
-  if (isWorkspace || isProfessor) return null;
+  const isPricing = location === "/pricing";
+  if (isWorkspace || isProfessor || isPricing) return null;
   return <FloatingAI />;
 }
 
@@ -71,6 +74,7 @@ function Router() {
         <Route path="/" component={Landing} />
         <Route path="/login" component={Login} />
         <Route path="/signup" component={Signup} />
+        <Route path="/pricing" component={PricingPage} />
         <Route path="/role-select">
           <ProtectedRoute component={RoleSelect} />
         </Route>
@@ -97,6 +101,9 @@ function Router() {
         </Route>
         <Route path="/assignments">
           <ProtectedRoute component={StudentAssignments} />
+        </Route>
+        <Route path="/settings/billing">
+          <ProtectedRoute component={BillingPage} />
         </Route>
         <Route path="/p/:shareToken" component={PublicProjectPage} />
 

@@ -2,14 +2,10 @@ import { Router } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
 import { logger } from "../lib/logger";
-import { db } from "@workspace/db";
-import { projects } from "@workspace/db/schema";
-import { and, eq } from "drizzle-orm";
+import { getAuthClient } from "../lib/supabaseAdmin";
 
 const router = Router();
-
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? "";
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
 const SYSTEM_PROMPT = `You are Nexora's IoT project analysis AI. 
 Your job is to analyze an IoT project idea and return a structured JSON response.
@@ -62,7 +58,6 @@ async function callGemini(idea: string, skillLevel: string): Promise<object> {
   }
 }
 
-// POST /api/projects/analyze
 router.post("/projects/analyze", verifyToken, async (req: AuthRequest, res) => {
   const { idea, skillLevel } = req.body;
 
@@ -88,22 +83,23 @@ router.post("/projects/analyze", verifyToken, async (req: AuthRequest, res) => {
   const analysisObj = analysis as Record<string, unknown>;
   const projectTitle = (typeof analysisObj.projectTitle === "string" ? analysisObj.projectTitle : null) ?? "Untitled Project";
 
-  const [project] = await db
-    .insert(projects)
-    .values({
-      id: crypto.randomUUID(),
-      userId: req.userId!,
+  const db = getAuthClient(req.token!);
+  const { data: project, error } = await db
+    .from("projects")
+    .insert({
+      user_id: req.userId!,
       title: projectTitle,
       description: (analysisObj.projectSummary as string) ?? "",
-      ideaInput: idea.trim(),
+      idea_input: idea.trim(),
       status: "draft",
-      currentStep: 1,
-      aiAnalysis: analysis,
+      current_step: 1,
+      ai_analysis: analysis,
     })
-    .returning();
+    .select()
+    .single();
 
-  if (!project) {
-    logger.error({}, "Failed to create project after analysis");
+  if (error || !project) {
+    logger.error({ error }, "Failed to create project after analysis");
     res.status(500).json({ error: "Failed to save project" });
     return;
   }
@@ -111,7 +107,6 @@ router.post("/projects/analyze", verifyToken, async (req: AuthRequest, res) => {
   res.json({ projectId: project.id, analysis });
 });
 
-// POST /api/projects/save-components
 router.post("/projects/save-components", verifyToken, async (req: AuthRequest, res) => {
   const { projectId, components } = req.body;
 
@@ -120,10 +115,12 @@ router.post("/projects/save-components", verifyToken, async (req: AuthRequest, r
     return;
   }
 
+  const db = getAuthClient(req.token!);
   await db
-    .update(projects)
-    .set({ components: { list: components }, updatedAt: new Date() })
-    .where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
+    .from("projects")
+    .update({ components: { list: components }, updated_at: new Date().toISOString() })
+    .eq("id", projectId)
+    .eq("user_id", req.userId!);
 
   res.json({ success: true });
 });

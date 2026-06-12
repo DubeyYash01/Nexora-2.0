@@ -2,39 +2,40 @@ import { Router } from "express";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
 import { UpdateMyProfileBody } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
-import { db } from "@workspace/db";
-import { profiles } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { getAuthClient } from "../lib/supabaseAdmin";
 
 const router = Router();
 
-// GET /api/profiles/me
 router.get("/profiles/me", verifyToken, async (req: AuthRequest, res) => {
   try {
-    const [profile] = await db.select().from(profiles).where(eq(profiles.id, req.userId!));
+    const db = getAuthClient(req.token!);
+    const { data, error } = await db
+      .from("profiles")
+      .select("*")
+      .eq("id", req.userId!)
+      .single();
 
-    if (!profile) {
-      const [newProfile] = await db
-        .insert(profiles)
-        .values({ id: req.userId!, email: req.userEmail! })
-        .returning();
-
-      if (!newProfile) {
+    if (error || !data) {
+      const { data: inserted, error: insertErr } = await db
+        .from("profiles")
+        .insert({ id: req.userId!, email: req.userEmail! })
+        .select()
+        .single();
+      if (insertErr) {
         res.status(500).json({ error: "Failed to create profile" });
         return;
       }
-      res.json(newProfile);
+      res.json(inserted);
       return;
     }
 
-    res.json(profile);
+    res.json(data);
   } catch (err) {
     logger.error({ err }, "Unexpected error in GET /profiles/me");
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// PATCH /api/profiles/me
 router.patch("/profiles/me", verifyToken, async (req: AuthRequest, res) => {
   try {
     const parsed = UpdateMyProfileBody.safeParse(req.body);
@@ -43,29 +44,19 @@ router.patch("/profiles/me", verifyToken, async (req: AuthRequest, res) => {
       return;
     }
 
-    const [updated] = await db
-      .insert(profiles)
-      .values({
-        id: req.userId!,
-        email: req.userEmail!,
-        ...parsed.data,
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: profiles.id,
-        set: {
-          ...parsed.data,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
+    const db = getAuthClient(req.token!);
+    const { data, error } = await db
+      .from("profiles")
+      .upsert({ id: req.userId!, email: req.userEmail!, ...parsed.data, updated_at: new Date().toISOString() })
+      .select()
+      .single();
 
-    if (!updated) {
+    if (error) {
       res.status(500).json({ error: "Failed to update profile" });
       return;
     }
 
-    res.json(updated);
+    res.json(data);
   } catch (err) {
     logger.error({ err }, "Unexpected error in PATCH /profiles/me");
     res.status(500).json({ error: "Internal server error" });

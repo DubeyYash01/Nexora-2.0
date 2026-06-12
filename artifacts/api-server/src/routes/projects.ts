@@ -8,19 +8,19 @@ import {
   DeleteProjectParams,
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
-import { db } from "@workspace/db";
-import { projects } from "@workspace/db/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { getAuthClient } from "../lib/supabaseAdmin";
 
 const router = Router();
 
-// GET /api/projects/stats — must be before /:id
 router.get("/projects/stats", verifyToken, async (req: AuthRequest, res) => {
   try {
-    const data = await db
-      .select({ status: projects.status })
-      .from(projects)
-      .where(eq(projects.userId, req.userId!));
+    const db = getAuthClient(req.token!);
+    const { data, error } = await db
+      .from("projects")
+      .select("status")
+      .eq("user_id", req.userId!);
+
+    if (error) throw error;
 
     const stats = {
       total: data.length,
@@ -36,15 +36,16 @@ router.get("/projects/stats", verifyToken, async (req: AuthRequest, res) => {
   }
 });
 
-// GET /api/projects
 router.get("/projects", verifyToken, async (req: AuthRequest, res) => {
   try {
-    const data = await db
-      .select()
-      .from(projects)
-      .where(eq(projects.userId, req.userId!))
-      .orderBy(desc(projects.createdAt));
+    const db = getAuthClient(req.token!);
+    const { data, error } = await db
+      .from("projects")
+      .select("*")
+      .eq("user_id", req.userId!)
+      .order("created_at", { ascending: false });
 
+    if (error) throw error;
     res.json(data);
   } catch (err) {
     logger.error({ err }, "Unexpected error in GET /projects");
@@ -52,7 +53,6 @@ router.get("/projects", verifyToken, async (req: AuthRequest, res) => {
   }
 });
 
-// POST /api/projects
 router.post("/projects", verifyToken, async (req: AuthRequest, res) => {
   try {
     const parsed = CreateProjectBody.safeParse(req.body);
@@ -61,26 +61,23 @@ router.post("/projects", verifyToken, async (req: AuthRequest, res) => {
       return;
     }
 
+    const db = getAuthClient(req.token!);
     const assignmentId = (req.body as Record<string, unknown>).assignment_id as string | undefined;
 
-    const [data] = await db
-      .insert(projects)
-      .values({
-        id: crypto.randomUUID(),
-        userId: req.userId!,
+    const { data, error } = await db
+      .from("projects")
+      .insert({
+        user_id: req.userId!,
         title: parsed.data.title,
         description: parsed.data.description ?? "",
         status: parsed.data.status ?? "draft",
-        currentStep: 0,
-        ...(assignmentId ? { assignmentId } : {}),
+        current_step: 0,
+        ...(assignmentId ? { assignment_id: assignmentId } : {}),
       })
-      .returning();
+      .select()
+      .single();
 
-    if (!data) {
-      res.status(500).json({ error: "Failed to create project" });
-      return;
-    }
-
+    if (error) throw error;
     res.status(201).json({ project: data });
   } catch (err) {
     logger.error({ err }, "Unexpected error in POST /projects");
@@ -88,7 +85,6 @@ router.post("/projects", verifyToken, async (req: AuthRequest, res) => {
   }
 });
 
-// GET /api/projects/:id
 router.get("/projects/:id", verifyToken, async (req: AuthRequest, res) => {
   try {
     const params = GetProjectParams.safeParse(req.params);
@@ -97,12 +93,15 @@ router.get("/projects/:id", verifyToken, async (req: AuthRequest, res) => {
       return;
     }
 
-    const [data] = await db
-      .select()
-      .from(projects)
-      .where(and(eq(projects.id, params.data.id), eq(projects.userId, req.userId!)));
+    const db = getAuthClient(req.token!);
+    const { data, error } = await db
+      .from("projects")
+      .select("*")
+      .eq("id", params.data.id)
+      .eq("user_id", req.userId!)
+      .single();
 
-    if (!data) {
+    if (error || !data) {
       res.status(404).json({ error: "Project not found" });
       return;
     }
@@ -114,7 +113,6 @@ router.get("/projects/:id", verifyToken, async (req: AuthRequest, res) => {
   }
 });
 
-// PATCH /api/projects/:id
 router.patch("/projects/:id", verifyToken, async (req: AuthRequest, res) => {
   try {
     const params = UpdateProjectParams.safeParse(req.params);
@@ -129,13 +127,16 @@ router.patch("/projects/:id", verifyToken, async (req: AuthRequest, res) => {
       return;
     }
 
-    const [data] = await db
-      .update(projects)
-      .set({ ...parsed.data, updatedAt: new Date() })
-      .where(and(eq(projects.id, params.data.id), eq(projects.userId, req.userId!)))
-      .returning();
+    const db = getAuthClient(req.token!);
+    const { data, error } = await db
+      .from("projects")
+      .update({ ...parsed.data, updated_at: new Date().toISOString() })
+      .eq("id", params.data.id)
+      .eq("user_id", req.userId!)
+      .select()
+      .single();
 
-    if (!data) {
+    if (error || !data) {
       res.status(404).json({ error: "Project not found or update failed" });
       return;
     }
@@ -147,7 +148,6 @@ router.patch("/projects/:id", verifyToken, async (req: AuthRequest, res) => {
   }
 });
 
-// DELETE /api/projects/:id
 router.delete("/projects/:id", verifyToken, async (req: AuthRequest, res) => {
   try {
     const params = DeleteProjectParams.safeParse(req.params);
@@ -156,13 +156,40 @@ router.delete("/projects/:id", verifyToken, async (req: AuthRequest, res) => {
       return;
     }
 
-    await db
-      .delete(projects)
-      .where(and(eq(projects.id, params.data.id), eq(projects.userId, req.userId!)));
+    const db = getAuthClient(req.token!);
+    const { error } = await db
+      .from("projects")
+      .delete()
+      .eq("id", params.data.id)
+      .eq("user_id", req.userId!);
 
+    if (error) throw error;
     res.status(204).send();
   } catch (err) {
     logger.error({ err }, "Unexpected error in DELETE /projects/:id");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/projects/archive", verifyToken, async (req: AuthRequest, res) => {
+  try {
+    const { projectId } = req.body;
+    if (!projectId) {
+      res.status(400).json({ error: "projectId required" });
+      return;
+    }
+
+    const db = getAuthClient(req.token!);
+    const { error } = await db
+      .from("projects")
+      .update({ status: "archived", updated_at: new Date().toISOString() })
+      .eq("id", projectId)
+      .eq("user_id", req.userId!);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    logger.error({ err }, "Unexpected error in POST /projects/archive");
     res.status(500).json({ error: "Internal server error" });
   }
 });

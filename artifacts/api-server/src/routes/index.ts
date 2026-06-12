@@ -13,6 +13,9 @@ import classesRouter from "./classes";
 import assignmentsRouter from "./assignments";
 import submissionsRouter from "./submissions";
 import analyticsRouter from "./analytics";
+import paymentsRouter from "./payments";
+import usageRouter from "./usage";
+import contactRouter from "./contact";
 
 const router: IRouter = Router();
 
@@ -29,6 +32,9 @@ router.use(classesRouter);
 router.use(assignmentsRouter);
 router.use(submissionsRouter);
 router.use(analyticsRouter);
+router.use(paymentsRouter);
+router.use(usageRouter);
+router.use(contactRouter);
 router.use(projectsRouter);
 
 export default router;

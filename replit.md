@@ -393,10 +393,103 @@ Nexora is a complete IoT project creation platform. Prompts 1–6 of 14 complete
   - Supabase tables: `classes`, `class_members`, `assignments`, `assignment_submissions`
   - `projects` table: added `assignment_id uuid` and `submitted_for_assignment boolean` columns
 
+- **Prompt 8**: Pricing Plans + Razorpay Payments + Subscription Management:
+  - `/pricing` page: Free / Student Pro (₹299/month or ₹999/semester) / Maker Pro (₹499/month) / College Lab (contact)
+  - 7-day free trial for Student Pro (no payment needed), `trial_used` flag prevents repeat
+  - Razorpay checkout integration: create-order → Razorpay modal → verify signature → activate subscription
+  - `/settings/billing` page: current plan, usage stats, payment history, cancel subscription
+  - `usePlan` hook: fetches subscription state from `/api/payments/subscription/:userId`
+  - `useAILimit` hook: fetches daily AI message usage from `/api/usage/me`
+  - `UpgradeModal` component: plan picker with billing cycle selector + free trial CTA
+  - `PaywallGate` component: wraps features with upgrade prompt (block / blur / lock-icon modes)
+  - `PLANS` config in `lib/planLimits.ts`: limits, prices, features per plan
+  - Backend routes: `/api/payments/*` (create-order, verify, start-trial, cancel, subscription/:id, history/:id), `/api/usage/me`, `/api/contact/college-inquiry`
+  - Supabase tables: `subscriptions`, `payment_history`, `usage_tracking`, `college_inquiries`; `profiles.plan` and `profiles.trial_used` columns
+  - Razorpay env vars: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` (set in Replit secrets)
+
+## Supabase Setup Required (Prompt 8 additions)
+
+Run these SQL statements in Supabase SQL Editor after the Prompt 7 tables:
+
+```sql
+-- Add plan columns to profiles
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS plan text DEFAULT 'free';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS trial_used boolean DEFAULT false;
+
+-- Subscriptions table
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id) UNIQUE,
+  plan text NOT NULL DEFAULT 'free',
+  status text DEFAULT 'active' CHECK (status IN ('active','trial','cancelled','expired')),
+  billing_cycle text DEFAULT 'monthly',
+  razorpay_order_id text,
+  razorpay_payment_id text,
+  razorpay_subscription_id text,
+  current_period_start timestamptz DEFAULT now(),
+  current_period_end timestamptz,
+  trial_ends_at timestamptz,
+  cancelled_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Payment history table
+CREATE TABLE IF NOT EXISTS payment_history (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id),
+  plan text NOT NULL,
+  billing_cycle text,
+  amount integer NOT NULL,
+  currency text DEFAULT 'INR',
+  razorpay_order_id text,
+  razorpay_payment_id text,
+  status text DEFAULT 'captured',
+  created_at timestamptz DEFAULT now()
+);
+
+-- Usage tracking table
+CREATE TABLE IF NOT EXISTS usage_tracking (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id),
+  date date DEFAULT CURRENT_DATE,
+  ai_messages_count integer DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(user_id, date)
+);
+
+-- College inquiries table
+CREATE TABLE IF NOT EXISTS college_inquiries (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  institution_name text NOT NULL,
+  contact_name text NOT NULL,
+  email text NOT NULL,
+  phone text,
+  student_count integer,
+  message text,
+  user_id uuid REFERENCES profiles(id),
+  status text DEFAULT 'pending',
+  created_at timestamptz DEFAULT now()
+);
+
+-- Enable RLS
+ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payment_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE usage_tracking ENABLE ROW LEVEL SECURITY;
+ALTER TABLE college_inquiries ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies
+CREATE POLICY "users manage own subscription" ON subscriptions FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "users view own payment history" ON payment_history FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "users manage own usage" ON usage_tracking FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "users insert own inquiries" ON college_inquiries FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
+```
+
 ## User preferences
 
 - Design system must be consistent across every screen built in all future prompts
-- This is Prompt 7 of 14 — future prompts will build on top of this foundation
+- This is Prompt 8 of 14 — future prompts will build on top of this foundation
 
 ## Gotchas
 

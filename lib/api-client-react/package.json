@@ -7,7 +7,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@tanstack/react-query": "catalog:"
+    "@tanstack/react-query": "catalog:",
+    "razorpay": "^2.9.6"
   },
   "peerDependencies": {
     "react": ">=18"

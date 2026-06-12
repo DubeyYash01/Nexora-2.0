@@ -29,17 +29,8 @@ async function buildAll() {
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
     external: [
       "*.node",
-      "drizzle-orm",
-      "drizzle-orm/*",
-      "pg",
-      "pg-pool",
+      "razorpay",
       "zod",
-      "openid-client",
-      "passport",
-      "passport-*",
-      "express-session",
-      "connect-pg-simple",
-      "memoizee",
       "sharp",
       "better-sqlite3",
       "sqlite3",

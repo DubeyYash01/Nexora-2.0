@@ -1,232 +1,143 @@
 import { Router } from "express";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
-import { logger } from "../lib/logger";
 import type { Response } from "express";
-import { db } from "@workspace/db";
-import { assignmentSubmissions, assignments, projects, aiConversations, profiles } from "@workspace/db/schema";
-import { and, eq, desc } from "drizzle-orm";
+import { getAuthClient } from "../lib/supabaseAdmin";
 
 const router = Router();
 
-// GET /api/submissions/:submissionId
 router.get("/submissions/:submissionId", verifyToken, async (req: AuthRequest, res: Response) => {
   const { submissionId } = req.params;
+  const db = getAuthClient(req.token!);
 
-  const [submission] = await db
-    .select()
-    .from(assignmentSubmissions)
-    .where(eq(assignmentSubmissions.id, submissionId));
+  const { data: submission } = await db.from("assignment_submissions").select("*").eq("id", submissionId).single();
+  if (!submission) { res.status(404).json({ error: "Submission not found" }); return; }
 
-  if (!submission) {
-    res.status(404).json({ error: "Submission not found" });
-    return;
-  }
+  const { data: assignment } = await db
+    .from("assignments")
+    .select("professor_id,title,deadline,grading_criteria,required_phases")
+    .eq("id", submission.assignment_id)
+    .single();
 
-  const [assignment] = await db
-    .select({ professorId: assignments.professorId, title: assignments.title, deadline: assignments.deadline, gradingCriteria: assignments.gradingCriteria, requiredPhases: assignments.requiredPhases })
-    .from(assignments)
-    .where(eq(assignments.id, submission.assignmentId));
-
-  if (submission.studentId !== req.userId && assignment?.professorId !== req.userId) {
+  if (submission.student_id !== req.userId && assignment?.professor_id !== req.userId) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
 
-  const [aiConv] = await db
-    .select({ messages: aiConversations.messages })
-    .from(aiConversations)
-    .where(and(eq(aiConversations.projectId, submission.projectId!), eq(aiConversations.userId, submission.studentId)));
+  const { data: aiConv } = await db
+    .from("ai_conversations")
+    .select("messages")
+    .eq("project_id", submission.project_id)
+    .eq("user_id", submission.student_id)
+    .single();
 
   const messages = (aiConv?.messages as object[]) ?? [];
-
   res.json({ submission: { ...submission, assignment, aiMessageCount: messages.length, aiMessages: messages } });
 });
 
-// POST /api/submissions/submit
 router.post("/submissions/submit", verifyToken, async (req: AuthRequest, res: Response) => {
   const { projectId, assignmentId, groupMembers, videoDemoUrl, studentNote } = req.body;
 
-  if (!projectId || !assignmentId) {
-    res.status(400).json({ error: "projectId and assignmentId required" });
-    return;
-  }
+  if (!projectId || !assignmentId) { res.status(400).json({ error: "projectId and assignmentId required" }); return; }
 
-  const [project] = await db
-    .select()
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
+  const db = getAuthClient(req.token!);
+  const { data: project } = await db.from("projects").select("*").eq("id", projectId).eq("user_id", req.userId!).single();
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
 
-  if (!project) {
-    res.status(404).json({ error: "Project not found" });
-    return;
-  }
-
-  const buildPlan = project.buildPlan as { buildPlan?: { totalSteps?: number } } | null;
-  const totalSteps = buildPlan?.buildPlan?.totalSteps ?? 0;
-  const completedSteps = (project.completedSteps as number[] | null) ?? [];
-
-  const [aiConv] = await db
-    .select({ messages: aiConversations.messages })
-    .from(aiConversations)
-    .where(and(eq(aiConversations.projectId, projectId), eq(aiConversations.userId, req.userId!)));
+  const { data: aiConv } = await db
+    .from("ai_conversations")
+    .select("messages")
+    .eq("project_id", projectId)
+    .eq("user_id", req.userId!)
+    .single();
 
   const aiMessages = (aiConv?.messages as object[]) ?? [];
   const aiAssistanceLog = { totalMessages: aiMessages.length, messagesLog: aiMessages };
 
-  const [existing] = await db
-    .select({ id: assignmentSubmissions.id })
-    .from(assignmentSubmissions)
-    .where(and(eq(assignmentSubmissions.assignmentId, assignmentId), eq(assignmentSubmissions.studentId, req.userId!)));
+  const { data: existing } = await db
+    .from("assignment_submissions")
+    .select("id")
+    .eq("assignment_id", assignmentId)
+    .eq("student_id", req.userId!)
+    .single();
 
   let submission;
   if (existing) {
-    const [updated] = await db
-      .update(assignmentSubmissions)
-      .set({
-        projectId,
-        groupMembers: groupMembers ?? [],
-        submittedAt: new Date(),
-        status: "submitted",
-        aiAssistanceLog,
-        componentList: project.components,
-        videoDemoUrl: videoDemoUrl ?? null,
-        studentNote: studentNote ?? null,
-        updatedAt: new Date(),
-      })
-      .where(eq(assignmentSubmissions.id, existing.id))
-      .returning();
-    submission = updated;
+    const { data } = await db
+      .from("assignment_submissions")
+      .update({ project_id: projectId, group_members: groupMembers ?? [], submitted_at: new Date().toISOString(), status: "submitted", ai_assistance_log: aiAssistanceLog, component_list: project.components, video_demo_url: videoDemoUrl ?? null, student_note: studentNote ?? null, updated_at: new Date().toISOString() })
+      .eq("id", existing.id)
+      .select()
+      .single();
+    submission = data;
   } else {
-    const [inserted] = await db
-      .insert(assignmentSubmissions)
-      .values({
-        id: crypto.randomUUID(),
-        assignmentId,
-        projectId,
-        studentId: req.userId!,
-        groupMembers: groupMembers ?? [],
-        submittedAt: new Date(),
-        status: "submitted",
-        aiAssistanceLog,
-        componentList: project.components,
-        videoDemoUrl: videoDemoUrl ?? null,
-        studentNote: studentNote ?? null,
-      })
-      .returning();
-    submission = inserted;
+    const { data } = await db
+      .from("assignment_submissions")
+      .insert({ assignment_id: assignmentId, project_id: projectId, student_id: req.userId!, group_members: groupMembers ?? [], submitted_at: new Date().toISOString(), status: "submitted", ai_assistance_log: aiAssistanceLog, component_list: project.components, video_demo_url: videoDemoUrl ?? null, student_note: studentNote ?? null })
+      .select()
+      .single();
+    submission = data;
   }
 
   res.json({ submission });
 });
 
-// POST /api/submissions/draft
 router.post("/submissions/draft", verifyToken, async (req: AuthRequest, res: Response) => {
   const { projectId, assignmentId } = req.body;
+  if (!projectId || !assignmentId) { res.status(400).json({ error: "projectId and assignmentId required" }); return; }
 
-  if (!projectId || !assignmentId) {
-    res.status(400).json({ error: "projectId and assignmentId required" });
-    return;
-  }
+  const db = getAuthClient(req.token!);
+  const { data: existing } = await db
+    .from("assignment_submissions")
+    .select("id")
+    .eq("assignment_id", assignmentId)
+    .eq("student_id", req.userId!)
+    .single();
 
-  const [existing] = await db
-    .select({ id: assignmentSubmissions.id })
-    .from(assignmentSubmissions)
-    .where(and(eq(assignmentSubmissions.assignmentId, assignmentId), eq(assignmentSubmissions.studentId, req.userId!)));
+  if (existing) { res.json({ submission: existing }); return; }
 
-  if (existing) {
-    res.json({ submission: existing });
-    return;
-  }
-
-  const [data] = await db
-    .insert(assignmentSubmissions)
-    .values({
-      id: crypto.randomUUID(),
-      assignmentId,
-      projectId,
-      studentId: req.userId!,
-      status: "draft",
-    })
-    .returning();
+  const { data } = await db
+    .from("assignment_submissions")
+    .insert({ assignment_id: assignmentId, project_id: projectId, student_id: req.userId!, status: "draft" })
+    .select()
+    .single();
 
   res.json({ submission: data });
 });
 
-// PUT /api/submissions/grade
 router.put("/submissions/grade", verifyToken, async (req: AuthRequest, res: Response) => {
   const { submissionId, grade, feedback } = req.body;
+  if (!submissionId) { res.status(400).json({ error: "submissionId required" }); return; }
 
-  if (!submissionId) {
-    res.status(400).json({ error: "submissionId required" });
-    return;
-  }
+  const db = getAuthClient(req.token!);
+  const { data: submission } = await db.from("assignment_submissions").select("assignment_id").eq("id", submissionId).single();
+  if (!submission) { res.status(404).json({ error: "Submission not found" }); return; }
 
-  const [submission] = await db
-    .select({ assignmentId: assignmentSubmissions.assignmentId })
-    .from(assignmentSubmissions)
-    .where(eq(assignmentSubmissions.id, submissionId));
+  const { data: assignment } = await db.from("assignments").select("professor_id").eq("id", submission.assignment_id).single();
+  if (!assignment || assignment.professor_id !== req.userId) { res.status(403).json({ error: "Professor access only" }); return; }
 
-  if (!submission) {
-    res.status(404).json({ error: "Submission not found" });
-    return;
-  }
+  const { data, error } = await db
+    .from("assignment_submissions")
+    .update({ grade, grader_feedback: feedback, status: "graded", graded_at: new Date().toISOString(), graded_by: req.userId!, updated_at: new Date().toISOString() })
+    .eq("id", submissionId)
+    .select()
+    .single();
 
-  const [assignment] = await db
-    .select({ professorId: assignments.professorId })
-    .from(assignments)
-    .where(eq(assignments.id, submission.assignmentId));
-
-  if (!assignment || assignment.professorId !== req.userId) {
-    res.status(403).json({ error: "Professor access only" });
-    return;
-  }
-
-  const [data] = await db
-    .update(assignmentSubmissions)
-    .set({
-      grade,
-      graderFeedback: feedback,
-      status: "graded",
-      gradedAt: new Date(),
-      gradedBy: req.userId!,
-      updatedAt: new Date(),
-    })
-    .where(eq(assignmentSubmissions.id, submissionId))
-    .returning();
-
-  if (!data) {
-    res.status(500).json({ error: "Failed to save grade" });
-    return;
-  }
-
+  if (error) { res.status(500).json({ error: "Failed to save grade" }); return; }
   res.json({ submission: data });
 });
 
-// GET /api/submissions/student/:studentId
 router.get("/submissions/student/:studentId", verifyToken, async (req: AuthRequest, res: Response) => {
   const { studentId } = req.params;
+  if (req.userId !== studentId) { res.status(403).json({ error: "Forbidden" }); return; }
 
-  if (req.userId !== studentId) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
+  const db = getAuthClient(req.token!);
+  const { data } = await db
+    .from("assignment_submissions")
+    .select("id,assignment_id,status,grade,submitted_at,assignments(title,deadline)")
+    .eq("student_id", studentId)
+    .order("submitted_at", { ascending: false });
 
-  const data = await db
-    .select({
-      id: assignmentSubmissions.id,
-      assignmentId: assignmentSubmissions.assignmentId,
-      status: assignmentSubmissions.status,
-      grade: assignmentSubmissions.grade,
-      submittedAt: assignmentSubmissions.submittedAt,
-      assignmentTitle: assignments.title,
-      assignmentDeadline: assignments.deadline,
-    })
-    .from(assignmentSubmissions)
-    .leftJoin(assignments, eq(assignments.id, assignmentSubmissions.assignmentId))
-    .where(eq(assignmentSubmissions.studentId, studentId))
-    .orderBy(desc(assignmentSubmissions.submittedAt));
-
-  res.json({ submissions: data });
+  res.json({ submissions: data ?? [] });
 });
 
 export default router;

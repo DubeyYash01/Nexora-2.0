@@ -2,9 +2,7 @@ import { Router } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
 import { logger } from "../lib/logger";
-import { db } from "@workspace/db";
-import { aiConversations, aiFeedback } from "@workspace/db/schema";
-import { and, eq } from "drizzle-orm";
+import { getAuthClient, supabase } from "../lib/supabaseAdmin";
 
 const router = Router();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
@@ -58,30 +56,6 @@ When responding to ERROR DIAGNOSIS requests, always structure your response as:
 💡 **Pro tip:**
 [one helpful tip to avoid this in future]`;
 
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-
-function checkRateLimit(userId: string): { allowed: boolean; remaining: number; resetIn: number } {
-  const now = Date.now();
-  const hourMs = 60 * 60 * 1000;
-  const limit = 30;
-
-  let entry = rateLimitMap.get(userId);
-  if (!entry || now > entry.resetAt) {
-    entry = { count: 0, resetAt: now + hourMs };
-    rateLimitMap.set(userId, entry);
-  }
-
-  const remaining = Math.max(0, limit - entry.count);
-  const resetIn = Math.ceil((entry.resetAt - now) / 60000);
-
-  if (entry.count >= limit) {
-    return { allowed: false, remaining: 0, resetIn };
-  }
-  entry.count++;
-  return { allowed: true, remaining: remaining - 1, resetIn };
-}
-
-// POST /api/ai/chat
 router.post("/ai/chat", verifyToken, async (req: AuthRequest, res) => {
   const { projectId, message, conversationHistory, projectContext, messageType } = req.body as {
     projectId: string;
@@ -96,17 +70,58 @@ router.post("/ai/chat", verifyToken, async (req: AuthRequest, res) => {
     return;
   }
 
-  const rl = checkRateLimit(req.userId!);
-  if (!rl.allowed) {
-    res.status(429).json({
-      error: `You've sent a lot of messages! Take a 5-minute break and come back. Free plan allows 30 messages/hour. Resets in ${rl.resetIn} minute(s).`,
-      rateLimited: true,
-    });
-    return;
+  const db = getAuthClient(req.token!);
+
+  const { data: usageRow } = await db
+    .from("usage_tracking")
+    .select("ai_messages_today, ai_messages_reset_at")
+    .eq("user_id", req.userId!)
+    .single();
+
+  const { data: profileRow } = await db
+    .from("profiles")
+    .select("plan")
+    .eq("id", req.userId!)
+    .single();
+
+  const plan = profileRow?.plan ?? "free";
+  const planLimits: Record<string, number> = { free: 3, student_pro: 50, maker_pro: -1, college_lab: -1 };
+  const limit = planLimits[plan] ?? 3;
+
+  if (limit !== -1 && usageRow) {
+    const resetAt = usageRow.ai_messages_reset_at ? new Date(usageRow.ai_messages_reset_at) : new Date(0);
+    const now = new Date();
+    const isNewDay =
+      now.getFullYear() !== resetAt.getFullYear() ||
+      now.getMonth() !== resetAt.getMonth() ||
+      now.getDate() !== resetAt.getDate();
+
+    let todayCount = usageRow.ai_messages_today ?? 0;
+    if (isNewDay) {
+      todayCount = 0;
+      await db
+        .from("usage_tracking")
+        .update({ ai_messages_today: 0, ai_messages_reset_at: now.toISOString() })
+        .eq("user_id", req.userId!);
+    }
+
+    if (todayCount >= limit) {
+      res.status(429).json({
+        error: `Daily AI message limit reached (${limit}/day on ${plan} plan). Upgrade for more messages.`,
+        rateLimited: true,
+        limit,
+        used: todayCount,
+      });
+      return;
+    }
+
+    await db
+      .from("usage_tracking")
+      .update({ ai_messages_today: todayCount + 1, last_updated: new Date().toISOString() })
+      .eq("user_id", req.userId!);
   }
 
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
   const systemWithContext = projectContext
     ? `${AI_SYSTEM_PROMPT}\n\n${projectContext}`
     : AI_SYSTEM_PROMPT;
@@ -147,63 +162,99 @@ router.post("/ai/chat", verifyToken, async (req: AuthRequest, res) => {
       context: { messageType: messageType ?? "general" },
     };
 
-    const [existing] = await db
-      .select({ id: aiConversations.id, messages: aiConversations.messages })
-      .from(aiConversations)
-      .where(and(eq(aiConversations.projectId, projectId), eq(aiConversations.userId, req.userId!)));
+    const { data: existing } = await db
+      .from("ai_conversations")
+      .select("id, messages")
+      .eq("project_id", projectId)
+      .eq("user_id", req.userId!)
+      .single();
 
     if (existing) {
       const msgs = (existing.messages as object[]) ?? [];
       await db
-        .update(aiConversations)
-        .set({ messages: [...msgs, userMsg, asstMsg], updatedAt: new Date() })
-        .where(eq(aiConversations.id, existing.id));
+        .from("ai_conversations")
+        .update({ messages: [...msgs, userMsg, asstMsg], updated_at: new Date().toISOString() })
+        .eq("id", existing.id);
     } else {
-      await db.insert(aiConversations).values({
-        id: crypto.randomUUID(),
-        projectId,
-        userId: req.userId!,
+      await db.from("ai_conversations").insert({
+        project_id: projectId,
+        user_id: req.userId!,
         messages: [userMsg, asstMsg],
       });
     }
   }
 
-  res.json({ response: responseText, messageId: msgId, remaining: rl.remaining });
+  const { data: updatedUsage } = await db
+    .from("usage_tracking")
+    .select("ai_messages_today")
+    .eq("user_id", req.userId!)
+    .single();
+
+  const remaining = limit === -1 ? -1 : Math.max(0, limit - (updatedUsage?.ai_messages_today ?? 0));
+  res.json({ response: responseText, messageId: msgId, remaining, limit });
 });
 
-// POST /api/ai/rate-check
 router.post("/ai/rate-check", verifyToken, async (req: AuthRequest, res) => {
-  const rl = checkRateLimit(req.userId!);
-  const entry = rateLimitMap.get(req.userId!);
-  if (entry) entry.count = Math.max(0, entry.count - 1);
-  res.json({ allowed: rl.allowed, remaining: rl.remaining, resetIn: rl.resetIn });
+  const db = getAuthClient(req.token!);
+
+  const { data: usageRow } = await db
+    .from("usage_tracking")
+    .select("ai_messages_today, ai_messages_reset_at")
+    .eq("user_id", req.userId!)
+    .single();
+
+  const { data: profileRow } = await db
+    .from("profiles")
+    .select("plan")
+    .eq("id", req.userId!)
+    .single();
+
+  const plan = profileRow?.plan ?? "free";
+  const planLimits: Record<string, number> = { free: 3, student_pro: 50, maker_pro: -1, college_lab: -1 };
+  const limit = planLimits[plan] ?? 3;
+
+  let todayCount = usageRow?.ai_messages_today ?? 0;
+  const resetAt = usageRow?.ai_messages_reset_at ? new Date(usageRow.ai_messages_reset_at) : new Date(0);
+  const now = new Date();
+  const isNewDay =
+    now.getFullYear() !== resetAt.getFullYear() ||
+    now.getMonth() !== resetAt.getMonth() ||
+    now.getDate() !== resetAt.getDate();
+  if (isNewDay) todayCount = 0;
+
+  const allowed = limit === -1 || todayCount < limit;
+  const remaining = limit === -1 ? -1 : Math.max(0, limit - todayCount);
+
+  res.json({ allowed, remaining, limit, used: todayCount, plan });
 });
 
-// GET /api/ai/conversation/:projectId
 router.get("/ai/conversation/:projectId", verifyToken, async (req: AuthRequest, res) => {
   const { projectId } = req.params;
+  const db = getAuthClient(req.token!);
 
-  const [data] = await db
-    .select({ messages: aiConversations.messages })
-    .from(aiConversations)
-    .where(and(eq(aiConversations.projectId, projectId), eq(aiConversations.userId, req.userId!)));
+  const { data } = await db
+    .from("ai_conversations")
+    .select("messages")
+    .eq("project_id", projectId)
+    .eq("user_id", req.userId!)
+    .single();
 
   res.json({ messages: data?.messages ?? [] });
 });
 
-// DELETE /api/ai/conversation/:projectId
 router.delete("/ai/conversation/:projectId", verifyToken, async (req: AuthRequest, res) => {
   const { projectId } = req.params;
+  const db = getAuthClient(req.token!);
 
   await db
-    .update(aiConversations)
-    .set({ messages: [], updatedAt: new Date() })
-    .where(and(eq(aiConversations.projectId, projectId), eq(aiConversations.userId, req.userId!)));
+    .from("ai_conversations")
+    .update({ messages: [], updated_at: new Date().toISOString() })
+    .eq("project_id", projectId)
+    .eq("user_id", req.userId!);
 
   res.json({ success: true });
 });
 
-// POST /api/ai/feedback
 router.post("/ai/feedback", verifyToken, async (req: AuthRequest, res) => {
   const { messageId, projectId, feedback } = req.body as {
     messageId: string;
@@ -211,11 +262,11 @@ router.post("/ai/feedback", verifyToken, async (req: AuthRequest, res) => {
     feedback: "helpful" | "not_helpful";
   };
 
-  await db.insert(aiFeedback).values({
-    id: crypto.randomUUID(),
-    messageId,
-    projectId,
-    userId: req.userId!,
+  const db = getAuthClient(req.token!);
+  await db.from("ai_feedback").insert({
+    message_id: messageId,
+    project_id: projectId,
+    user_id: req.userId!,
     feedback,
   });
 

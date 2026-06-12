@@ -1,0 +1,1255 @@
+This is Prompt 8 of 14 for building Nexora.
+Prompts 1-7 already built: foundation, auth,
+dashboard, project creation, AI analysis,
+component selection, build plan, Nexora IDE,
+incremental code push, AI assistant,
+component inventory, budget tracker,
+shopping list, blueprint library, project
+sharing, "Made with Nexora" export,
+professor dashboard, assignment system,
+and college lab flow.
+
+Do NOT touch or recreate anything from
+Prompts 1 through 7. Only ADD to what exists.
+
+═══════════════════════════════════════
+WHAT THIS PROMPT BUILDS
+═══════════════════════════════════════
+
+1. Pricing Plans & Feature Gates
+2. Razorpay Payment Integration
+3. Subscription Management System
+4. Upgrade Flow & Paywalls
+5. Usage Tracking & Limits
+6. Pricing Page (/pricing)
+7. Billing Dashboard (/settings/billing)
+8. College/Institution License Flow
+9. Free Trial System (7 days Pro free)
+
+═══════════════════════════════════════
+PRICING STRATEGY — UNDERSTAND THIS FIRST
+═══════════════════════════════════════
+
+Three tiers:
+
+FREE:
+  Price: ₹0 forever
+  Target: Students exploring, 
+          first-time users
+  Limits:
+    - 2 active projects max
+    - 3 AI messages per project per day
+    - Basic blueprints only (no forking)
+    - No code download/export
+    - No budget tracker
+    - No component inventory
+    - Watermark on "Made with Nexora" card
+    - Cannot submit to assignments
+      (must upgrade)
+    - No group projects
+
+STUDENT PRO:
+  Price: ₹299/month OR ₹999/semester
+  Target: College students with projects
+  Everything in Free PLUS:
+    - Unlimited projects
+    - 50 AI messages per project per day
+    - Full blueprint library + forking
+    - Full code download (.ino, .zip)
+    - Budget tracker
+    - Component inventory (up to 50)
+    - No watermark
+    - Assignment submission enabled
+    - Group projects (up to 4 members)
+    - Priority AI responses
+    - Semester = 6 months access
+
+MAKER PRO:
+  Price: ₹499/month
+  Target: Hobbyists, professionals
+  Everything in Student Pro PLUS:
+    - Unlimited AI messages
+    - Unlimited component inventory
+    - Digital twin preview (future)
+    - API access (future)
+    - Early access to new features
+    - Commercial use allowed
+
+COLLEGE LAB (Institution):
+  Price: ₹8,000–15,000/year
+  Target: Engineering colleges, labs
+  Custom pricing, manual onboarding
+  Contact form → email → manual setup
+  Covers: unlimited students in 
+          one institution
+  Professor accounts: up to 10
+  Full platform access for all students
+
+═══════════════════════════════════════
+SUPABASE CHANGES NEEDED
+═══════════════════════════════════════
+
+Run in Supabase SQL Editor:
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id)
+    UNIQUE,
+  plan text DEFAULT 'free'
+    CHECK (plan IN (
+      'free','student_pro',
+      'maker_pro','college_lab'
+    )),
+  billing_cycle text
+    CHECK (billing_cycle IN (
+      'monthly','semester','annual',NULL
+    )),
+  status text DEFAULT 'active'
+    CHECK (status IN (
+      'active','cancelled',
+      'expired','trial'
+    )),
+  trial_ends_at timestamptz,
+  current_period_start timestamptz,
+  current_period_end timestamptz,
+  razorpay_subscription_id text,
+  razorpay_customer_id text,
+  razorpay_payment_id text,
+  amount_paid integer,
+  currency text DEFAULT 'INR',
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS 
+  payment_history (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id),
+  subscription_id uuid 
+    REFERENCES subscriptions(id),
+  razorpay_payment_id text,
+  razorpay_order_id text,
+  amount integer,
+  currency text DEFAULT 'INR',
+  status text,
+  plan text,
+  billing_cycle text,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS usage_tracking (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id)
+    UNIQUE,
+  active_projects integer DEFAULT 0,
+  total_projects integer DEFAULT 0,
+  ai_messages_today integer DEFAULT 0,
+  ai_messages_reset_at timestamptz
+    DEFAULT now(),
+  component_count integer DEFAULT 0,
+  last_updated timestamptz DEFAULT now()
+);
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS
+  plan text DEFAULT 'free';
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS
+  trial_used boolean DEFAULT false;
+
+-- RLS
+ALTER TABLE subscriptions
+  ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "users view own subscription"
+  ON subscriptions FOR SELECT
+  USING (auth.uid() = user_id);
+
+ALTER TABLE payment_history
+  ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "users view own payments"
+  ON payment_history FOR SELECT
+  USING (auth.uid() = user_id);
+
+ALTER TABLE usage_tracking
+  ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "users view own usage"
+  ON usage_tracking FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- Auto-create usage_tracking row
+-- when new user signs up
+-- Add to existing handle_new_user trigger:
+-- INSERT INTO usage_tracking(user_id) 
+-- VALUES (new.id);
+-- INSERT INTO subscriptions(user_id)
+-- VALUES (new.id);
+
+═══════════════════════════════════════
+PLAN LIMITS CONFIGURATION
+═══════════════════════════════════════
+
+File: client/src/lib/planLimits.js
+
+Export this config object:
+
+const PLAN_LIMITS = {
+  free: {
+    maxActiveProjects: 2,
+    aiMessagesPerDay: 3,
+    componentInventory: 0,
+    canDownloadCode: false,
+    canForkBlueprints: false,
+    canSubmitAssignments: false,
+    canGroupProject: false,
+    hasBudgetTracker: false,
+    watermarkOnExport: true,
+    maxGroupSize: 1
+  },
+  student_pro: {
+    maxActiveProjects: -1,
+    aiMessagesPerDay: 50,
+    componentInventory: 50,
+    canDownloadCode: true,
+    canForkBlueprints: true,
+    canSubmitAssignments: true,
+    canGroupProject: true,
+    hasBudgetTracker: true,
+    watermarkOnExport: false,
+    maxGroupSize: 4
+  },
+  maker_pro: {
+    maxActiveProjects: -1,
+    aiMessagesPerDay: -1,
+    componentInventory: -1,
+    canDownloadCode: true,
+    canForkBlueprints: true,
+    canSubmitAssignments: true,
+    canGroupProject: true,
+    hasBudgetTracker: true,
+    watermarkOnExport: false,
+    maxGroupSize: 6
+  },
+  college_lab: {
+    maxActiveProjects: -1,
+    aiMessagesPerDay: -1,
+    componentInventory: -1,
+    canDownloadCode: true,
+    canForkBlueprints: true,
+    canSubmitAssignments: true,
+    canGroupProject: true,
+    hasBudgetTracker: true,
+    watermarkOnExport: false,
+    maxGroupSize: 6
+  }
+}
+
+-1 means unlimited.
+
+Also create a helper hook:
+File: client/src/hooks/usePlan.js
+
+export function usePlan() {
+  const { profile } = useAuth()
+  const plan = profile?.plan || 'free'
+  const limits = PLAN_LIMITS[plan]
+  
+  function canDo(feature) {
+    return limits[feature] === true ||
+           limits[feature] === -1 ||
+           (typeof limits[feature] === 
+            'number' && 
+            limits[feature] > 0)
+  }
+  
+  function isLimited(feature, current) {
+    const limit = limits[feature]
+    if (limit === -1) return false
+    return current >= limit
+  }
+  
+  return { plan, limits, canDo, isLimited }
+}
+
+═══════════════════════════════════════
+PAYWALL COMPONENT (Reusable)
+═══════════════════════════════════════
+
+File: client/src/components/ui/
+      PaywallGate.jsx
+
+Props:
+  feature: string (feature name)
+  requiredPlan: 'student_pro'|'maker_pro'
+  children: React children
+  fallback: optional custom fallback UI
+
+Behavior:
+  If user has required plan or higher:
+    Render children normally
+  
+  If user is on free plan:
+    Render fallback OR default paywall UI
+
+Default paywall UI (inline, not modal):
+  
+  Overlay on top of blurred content:
+    bg: rgba(10,10,15,0.85)
+    backdrop-filter: blur(4px)
+    border-radius: 12px
+    padding: 32px
+    text-align: center
+  
+  Lock icon (large, #6C63FF, 32px)
+  
+  Heading: feature-specific message:
+    canDownloadCode: 
+      "Download Code with Pro"
+    canForkBlueprints: 
+      "Fork Blueprints with Pro"
+    canSubmitAssignments:
+      "Submit Assignments with Pro"
+    hasBudgetTracker:
+      "Budget Tracker is a Pro Feature"
+    Default: "Upgrade to Unlock"
+  
+  Subtext: "Available on Student Pro 
+            and Maker Pro plans"
+  
+  Two buttons:
+    "Upgrade Now" (primary)
+      → opens upgrade modal
+    "Start Free Trial" (secondary)
+      → only if trial not used
+      → starts 7-day pro trial
+
+Usage example:
+<PaywallGate 
+  feature="canDownloadCode"
+  requiredPlan="student_pro">
+  <DownloadButton />
+</PaywallGate>
+
+Apply PaywallGate to these features:
+  1. Code download button (Prompt 3 IDE)
+  2. Fork blueprint button (Prompt 6)
+  3. Budget tracker tab (Prompt 5)
+  4. Component inventory page (Prompt 5)
+  5. Assignment submit button (Prompt 7)
+  6. Group project option (Prompt 2)
+  7. "Made with Nexora" no-watermark
+     (Prompt 6)
+
+═══════════════════════════════════════
+AI MESSAGE LIMIT SYSTEM
+═══════════════════════════════════════
+
+File: client/src/hooks/useAILimit.js
+
+This replaces the basic rate limiting 
+from Prompt 4.
+
+On every AI message send:
+  1. Check usage_tracking for user
+  2. Check if ai_messages_reset_at 
+     is from a previous day
+     If yes: reset ai_messages_today to 0
+  3. Check if ai_messages_today >= 
+     plan limit
+  4. If at limit: block send, show 
+     upgrade prompt
+  5. If not at limit: allow send,
+     increment counter
+
+When limit reached, show inline message
+in AI assistant panel:
+
+  Card replacing the input bar:
+    bg: rgba(108,99,255,0.08)
+    border: #6C63FF
+    
+    Icon: sparkles (muted)
+    
+    Text for free (3/day limit):
+    "You've used your 3 free AI messages 
+     today. Upgrade to Student Pro for 
+     50 messages per day."
+    
+    Two buttons:
+    "Upgrade to Pro — ₹299/mo" (primary)
+    "Try Pro Free for 7 Days" (secondary)
+    
+    Small text: "Resets tomorrow at midnight"
+
+Update backend /api/ai/rate-check 
+to use usage_tracking table instead 
+of in-memory tracking.
+
+Also add visual counter in AI panel header:
+  Small text next to "Nexora AI":
+  Free: "3/3 messages today" 
+        (red when at 0)
+  Pro: "47/50 today" 
+       (hidden when plenty left,
+        shows when under 10 remaining)
+  Maker Pro: hidden entirely
+
+═══════════════════════════════════════
+UPGRADE MODAL
+═══════════════════════════════════════
+
+File: client/src/components/billing/
+      UpgradeModal.jsx
+
+Triggered from:
+  - Any PaywallGate "Upgrade Now" button
+  - AI message limit card
+  - Pricing page CTA buttons
+  - Navbar upgrade prompt
+
+Full-screen modal overlay.
+Max-width 860px, centered.
+Can close with X or Escape.
+
+Header:
+  "Upgrade Nexora"
+  "Build more. Learn faster. 
+   No limitations."
+  Close button (X, top right)
+
+Plan cards (side by side):
+
+── STUDENT PRO CARD:
+  
+  Top badge: "Most Popular 🎓"
+  (purple gradient badge)
+  
+  Plan name: "Student Pro"
+  
+  Pricing toggle:
+    [Monthly] [Semester] tabs
+    
+    Monthly selected:
+      "₹299" (large, bold)
+      "/month" (small, secondary)
+    
+    Semester selected:
+      "₹999" (large, bold, #00C896)
+      "/6 months" (small)
+      Below: savings badge:
+      "Save ₹795 vs monthly" 
+      (green pill)
+  
+  Feature list:
+    ✓ Unlimited projects
+    ✓ 50 AI messages/day
+    ✓ Full code download
+    ✓ Fork any blueprint
+    ✓ Component inventory
+    ✓ Budget tracker
+    ✓ Assignment submission
+    ✓ Group projects (up to 4)
+    ✓ No watermarks
+  
+  CTA button:
+    Monthly: "Get Student Pro — ₹299/mo"
+    Semester: "Get Semester Plan — ₹999"
+    Both: primary style, full width
+  
+  Below button:
+    "🔒 Secure payment via Razorpay"
+    "Cancel anytime"
+
+── MAKER PRO CARD:
+  
+  Plan name: "Maker Pro"
+  
+  Price: "₹499" + "/month"
+  
+  "Everything in Student Pro PLUS:"
+    ✓ Unlimited AI messages
+    ✓ Unlimited component inventory
+    ✓ Commercial use allowed
+    ✓ Early access to new features
+    ✓ Priority support
+  
+  CTA: "Get Maker Pro — ₹499/mo"
+  Secondary style (less prominent)
+
+── FREE TRIAL BANNER:
+
+  Below both cards:
+  Highlighted banner:
+  bg: rgba(0,200,150,0.08)
+  border: #00C896
+  
+  "✦ Not ready to pay? 
+   Try Student Pro FREE for 7 days"
+  
+  "No credit card required. 
+   Full Pro access. Cancel anytime."
+  
+  "Start Free Trial" button 
+  (green, outlined)
+  
+  Only shown if user.trial_used = false
+
+── BOTTOM NOTE:
+
+  "🎓 Student? Use code NEXORA10 
+   for 10% off" 
+  (placeholder discount code, 
+   can be activated later)
+  
+  "For college lab licenses 
+   (10+ students): Contact us"
+  Link → opens college contact form
+
+═══════════════════════════════════════
+RAZORPAY INTEGRATION
+═══════════════════════════════════════
+
+Install on backend:
+npm install razorpay
+
+File: server/lib/razorpay.js
+
+const Razorpay = require('razorpay')
+
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET
+})
+
+module.exports = razorpay
+
+Add to .env:
+RAZORPAY_KEY_ID=your_razorpay_key_id
+RAZORPAY_KEY_SECRET=your_razorpay_key_secret
+RAZORPAY_WEBHOOK_SECRET=your_webhook_secret
+
+────────────────────────────────────
+PAYMENT FLOW
+────────────────────────────────────
+
+When user clicks upgrade button:
+
+STEP 1 — Create Order (backend):
+POST /api/payments/create-order
+Body: { userId, plan, billingCycle }
+
+Backend:
+  Calculates amount:
+    student_pro monthly: 29900 (paise)
+    student_pro semester: 99900
+    maker_pro monthly: 49900
+  
+  Creates Razorpay order:
+  razorpay.orders.create({
+    amount: amount,
+    currency: 'INR',
+    receipt: `nexora_${userId}_${Date.now()}`,
+    notes: { userId, plan, billingCycle }
+  })
+  
+  Returns { orderId, amount, currency,
+            keyId }
+
+STEP 2 — Open Razorpay Checkout 
+(frontend):
+
+Load Razorpay script dynamically:
+const script = document.createElement('script')
+script.src = 
+  'https://checkout.razorpay.com/v1/checkout.js'
+document.body.appendChild(script)
+
+Open checkout:
+const options = {
+  key: keyId,
+  amount: amount,
+  currency: 'INR',
+  name: 'Nexora',
+  description: `${planName} Plan`,
+  order_id: orderId,
+  prefill: {
+    name: user.full_name,
+    email: user.email
+  },
+  theme: {
+    color: '#6C63FF'
+  },
+  handler: function(response) {
+    verifyPayment(response)
+  },
+  modal: {
+    ondismiss: function() {
+      setPaymentCancelled(true)
+    }
+  }
+}
+const rzp = new window.Razorpay(options)
+rzp.open()
+
+STEP 3 — Verify Payment (backend):
+POST /api/payments/verify
+Body: { 
+  razorpay_order_id,
+  razorpay_payment_id,
+  razorpay_signature,
+  userId, plan, billingCycle
+}
+
+Backend verification:
+  const crypto = require('crypto')
+  const hmac = crypto.createHmac(
+    'sha256', 
+    RAZORPAY_KEY_SECRET
+  )
+  hmac.update(
+    orderId + '|' + paymentId
+  )
+  const generated = hmac.digest('hex')
+  
+  if (generated !== signature):
+    return { success: false, 
+             error: 'Invalid signature' }
+  
+  If valid:
+    Calculate period end:
+      monthly: now + 30 days
+      semester: now + 180 days
+    
+    Upsert subscriptions table:
+      plan = plan
+      billing_cycle = billingCycle
+      status = 'active'
+      razorpay_payment_id = paymentId
+      current_period_start = now
+      current_period_end = calculated
+      amount_paid = amount
+    
+    Update profiles:
+      plan = plan
+    
+    Insert payment_history row
+    
+    Return { success: true, subscription }
+
+STEP 4 — Success UI:
+
+After payment verified:
+  Close upgrade modal
+  
+  Show success overlay (full screen):
+    Confetti animation (CSS)
+    
+    "🎉 Welcome to [Plan Name]!"
+    
+    "Your account has been upgraded.
+     All Pro features are now active."
+    
+    Feature highlights:
+    Show 3 key features they just unlocked
+    (based on which plan they bought)
+    
+    "Start Building" button (primary)
+    → Closes overlay, refreshes user plan
+    
+    Receipt note:
+    "A receipt has been sent to 
+     [user email]"
+
+────────────────────────────────────
+FREE TRIAL FLOW
+────────────────────────────────────
+
+POST /api/payments/start-trial
+Body: { userId }
+
+Backend:
+  Check trial_used = false
+  If already used: return error
+  
+  Upsert subscriptions:
+    plan = 'student_pro'
+    status = 'trial'
+    trial_ends_at = now + 7 days
+    current_period_end = now + 7 days
+  
+  Update profiles:
+    plan = 'student_pro'
+    trial_used = true
+  
+  Return { success, trialEndsAt }
+
+Frontend after trial start:
+  Same success overlay but:
+  "Your 7-day free trial is active!"
+  "Trial ends: [date]"
+  "No payment needed until then."
+
+Trial expiry handling:
+  On every app load, backend checks:
+  If subscription.status = 'trial' AND
+  trial_ends_at < now:
+    Update subscription status = 'expired'
+    Update profile plan = 'free'
+  
+  Add this check to a middleware that
+  runs on authenticated requests:
+  server/middleware/checkTrialExpiry.js
+
+Trial expiry notification:
+  When user logs in and trial expired:
+    Show one-time banner at top:
+    bg: rgba(255,90,90,0.1)
+    border: #FF5A5A
+    
+    "Your free trial has ended. 
+     Upgrade to keep Pro features."
+    "Upgrade Now — ₹299/mo" button
+    Dismiss button (X)
+
+When trial is active:
+  Show trial badge in navbar:
+  "Trial: X days left"
+  bg: #FFB84D (orange)
+  Clicking it opens upgrade modal
+
+═══════════════════════════════════════
+PRICING PAGE — /pricing
+═══════════════════════════════════════
+
+Public page (no auth required).
+Accessible from landing page and navbar.
+
+────────────────────────────────────
+PAGE STRUCTURE
+────────────────────────────────────
+
+Hero:
+  Badge: "Simple, honest pricing"
+  Heading: "Start free. 
+            Upgrade when you need to."
+  Subtext: "No hidden fees. 
+            Cancel anytime."
+  
+  Toggle: [Monthly] [Semester] 
+          (affects Student Pro price display)
+
+Pricing cards (3 columns):
+
+── FREE CARD:
+  Plan: "Free"
+  Price: "₹0" + "forever"
+  
+  "Perfect for exploring"
+  
+  Features list:
+    ✓ 2 projects
+    ✓ 3 AI messages/day
+    ✓ Browse blueprints
+    ✓ Basic build guidance
+    ✗ Code download
+    ✗ Fork blueprints
+    ✗ Component inventory
+    ✗ Assignment submission
+  
+  CTA: "Get Started Free" 
+  (secondary style)
+  → /signup
+
+── STUDENT PRO CARD:
+  Badge: "Most Popular" (purple)
+  Plan: "Student Pro"
+  
+  Price toggles with Monthly/Semester
+  Same as upgrade modal
+  
+  "Built for college projects"
+  
+  Full feature list
+  
+  CTA: "Start Student Pro"
+  (primary style)
+  
+  Below: "or try free for 7 days"
+  (small link, starts trial)
+
+── MAKER PRO CARD:
+  Plan: "Maker Pro"
+  Price: "₹499/mo"
+  
+  "For serious makers"
+  
+  Full feature list
+  
+  CTA: "Get Maker Pro"
+  (secondary/outlined style)
+
+── COLLEGE LAB SECTION:
+
+  Full width card below the 3 columns:
+  
+  bg: linear gradient 
+    rgba(108,99,255,0.06) → transparent
+  border: 1px solid #2A2A3E
+  
+  Left side:
+    "🏫 College Lab License"
+    Heading: "For Institutions & Labs"
+    "Cover your entire IoT lab with 
+     one license. Unlimited students, 
+     professor accounts, and full 
+     platform access."
+    
+    Features:
+    ✓ Unlimited students
+    ✓ Up to 10 professor accounts
+    ✓ Assignment management system
+    ✓ Student analytics dashboard
+    ✓ Custom onboarding support
+    ✓ Invoice-based billing available
+    
+    Price: "₹8,000 – ₹15,000/year"
+    Subtext: "Based on institution size"
+  
+  Right side:
+    Contact form:
+      Institution Name *
+      Your Name *
+      Email *
+      Phone (optional)
+      Number of Students (dropdown:
+        <50 | 50-100 | 100-200 | 200+)
+      Message (textarea, optional)
+    
+    "Request a Demo" button (primary)
+    
+    On submit:
+      POST /api/contact/college-inquiry
+      Saves to Supabase:
+      
+      CREATE TABLE IF NOT EXISTS 
+        college_inquiries (
+        id uuid DEFAULT gen_random_uuid()
+           PRIMARY KEY,
+        institution_name text,
+        contact_name text,
+        email text,
+        phone text,
+        student_count text,
+        message text,
+        status text DEFAULT 'new',
+        created_at timestamptz 
+          DEFAULT now()
+      );
+      
+      Returns { success }
+      
+      Shows: "Thanks! We'll reach out 
+              within 24 hours."
+
+FAQ Section:
+  Accordion style (click to expand):
+  
+  Q: "Can I switch plans anytime?"
+  A: "Yes. Upgrade or downgrade anytime.
+      Downgrades take effect at end 
+      of billing period."
+  
+  Q: "Is there a student discount?"
+  A: "The Student Pro plan IS the 
+      discount. ₹299/month is our 
+      special student pricing."
+  
+  Q: "What payment methods work?"
+  A: "UPI, debit/credit cards, 
+      net banking — all via Razorpay."
+  
+  Q: "What happens to my projects 
+      if I downgrade?"
+  A: "Your projects are safe. You 
+      just lose access to Pro features.
+      All data stays."
+  
+  Q: "Can my college get an invoice?"
+  A: "Yes. College Lab plans support
+      purchase orders and GST invoices."
+
+═══════════════════════════════════════
+BILLING DASHBOARD — /settings/billing
+═══════════════════════════════════════
+
+Route: /settings/billing
+Accessible from: Settings sidebar item,
+  upgrade modal "Manage Billing" link,
+  navbar user menu
+
+────────────────────────────────────
+PAGE LAYOUT
+────────────────────────────────────
+
+Page title: "Billing & Subscription"
+
+Current Plan Section:
+  
+  Card:
+    Left:
+      Plan name (large, bold)
+      Plan badge (colored by tier)
+      Status: Active / Trial / Expired
+      
+      If trial active:
+        "Trial ends: [date]"
+        "X days remaining"
+        Warning if < 3 days
+      
+      If paid plan:
+        "Next billing: [date]"
+        "Amount: ₹[amount]"
+      
+      If free:
+        "You're on the free plan"
+    
+    Right:
+      If free or expired:
+        "Upgrade Plan" button (primary)
+      
+      If paid:
+        "Change Plan" button (secondary)
+        "Cancel Subscription" button
+          (ghost, red text)
+
+Usage This Period:
+  
+  Card with usage meters:
+  
+  AI Messages Today:
+    Progress bar
+    "X / Y messages used today"
+    Resets: "Resets at midnight"
+  
+  Active Projects:
+    Progress bar
+    "X / Y active projects"
+    If unlimited: "Unlimited ✓"
+  
+  Component Inventory:
+    "X / Y components saved"
+    If unlimited: "Unlimited ✓"
+
+Payment History:
+  
+  Table:
+  Columns: Date | Plan | Amount | 
+           Status | Receipt
+  
+  Each row:
+    Date formatted: "12 Jun 2025"
+    Plan name badge
+    "₹[amount]"
+    "Paid" badge (green)
+    "Download" link 
+      (placeholder for now — 
+       shows toast "Receipt sent 
+       to your email")
+  
+  If no payment history:
+    "No payments yet. 
+     You're on the free plan."
+
+Cancel Subscription:
+  Below payment history
+  Small section, not prominent:
+  
+  "Want to cancel?"
+  Link: "Cancel your subscription"
+    → Opens confirmation modal:
+      "Are you sure you want to cancel?"
+      "Your Pro access continues until 
+       [period end date]."
+      "After that, your account 
+       returns to the free plan."
+      "Your projects and data 
+       are never deleted."
+      
+      "Keep My Subscription" (primary)
+      "Yes, Cancel" (ghost, red)
+      
+      On confirm:
+        POST /api/payments/cancel
+        Sets subscription status 
+        to 'cancelled'
+        (access continues to period end)
+        Updates profile plan to 'free'
+          only AFTER period end
+        
+        Shows: "Subscription cancelled.
+                You have access until 
+                [date]."
+
+═══════════════════════════════════════
+NAVBAR UPGRADE PROMPT
+═══════════════════════════════════════
+
+For FREE users only:
+Add a subtle upgrade prompt in the 
+top navbar (right side, before avatar):
+
+Small pill button:
+  bg: rgba(108,99,255,0.15)
+  border: 1px solid #6C63FF
+  color: #6C63FF
+  text: "⚡ Upgrade"
+  font-size: small
+  padding: 4px 12px
+  border-radius: full
+  
+  On hover: bg #6C63FF, color white
+  On click: opens upgrade modal
+
+For TRIAL users:
+  Replace with:
+  bg: rgba(255,184,77,0.15)
+  border: #FFB84D
+  color: #FFB84D
+  text: "Trial: X days left"
+  On click: opens upgrade modal
+
+For PAID users:
+  No prompt shown. Clean navbar.
+
+═══════════════════════════════════════
+APPLY PAYWALLS TO EXISTING FEATURES
+═══════════════════════════════════════
+
+Go through existing code and wrap 
+these specific elements with PaywallGate:
+
+1. IDE code download button 
+   (Prompt 3 — IDE top bar):
+   
+   <PaywallGate feature="canDownloadCode"
+     requiredPlan="student_pro">
+     <DownloadButton />
+   </PaywallGate>
+
+2. Fork blueprint button 
+   (Prompt 6 — blueprint cards):
+   
+   <PaywallGate feature="canForkBlueprints"
+     requiredPlan="student_pro">
+     <ForkButton />
+   </PaywallGate>
+
+3. Budget tracker tab 
+   (Prompt 5 — workspace):
+   
+   <PaywallGate feature="hasBudgetTracker"
+     requiredPlan="student_pro">
+     <BudgetTab />
+   </PaywallGate>
+
+4. Component inventory page 
+   (Prompt 5 — /components):
+   
+   Show paywall as page overlay
+   if user is on free plan.
+   Don't hide the page — show it 
+   blurred with upgrade prompt on top.
+
+5. Assignment submit button 
+   (Prompt 7 — workspace):
+   
+   <PaywallGate 
+     feature="canSubmitAssignments"
+     requiredPlan="student_pro">
+     <SubmitButton />
+   </PaywallGate>
+
+6. New project — group option 
+   (Prompt 2):
+   
+   If user selects "Group Project"
+   and is on free plan:
+   Show inline paywall message 
+   below the toggle.
+
+7. "Made with Nexora" card export 
+   (Prompt 6):
+   
+   Free users see card WITH watermark.
+   PaywallGate wraps the 
+   "Remove watermark" option.
+   Watermark: small text at bottom 
+   "Free plan — nexora.app"
+
+8. New project creation:
+   If user has 2 active projects 
+   AND is on free plan:
+   
+   When they click "+ New Project":
+   Don't navigate. Instead show modal:
+   
+   "Project Limit Reached"
+   "Free plan allows 2 active projects.
+    You currently have 2."
+   
+   Options:
+   "Upgrade to Pro" (primary)
+   "Archive a Project" (secondary)
+     → Goes to /projects where they 
+       can archive old ones
+
+═══════════════════════════════════════
+PROJECT ARCHIVING (Free Tier Need)
+═══════════════════════════════════════
+
+Free users need a way to manage 
+their 2-project limit.
+
+Add "Archive" option to project 
+three-dot menu (in ProjectCard):
+
+On archive:
+  Updates project status = 'archived'
+  Decrements usage_tracking 
+  active_projects count
+  Project still visible in 
+  /projects under "Archived" filter
+  Can be unarchived anytime
+  (if still under limit)
+
+Add 'archived' to projects status:
+ALTER TABLE projects
+  DROP CONSTRAINT IF EXISTS 
+  projects_status_check;
+ALTER TABLE projects
+  ADD CONSTRAINT projects_status_check
+  CHECK (status IN (
+    'draft','in_progress',
+    'completed','archived'
+  ));
+
+Add "Archived" filter to /projects page.
+Archived projects shown with 
+muted styling and "Archived" badge.
+
+═══════════════════════════════════════
+BACKEND ROUTES TO ADD
+═══════════════════════════════════════
+
+POST /api/payments/create-order
+  Body: { userId, plan, billingCycle }
+  → Creates Razorpay order
+  → Returns { orderId, amount, keyId }
+
+POST /api/payments/verify
+  Body: { razorpay_order_id,
+          razorpay_payment_id,
+          razorpay_signature,
+          userId, plan, billingCycle }
+  → Verifies payment signature
+  → Updates subscription + profile
+  → Records payment history
+  → Returns { success, subscription }
+
+POST /api/payments/start-trial
+  Body: { userId }
+  → Validates trial not used
+  → Creates trial subscription
+  → Returns { success, trialEndsAt }
+
+POST /api/payments/cancel
+  Body: { userId }
+  → Marks subscription cancelled
+  → Returns { success, accessUntil }
+
+GET /api/payments/subscription/:userId
+  → Returns current subscription
+  → Includes usage data
+
+GET /api/payments/history/:userId
+  → Returns payment history
+
+POST /api/contact/college-inquiry
+  Body: { institutionName, contactName,
+          email, phone, studentCount,
+          message }
+  → Saves to college_inquiries table
+  → Returns { success }
+
+POST /api/usage/increment-ai
+  Body: { userId }
+  → Checks and resets daily counter
+  → Increments ai_messages_today
+  → Returns { allowed, remaining }
+
+POST /api/projects/archive
+  Body: { projectId, userId }
+  → Sets status = 'archived'
+  → Updates usage count
+  → Returns { success }
+
+═══════════════════════════════════════
+IMPORTANT RULES
+═══════════════════════════════════════
+
+1. NEVER block access to existing 
+   projects or data based on plan.
+   Only block NEW actions.
+   Users must never lose their work.
+
+2. Razorpay test mode:
+   Use test keys during development.
+   Razorpay test card: 
+   4111 1111 1111 1111
+   Any future expiry, any CVV.
+   Test UPI: success@razorpay
+
+3. Payment verification MUST happen
+   on the backend, never frontend.
+   Frontend only opens the checkout.
+   All verification is server-side.
+
+4. Free trial is one-time only per 
+   account (trial_used flag).
+   Check this on BOTH frontend and 
+   backend — never trust frontend alone.
+
+5. The PaywallGate component must
+   never crash the app if plan data
+   is loading. Show children by 
+   default if plan is still loading
+   (optimistic — better UX than 
+   blocking on load).
+
+6. Pricing page is PUBLIC — 
+   no auth required. 
+   Fast load, no auth checks.
+
+7. Add /pricing to landing page navbar
+   and footer links.
+
+8. After building confirm:
+   - /pricing page renders correctly
+   - Monthly/Semester toggle works
+   - Upgrade modal opens from any 
+     paywall gate
+   - Razorpay checkout opens 
+     (test mode)
+   - Payment verification works
+   - Plan updates in profile 
+     after payment
+   - Free trial activates correctly
+   - Trial badge shows in navbar
+   - AI message counter works
+   - Project limit blocks at 2
+   - /settings/billing shows 
+     current plan and usage
+   - College inquiry form submits

@@ -1,13 +1,10 @@
 import { Router } from "express";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
 import { logger } from "../lib/logger";
-import { db } from "@workspace/db";
-import { projectBudget } from "@workspace/db/schema";
-import { and, eq } from "drizzle-orm";
+import { getAuthClient } from "../lib/supabaseAdmin";
 
 const router = Router();
 
-// POST /api/budget/save
 router.post("/budget/save", verifyToken, async (req: AuthRequest, res) => {
   const { projectId, budgetLimit, components, totalEstimated } = req.body;
 
@@ -16,43 +13,49 @@ router.post("/budget/save", verifyToken, async (req: AuthRequest, res) => {
     return;
   }
 
-  const [existing] = await db
-    .select({ id: projectBudget.id })
-    .from(projectBudget)
-    .where(and(eq(projectBudget.projectId, projectId), eq(projectBudget.userId, req.userId!)));
+  const db = getAuthClient(req.token!);
+  const { data: existing } = await db
+    .from("project_budget")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("user_id", req.userId!)
+    .single();
 
   let result;
   if (existing) {
-    const [updated] = await db
-      .update(projectBudget)
-      .set({ budgetLimit: budgetLimit ?? null, components: components ?? [], totalEstimated: totalEstimated ?? 0, updatedAt: new Date() })
-      .where(eq(projectBudget.id, existing.id))
-      .returning();
-    result = updated;
+    const { data } = await db
+      .from("project_budget")
+      .update({ budget_limit: budgetLimit ?? null, components: components ?? [], total_estimated: totalEstimated ?? 0, updated_at: new Date().toISOString() })
+      .eq("id", existing.id)
+      .select()
+      .single();
+    result = data;
   } else {
-    const [inserted] = await db
-      .insert(projectBudget)
-      .values({ id: crypto.randomUUID(), projectId, userId: req.userId!, budgetLimit: budgetLimit ?? null, components: components ?? [], totalEstimated: totalEstimated ?? 0, totalActual: "0" })
-      .returning();
-    result = inserted;
+    const { data } = await db
+      .from("project_budget")
+      .insert({ project_id: projectId, user_id: req.userId!, budget_limit: budgetLimit ?? null, components: components ?? [], total_estimated: totalEstimated ?? 0, total_actual: 0 })
+      .select()
+      .single();
+    result = data;
   }
 
   res.json({ budget: result });
 });
 
-// GET /api/budget/:projectId
 router.get("/budget/:projectId", verifyToken, async (req: AuthRequest, res) => {
   const { projectId } = req.params;
+  const db = getAuthClient(req.token!);
 
-  const [data] = await db
-    .select()
-    .from(projectBudget)
-    .where(and(eq(projectBudget.projectId, projectId), eq(projectBudget.userId, req.userId!)));
+  const { data } = await db
+    .from("project_budget")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("user_id", req.userId!)
+    .single();
 
   res.json({ budget: data ?? null });
 });
 
-// PUT /api/budget/actual-cost
 router.put("/budget/actual-cost", verifyToken, async (req: AuthRequest, res) => {
   const { projectId, componentId, actualCost } = req.body;
 
@@ -61,10 +64,13 @@ router.put("/budget/actual-cost", verifyToken, async (req: AuthRequest, res) => 
     return;
   }
 
-  const [existing] = await db
-    .select()
-    .from(projectBudget)
-    .where(and(eq(projectBudget.projectId, projectId), eq(projectBudget.userId, req.userId!)));
+  const db = getAuthClient(req.token!);
+  const { data: existing } = await db
+    .from("project_budget")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("user_id", req.userId!)
+    .single();
 
   if (!existing) {
     res.status(404).json({ error: "Budget not found" });
@@ -83,9 +89,10 @@ router.put("/budget/actual-cost", verifyToken, async (req: AuthRequest, res) => 
   }, 0);
 
   await db
-    .update(projectBudget)
-    .set({ components: comps, totalActual: String(totalActual), updatedAt: new Date() })
-    .where(and(eq(projectBudget.projectId, projectId), eq(projectBudget.userId, req.userId!)));
+    .from("project_budget")
+    .update({ components: comps, total_actual: totalActual, updated_at: new Date().toISOString() })
+    .eq("project_id", projectId)
+    .eq("user_id", req.userId!);
 
   res.json({ success: true, totalActual });
 });

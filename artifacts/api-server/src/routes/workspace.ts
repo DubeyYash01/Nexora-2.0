@@ -2,9 +2,7 @@ import { Router } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
 import { logger } from "../lib/logger";
-import { db } from "@workspace/db";
-import { projects } from "@workspace/db/schema";
-import { and, eq } from "drizzle-orm";
+import { getAuthClient } from "../lib/supabaseAdmin";
 
 const router = Router();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
@@ -93,7 +91,6 @@ Remember: code must be cumulative — each step contains ALL code up to that poi
   }
 }
 
-// POST /api/projects/generate-plan
 router.post("/projects/generate-plan", verifyToken, async (req: AuthRequest, res) => {
   const { projectId, projectTitle, projectSummary, components, skillLevel } = req.body as {
     projectId: string;
@@ -132,24 +129,28 @@ router.post("/projects/generate-plan", verifyToken, async (req: AuthRequest, res
     }
   }
 
+  const db = getAuthClient(req.token!);
   await db
-    .update(projects)
-    .set({ buildPlan: planData, status: "in_progress", updatedAt: new Date() })
-    .where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
+    .from("projects")
+    .update({ build_plan: planData, status: "in_progress", updated_at: new Date().toISOString() })
+    .eq("id", projectId)
+    .eq("user_id", req.userId!);
 
   res.json({ buildPlan: (planData as Record<string, unknown>).buildPlan });
 });
 
-// GET /api/projects/workspace/:projectId
 router.get("/projects/workspace/:projectId", verifyToken, async (req: AuthRequest, res) => {
   const { projectId } = req.params;
 
-  const [project] = await db
-    .select()
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
+  const db = getAuthClient(req.token!);
+  const { data: project, error } = await db
+    .from("projects")
+    .select("*")
+    .eq("id", projectId)
+    .eq("user_id", req.userId!)
+    .single();
 
-  if (!project) {
+  if (error || !project) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
@@ -157,7 +158,6 @@ router.get("/projects/workspace/:projectId", verifyToken, async (req: AuthReques
   res.json({ project });
 });
 
-// POST /api/projects/complete-step
 router.post("/projects/complete-step", verifyToken, async (req: AuthRequest, res) => {
   const { projectId, stepNumber, instructionChecks } = req.body as {
     projectId: string;
@@ -170,37 +170,40 @@ router.post("/projects/complete-step", verifyToken, async (req: AuthRequest, res
     return;
   }
 
-  const [project] = await db
-    .select({ completedSteps: projects.completedSteps, buildPlan: projects.buildPlan })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
+  const db = getAuthClient(req.token!);
+  const { data: project, error } = await db
+    .from("projects")
+    .select("completed_steps, build_plan")
+    .eq("id", projectId)
+    .eq("user_id", req.userId!)
+    .single();
 
-  if (!project) {
+  if (error || !project) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
 
-  const existing: number[] = (project.completedSteps as number[]) ?? [];
+  const existing: number[] = (project.completed_steps as number[]) ?? [];
   const completedSteps = Array.from(new Set([...existing, stepNumber]));
 
   await db
-    .update(projects)
-    .set({
-      currentStep: stepNumber + 1,
-      completedSteps,
-      instructionChecks,
-      updatedAt: new Date(),
+    .from("projects")
+    .update({
+      current_step: stepNumber + 1,
+      completed_steps: completedSteps,
+      instruction_checks: instructionChecks,
+      updated_at: new Date().toISOString(),
     })
-    .where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
+    .eq("id", projectId)
+    .eq("user_id", req.userId!);
 
-  const buildPlan = project.buildPlan as { buildPlan?: { totalSteps?: number } } | null;
+  const buildPlan = project.build_plan as { buildPlan?: { totalSteps?: number } } | null;
   const totalSteps = buildPlan?.buildPlan?.totalSteps ?? 0;
   const nextStep = stepNumber < totalSteps ? stepNumber + 1 : null;
 
   res.json({ success: true, nextStep });
 });
 
-// POST /api/projects/save-ide-code
 router.post("/projects/save-ide-code", verifyToken, async (req: AuthRequest, res) => {
   const { projectId, code } = req.body as { projectId: string; code: string };
 
@@ -209,10 +212,12 @@ router.post("/projects/save-ide-code", verifyToken, async (req: AuthRequest, res
     return;
   }
 
+  const db = getAuthClient(req.token!);
   await db
-    .update(projects)
-    .set({ ideCode: code, updatedAt: new Date() })
-    .where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
+    .from("projects")
+    .update({ ide_code: code, updated_at: new Date().toISOString() })
+    .eq("id", projectId)
+    .eq("user_id", req.userId!);
 
   res.json({ success: true });
 });

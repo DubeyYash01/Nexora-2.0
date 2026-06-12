@@ -4,9 +4,7 @@ import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
 import { logger } from "../lib/logger";
 import { SEED_BLUEPRINTS } from "../data/seedBlueprints";
 import type { Request, Response } from "express";
-import { db } from "@workspace/db";
-import { blueprints, blueprintLikes, blueprintReviews, projects, userComponents, profiles } from "@workspace/db/schema";
-import { and, eq, desc, asc, count, inArray } from "drizzle-orm";
+import { supabase, getAuthClient } from "../lib/supabaseAdmin";
 
 const router = Router();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
@@ -19,69 +17,52 @@ async function callGeminiJSON(prompt: string): Promise<unknown> {
   return JSON.parse(cleaned);
 }
 
-// GET /api/blueprints/seed
 router.get("/blueprints/seed", async (_req: Request, res: Response) => {
-  const [{ total }] = await db.select({ total: count() }).from(blueprints);
+  const { count } = await supabase.from("blueprints").select("*", { count: "exact", head: true });
 
-  if ((total ?? 0) > 0) {
-    res.json({ seeded: false, count: total });
+  if ((count ?? 0) > 0) {
+    res.json({ seeded: false, count });
     return;
   }
 
   for (const bp of SEED_BLUEPRINTS) {
-    await db.insert(blueprints).values({
-      id: crypto.randomUUID(),
+    await supabase.from("blueprints").insert({
       title: bp.title,
       description: bp.description,
       difficulty: bp.difficulty,
       category: bp.category,
       components: bp.components,
-      buildPlan: bp.build_plan,
-      aiAnalysis: bp.ai_analysis,
+      build_plan: bp.build_plan,
+      ai_analysis: bp.ai_analysis,
       tags: bp.tags,
-      isFeatured: bp.is_featured ?? false,
-      isPublic: true,
+      is_featured: bp.is_featured ?? false,
+      is_public: true,
       platform: bp.platform,
-      estimatedCostMin: bp.estimated_cost_min,
-      estimatedCostMax: bp.estimated_cost_max,
-      estimatedTime: bp.estimated_time,
+      estimated_cost_min: bp.estimated_cost_min,
+      estimated_cost_max: bp.estimated_cost_max,
+      estimated_time: bp.estimated_time,
     });
   }
 
   res.json({ seeded: true });
 });
 
-// GET /api/blueprints
 router.get("/blueprints", async (req: AuthRequest, res: Response) => {
   const { search, difficulty, category, sort = "popular", limit = 50, offset = 0 } = req.query as Record<string, string>;
 
-  let query = db.select({
-    id: blueprints.id,
-    title: blueprints.title,
-    description: blueprints.description,
-    difficulty: blueprints.difficulty,
-    category: blueprints.category,
-    tags: blueprints.tags,
-    platform: blueprints.platform,
-    forkCount: blueprints.forkCount,
-    viewCount: blueprints.viewCount,
-    likeCount: blueprints.likeCount,
-    estimatedCostMin: blueprints.estimatedCostMin,
-    estimatedCostMax: blueprints.estimatedCostMax,
-    estimatedTime: blueprints.estimatedTime,
-    components: blueprints.components,
-    authorId: blueprints.authorId,
-    createdAt: blueprints.createdAt,
-  }).from(blueprints).where(eq(blueprints.isPublic, true)).$dynamic();
+  let query = supabase
+    .from("blueprints")
+    .select("id,title,description,difficulty,category,tags,platform,fork_count,view_count,like_count,estimated_cost_min,estimated_cost_max,estimated_time,components,author_id,created_at")
+    .eq("is_public", true);
 
-  let results = await query;
+  if (difficulty && difficulty !== "All") query = query.eq("difficulty", difficulty);
+  if (category && category !== "All Categories") query = query.eq("category", category);
 
-  if (difficulty && difficulty !== "All") {
-    results = results.filter((b) => b.difficulty === difficulty);
-  }
-  if (category && category !== "All Categories") {
-    results = results.filter((b) => b.category === category);
-  }
+  const { data, error } = await query;
+  if (error) { res.status(500).json({ error: "Failed to fetch blueprints" }); return; }
+
+  let results = data ?? [];
+
   if (search) {
     const q = search.toLowerCase();
     results = results.filter((b) => {
@@ -95,43 +76,37 @@ router.get("/blueprints", async (req: AuthRequest, res: Response) => {
     });
   }
 
-  if (sort === "newest") results.sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
-  else if (sort === "forked") results.sort((a, b) => (b.forkCount ?? 0) - (a.forkCount ?? 0));
-  else if (sort === "cost") results.sort((a, b) => (a.estimatedCostMin ?? 0) - (b.estimatedCostMin ?? 0));
-  else results.sort((a, b) => (b.likeCount ?? 0) - (a.likeCount ?? 0));
+  if (sort === "newest") results.sort((a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime());
+  else if (sort === "forked") results.sort((a, b) => (b.fork_count ?? 0) - (a.fork_count ?? 0));
+  else if (sort === "cost") results.sort((a, b) => (a.estimated_cost_min ?? 0) - (b.estimated_cost_min ?? 0));
+  else results.sort((a, b) => (b.like_count ?? 0) - (a.like_count ?? 0));
 
   const paginated = results.slice(Number(offset), Number(offset) + Number(limit));
-
-  const enriched = paginated.map((b) => ({ ...b, userLiked: false }));
-  res.json({ blueprints: enriched });
+  res.json({ blueprints: paginated.map((b) => ({ ...b, userLiked: false })) });
 });
 
-// GET /api/blueprints/:id
 router.get("/blueprints/:id", async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
 
-  const [data] = await db.select().from(blueprints).where(eq(blueprints.id, id));
-  if (!data) { res.status(404).json({ error: "Blueprint not found" }); return; }
+  const { data, error } = await supabase.from("blueprints").select("*").eq("id", id).single();
+  if (error || !data) { res.status(404).json({ error: "Blueprint not found" }); return; }
 
-  db.update(blueprints).set({ viewCount: (data.viewCount ?? 0) + 1 }).where(eq(blueprints.id, id)).then(() => {});
+  supabase.from("blueprints").update({ view_count: (data.view_count ?? 0) + 1 }).eq("id", id).then(() => {});
 
-  const reviews = await db.select({
-    id: blueprintReviews.id,
-    rating: blueprintReviews.rating,
-    reviewText: blueprintReviews.reviewText,
-    createdAt: blueprintReviews.createdAt,
-    fullName: profiles.fullName,
-    avatarUrl: profiles.avatarUrl,
-  }).from(blueprintReviews).leftJoin(profiles, eq(profiles.id, blueprintReviews.userId)).where(eq(blueprintReviews.blueprintId, id)).orderBy(desc(blueprintReviews.createdAt));
+  const { data: reviews } = await supabase
+    .from("blueprint_reviews")
+    .select("id,rating,review_text,created_at,profiles(full_name,avatar_url)")
+    .eq("blueprint_id", id)
+    .order("created_at", { ascending: false });
 
-  res.json({ blueprint: { ...data, reviews, userLiked: false, userForked: false } });
+  res.json({ blueprint: { ...data, reviews: reviews ?? [], userLiked: false, userForked: false } });
 });
 
-// POST /api/blueprints/fork
 router.post("/blueprints/fork", verifyToken, async (req: AuthRequest, res: Response) => {
   const { blueprintId, projectName, adaptToInventory } = req.body;
+  const db = getAuthClient(req.token!);
 
-  const [blueprint] = await db.select().from(blueprints).where(eq(blueprints.id, blueprintId));
+  const { data: blueprint } = await supabase.from("blueprints").select("*").eq("id", blueprintId).single();
   if (!blueprint) { res.status(404).json({ error: "Blueprint not found" }); return; }
 
   let adaptedComponents = blueprint.components;
@@ -139,8 +114,8 @@ router.post("/blueprints/fork", verifyToken, async (req: AuthRequest, res: Respo
 
   if (adaptToInventory) {
     try {
-      const userComps = await db.select({ name: userComponents.name, category: userComponents.category }).from(userComponents).where(eq(userComponents.userId, req.userId!));
-      const inventory = userComps.map((c) => c.name);
+      const { data: userComps } = await db.from("user_components").select("name,category").eq("user_id", req.userId!);
+      const inventory = (userComps ?? []).map((c) => c.name);
       const originalComps = ((blueprint.components as { list?: { name: string }[] })?.list ?? []).map((c) => c.name).join(", ");
 
       const prompt = `You are adapting an IoT blueprint for a user.
@@ -162,107 +137,112 @@ Return ONLY valid JSON:
     }
   }
 
-  const [project] = await db
-    .insert(projects)
-    .values({
-      id: crypto.randomUUID(),
-      userId: req.userId!,
+  const { data: project, error } = await db
+    .from("projects")
+    .insert({
+      user_id: req.userId!,
       title: projectName ?? blueprint.title,
       description: blueprint.description ?? "",
-      ideaInput: blueprint.description ?? "",
-      aiAnalysis: blueprint.aiAnalysis,
+      idea_input: blueprint.description ?? "",
+      ai_analysis: blueprint.ai_analysis,
       components: adaptedComponents,
-      buildPlan: blueprint.buildPlan,
+      build_plan: blueprint.build_plan,
       status: "in_progress",
-      currentStep: 1,
+      current_step: 1,
+      forked_from: blueprintId,
     })
-    .returning();
+    .select()
+    .single();
 
-  if (!project) {
-    res.status(500).json({ error: "Failed to create project" });
-    return;
-  }
+  if (error || !project) { res.status(500).json({ error: "Failed to create project" }); return; }
 
-  db.update(blueprints).set({ forkCount: (blueprint.forkCount ?? 0) + 1 }).where(eq(blueprints.id, blueprintId)).then(() => {});
+  supabase.from("blueprints").update({ fork_count: (blueprint.fork_count ?? 0) + 1 }).eq("id", blueprintId).then(() => {});
 
   res.json({ projectId: project.id, adaptationChanges });
 });
 
-// POST /api/blueprints/publish
 router.post("/blueprints/publish", verifyToken, async (req: AuthRequest, res: Response) => {
   const { projectId, title, description, category, tags, difficulty, isPublic, showAuthor } = req.body;
+  const db = getAuthClient(req.token!);
 
-  const [project] = await db.select().from(projects).where(and(eq(projects.id, projectId), eq(projects.userId, req.userId!)));
+  const { data: project } = await db.from("projects").select("*").eq("id", projectId).eq("user_id", req.userId!).single();
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
 
   const compList = (project.components as { list?: { estimatedCost?: number }[] })?.list ?? [];
   const totalCost = compList.reduce((s, c) => s + (c.estimatedCost ?? 0), 0);
 
-  const [blueprint] = await db
-    .insert(blueprints)
-    .values({
-      id: crypto.randomUUID(),
-      authorId: showAuthor ? req.userId! : null,
+  const { data: blueprint, error } = await db
+    .from("blueprints")
+    .insert({
+      author_id: showAuthor ? req.userId! : null,
       title,
       description,
       category,
       tags: tags ?? [],
       difficulty,
-      isPublic: isPublic ?? true,
-      isFeatured: false,
-      platform: (project.aiAnalysis as { platform?: string })?.platform ?? "ESP32",
+      is_public: isPublic ?? true,
+      is_featured: false,
+      platform: (project.ai_analysis as { platform?: string })?.platform ?? "ESP32",
       components: project.components,
-      buildPlan: project.buildPlan,
-      aiAnalysis: project.aiAnalysis,
-      sourceProjectId: projectId,
-      estimatedCostMin: Math.round(totalCost * 0.85),
-      estimatedCostMax: Math.round(totalCost * 1.15),
-      estimatedTime: (project.buildPlan as { estimatedTotalTime?: string })?.estimatedTotalTime ?? "1-2 days",
+      build_plan: project.build_plan,
+      ai_analysis: project.ai_analysis,
+      source_project_id: projectId,
+      estimated_cost_min: Math.round(totalCost * 0.85),
+      estimated_cost_max: Math.round(totalCost * 1.15),
+      estimated_time: (project.build_plan as { estimatedTotalTime?: string })?.estimatedTotalTime ?? "1-2 days",
     })
-    .returning();
+    .select()
+    .single();
 
-  if (!blueprint) {
-    res.status(500).json({ error: "Failed to publish blueprint" });
-    return;
-  }
+  if (error || !blueprint) { res.status(500).json({ error: "Failed to publish blueprint" }); return; }
 
-  await db.update(projects).set({ blueprintId: blueprint.id }).where(eq(projects.id, projectId));
+  await db.from("projects").update({ blueprint_id: blueprint.id }).eq("id", projectId);
   res.json({ blueprintId: blueprint.id, url: `/blueprints/${blueprint.id}` });
 });
 
-// POST /api/blueprints/like
 router.post("/blueprints/like", verifyToken, async (req: AuthRequest, res: Response) => {
   const { blueprintId } = req.body;
+  const db = getAuthClient(req.token!);
 
-  const [existing] = await db.select({ id: blueprintLikes.id }).from(blueprintLikes).where(and(eq(blueprintLikes.blueprintId, blueprintId), eq(blueprintLikes.userId, req.userId!)));
+  const { data: existing } = await db
+    .from("blueprint_likes")
+    .select("id")
+    .eq("blueprint_id", blueprintId)
+    .eq("user_id", req.userId!)
+    .single();
 
   let liked: boolean;
   if (existing) {
-    await db.delete(blueprintLikes).where(and(eq(blueprintLikes.blueprintId, blueprintId), eq(blueprintLikes.userId, req.userId!)));
+    await db.from("blueprint_likes").delete().eq("blueprint_id", blueprintId).eq("user_id", req.userId!);
     liked = false;
   } else {
-    await db.insert(blueprintLikes).values({ id: crypto.randomUUID(), blueprintId, userId: req.userId! });
+    await db.from("blueprint_likes").insert({ blueprint_id: blueprintId, user_id: req.userId! });
     liked = true;
   }
 
-  const [{ total }] = await db.select({ total: count() }).from(blueprintLikes).where(eq(blueprintLikes.blueprintId, blueprintId));
-  await db.update(blueprints).set({ likeCount: total }).where(eq(blueprints.id, blueprintId));
-  res.json({ liked, count: total });
+  const { count } = await supabase.from("blueprint_likes").select("*", { count: "exact", head: true }).eq("blueprint_id", blueprintId);
+  await supabase.from("blueprints").update({ like_count: count ?? 0 }).eq("id", blueprintId);
+  res.json({ liked, count: count ?? 0 });
 });
 
-// POST /api/blueprints/review
 router.post("/blueprints/review", verifyToken, async (req: AuthRequest, res: Response) => {
   const { blueprintId, rating, reviewText } = req.body;
+  const db = getAuthClient(req.token!);
 
-  const [existing] = await db.select({ id: blueprintReviews.id }).from(blueprintReviews).where(and(eq(blueprintReviews.blueprintId, blueprintId), eq(blueprintReviews.userId, req.userId!)));
+  const { data: existing } = await db
+    .from("blueprint_reviews")
+    .select("id")
+    .eq("blueprint_id", blueprintId)
+    .eq("user_id", req.userId!)
+    .single();
 
   let review;
   if (existing) {
-    const [updated] = await db.update(blueprintReviews).set({ rating, reviewText, updatedAt: new Date() }).where(eq(blueprintReviews.id, existing.id)).returning();
-    review = updated;
+    const { data } = await db.from("blueprint_reviews").update({ rating, review_text: reviewText, updated_at: new Date().toISOString() }).eq("id", existing.id).select().single();
+    review = data;
   } else {
-    const [inserted] = await db.insert(blueprintReviews).values({ id: crypto.randomUUID(), blueprintId, userId: req.userId!, rating, reviewText }).returning();
-    review = inserted;
+    const { data } = await db.from("blueprint_reviews").insert({ blueprint_id: blueprintId, user_id: req.userId!, rating, review_text: reviewText }).select().single();
+    review = data;
   }
 
   res.json({ review });

@@ -2,9 +2,7 @@ import { Router } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
 import { logger } from "../lib/logger";
-import { db } from "@workspace/db";
-import { userComponents } from "@workspace/db/schema";
-import { and, eq, desc, count } from "drizzle-orm";
+import { getAuthClient } from "../lib/supabaseAdmin";
 
 const router = Router();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
@@ -21,26 +19,27 @@ async function callGeminiJSON(prompt: string): Promise<unknown> {
   }
 }
 
-// GET /api/components/me
 router.get("/components/me", verifyToken, async (req: AuthRequest, res) => {
-  const data = await db
-    .select()
-    .from(userComponents)
-    .where(eq(userComponents.userId, req.userId!))
-    .orderBy(desc(userComponents.addedAt));
+  const db = getAuthClient(req.token!);
+  const { data, error } = await db
+    .from("user_components")
+    .select("*")
+    .eq("user_id", req.userId!)
+    .order("added_at", { ascending: false });
+  if (error) { res.status(500).json({ error: "Failed to fetch components" }); return; }
   res.json({ components: data });
 });
 
-// GET /api/components/count
 router.get("/components/count", verifyToken, async (req: AuthRequest, res) => {
-  const [result] = await db
-    .select({ count: count() })
-    .from(userComponents)
-    .where(eq(userComponents.userId, req.userId!));
-  res.json({ count: result?.count ?? 0 });
+  const db = getAuthClient(req.token!);
+  const { count, error } = await db
+    .from("user_components")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", req.userId!);
+  if (error) { res.status(500).json({ error: "Failed to count components" }); return; }
+  res.json({ count: count ?? 0 });
 });
 
-// POST /api/components
 router.post("/components", verifyToken, async (req: AuthRequest, res) => {
   const { name, category, quantity, condition, purchasePrice, notes } = req.body;
 
@@ -49,50 +48,41 @@ router.post("/components", verifyToken, async (req: AuthRequest, res) => {
     return;
   }
 
-  const [data] = await db
-    .insert(userComponents)
-    .values({ id: crypto.randomUUID(), userId: req.userId!, name, category, quantity: quantity ?? 1, condition, purchasePrice: purchasePrice ?? null, notes: notes ?? null })
-    .returning();
+  const db = getAuthClient(req.token!);
+  const { data, error } = await db
+    .from("user_components")
+    .insert({ user_id: req.userId!, name, category, quantity: quantity ?? 1, condition, purchase_price: purchasePrice ?? null, notes: notes ?? null })
+    .select()
+    .single();
 
-  if (!data) {
-    res.status(500).json({ error: "Failed to add component" });
-    return;
-  }
-
+  if (error) { res.status(500).json({ error: "Failed to add component" }); return; }
   res.json({ component: data });
 });
 
-// PUT /api/components/:id
 router.put("/components/:id", verifyToken, async (req: AuthRequest, res) => {
   const { id } = req.params;
   const { name, category, quantity, condition, purchasePrice, notes } = req.body;
 
-  const [data] = await db
-    .update(userComponents)
-    .set({ name, category, quantity, condition, purchasePrice: purchasePrice ?? null, notes: notes ?? null })
-    .where(and(eq(userComponents.id, id), eq(userComponents.userId, req.userId!)))
-    .returning();
+  const db = getAuthClient(req.token!);
+  const { data, error } = await db
+    .from("user_components")
+    .update({ name, category, quantity, condition, purchase_price: purchasePrice ?? null, notes: notes ?? null })
+    .eq("id", id)
+    .eq("user_id", req.userId!)
+    .select()
+    .single();
 
-  if (!data) {
-    res.status(404).json({ error: "Component not found" });
-    return;
-  }
-
+  if (error || !data) { res.status(404).json({ error: "Component not found" }); return; }
   res.json({ component: data });
 });
 
-// DELETE /api/components/:id
 router.delete("/components/:id", verifyToken, async (req: AuthRequest, res) => {
   const { id } = req.params;
-
-  await db
-    .delete(userComponents)
-    .where(and(eq(userComponents.id, id), eq(userComponents.userId, req.userId!)));
-
+  const db = getAuthClient(req.token!);
+  await db.from("user_components").delete().eq("id", id).eq("user_id", req.userId!);
   res.json({ success: true });
 });
 
-// POST /api/components/suggest-projects
 router.post("/components/suggest-projects", verifyToken, async (req: AuthRequest, res) => {
   const { components, skillLevel } = req.body;
 
@@ -131,10 +121,8 @@ Return ONLY valid JSON. No markdown. No explanation. No code fences.
 
 Sort by matchScore descending. Return exactly 6 suggestions.`;
 
-  const userMessage = `Suggest IoT projects for this inventory:\n${inventoryList}\nUser skill level: ${skillLevel ?? "Beginner"}`;
-
   try {
-    const result = await callGeminiJSON(`${systemPrompt}\n\n${userMessage}`);
+    const result = await callGeminiJSON(`${systemPrompt}\n\nSuggest IoT projects for this inventory:\n${inventoryList}\nUser skill level: ${skillLevel ?? "Beginner"}`);
     res.json(result);
   } catch (err) {
     logger.error({ err }, "Failed to get project suggestions");
@@ -142,7 +130,6 @@ Sort by matchScore descending. Return exactly 6 suggestions.`;
   }
 });
 
-// POST /api/components/shopping-list
 router.post("/components/shopping-list", verifyToken, async (req: AuthRequest, res) => {
   const { components } = req.body;
 
@@ -177,7 +164,6 @@ Return ONLY valid JSON:
   }
 });
 
-// POST /api/components/substitutions
 router.post("/components/substitutions", verifyToken, async (req: AuthRequest, res) => {
   const { componentName, platform, userInventory, projectContext } = req.body;
 

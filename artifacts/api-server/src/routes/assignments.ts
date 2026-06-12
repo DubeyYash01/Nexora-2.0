@@ -1,253 +1,142 @@
 import { Router } from "express";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
-import { logger } from "../lib/logger";
 import type { Response } from "express";
-import { db } from "@workspace/db";
-import { classes, classMembers, assignments, assignmentSubmissions, profiles } from "@workspace/db/schema";
-import { and, eq, inArray, asc, desc } from "drizzle-orm";
+import { getAuthClient } from "../lib/supabaseAdmin";
 
 const router = Router();
 
-// POST /api/assignments/create
 router.post("/assignments/create", verifyToken, async (req: AuthRequest, res: Response) => {
-  const {
-    classId, title, description, objectives, allowedComponents,
-    requiredPhases, deadline, maxGroupSize, allowAnyComponents,
-    gradingCriteria, status,
-  } = req.body;
+  const { classId, title, description, objectives, allowedComponents, requiredPhases, deadline, maxGroupSize, allowAnyComponents, gradingCriteria, status } = req.body;
 
   if (!classId || !title || !description) {
     res.status(400).json({ error: "classId, title, and description are required" });
     return;
   }
 
-  const [cls] = await db
-    .select({ professorId: classes.professorId })
-    .from(classes)
-    .where(eq(classes.id, classId));
+  const db = getAuthClient(req.token!);
+  const { data: cls } = await db.from("classes").select("professor_id").eq("id", classId).single();
+  if (!cls || cls.professor_id !== req.userId) { res.status(403).json({ error: "You do not own this class" }); return; }
 
-  if (!cls || cls.professorId !== req.userId) {
-    res.status(403).json({ error: "You do not own this class" });
-    return;
-  }
-
-  const [data] = await db
-    .insert(assignments)
-    .values({
-      id: crypto.randomUUID(),
-      classId,
-      professorId: req.userId!,
+  const { data, error } = await db
+    .from("assignments")
+    .insert({
+      class_id: classId,
+      professor_id: req.userId!,
       title,
       description,
       objectives: objectives ?? [],
-      allowedComponents: allowedComponents ?? null,
-      requiredPhases: requiredPhases ?? [],
-      deadline: deadline ? new Date(deadline) : null,
-      maxGroupSize: maxGroupSize ?? 4,
-      allowAnyComponents: allowAnyComponents ?? true,
-      gradingCriteria: gradingCriteria ?? null,
+      allowed_components: allowedComponents ?? null,
+      required_phases: requiredPhases ?? [],
+      deadline: deadline ? new Date(deadline).toISOString() : null,
+      max_group_size: maxGroupSize ?? 4,
+      allow_any_components: allowAnyComponents ?? true,
+      grading_criteria: gradingCriteria ?? null,
       status: status ?? "active",
-      submissionCount: 0,
+      submission_count: 0,
     })
-    .returning();
+    .select()
+    .single();
 
-  if (!data) {
-    res.status(500).json({ error: "Failed to create assignment" });
-    return;
-  }
-
+  if (error) { res.status(500).json({ error: "Failed to create assignment" }); return; }
   res.status(201).json({ assignment: data });
 });
 
-// GET /api/assignments/professor/:professorId
 router.get("/assignments/professor/:professorId", verifyToken, async (req: AuthRequest, res: Response) => {
   const { professorId } = req.params;
+  if (req.userId !== professorId) { res.status(403).json({ error: "Forbidden" }); return; }
 
-  if (req.userId !== professorId) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
+  const db = getAuthClient(req.token!);
+  const { data } = await db
+    .from("assignments")
+    .select("id,class_id,title,status,deadline,submission_count,created_at,classes(name,subject)")
+    .eq("professor_id", professorId)
+    .order("created_at", { ascending: false });
 
-  const data = await db
-    .select({
-      id: assignments.id,
-      classId: assignments.classId,
-      title: assignments.title,
-      status: assignments.status,
-      deadline: assignments.deadline,
-      submissionCount: assignments.submissionCount,
-      createdAt: assignments.createdAt,
-      className: classes.name,
-      classSubject: classes.subject,
-    })
-    .from(assignments)
-    .leftJoin(classes, eq(classes.id, assignments.classId))
-    .where(eq(assignments.professorId, professorId))
-    .orderBy(desc(assignments.createdAt));
-
-  res.json({ assignments: data });
+  res.json({ assignments: data ?? [] });
 });
 
-// GET /api/assignments/student/:studentId
 router.get("/assignments/student/:studentId", verifyToken, async (req: AuthRequest, res: Response) => {
   const { studentId } = req.params;
+  if (req.userId !== studentId) { res.status(403).json({ error: "Forbidden" }); return; }
 
-  if (req.userId !== studentId) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
+  const db = getAuthClient(req.token!);
+  const { data: memberships } = await db.from("class_members").select("class_id").eq("student_id", studentId);
+  if (!memberships || memberships.length === 0) { res.json({ assignments: [] }); return; }
 
-  const memberships = await db
-    .select({ classId: classMembers.classId })
-    .from(classMembers)
-    .where(eq(classMembers.studentId, studentId));
+  const classIds = memberships.map((m) => m.class_id);
+  const { data: assignmentData } = await db
+    .from("assignments")
+    .select("id,class_id,title,description,objectives,deadline,status,max_group_size,required_phases,created_at,classes(name,subject)")
+    .in("class_id", classIds)
+    .in("status", ["active", "closed"])
+    .order("deadline", { ascending: true });
 
-  if (memberships.length === 0) {
-    res.json({ assignments: [] });
-    return;
-  }
+  const { data: submissionData } = await db
+    .from("assignment_submissions")
+    .select("id,assignment_id,status,grade,submitted_at,project_id")
+    .eq("student_id", studentId);
 
-  const classIds = memberships.map((m) => m.classId);
-
-  const assignmentData = await db
-    .select({
-      id: assignments.id,
-      classId: assignments.classId,
-      title: assignments.title,
-      description: assignments.description,
-      objectives: assignments.objectives,
-      deadline: assignments.deadline,
-      status: assignments.status,
-      maxGroupSize: assignments.maxGroupSize,
-      requiredPhases: assignments.requiredPhases,
-      createdAt: assignments.createdAt,
-      className: classes.name,
-      classSubject: classes.subject,
-    })
-    .from(assignments)
-    .leftJoin(classes, eq(classes.id, assignments.classId))
-    .where(and(inArray(assignments.classId, classIds), inArray(assignments.status, ["active", "closed"])))
-    .orderBy(asc(assignments.deadline));
-
-  const submissionData = await db
-    .select({
-      id: assignmentSubmissions.id,
-      assignmentId: assignmentSubmissions.assignmentId,
-      status: assignmentSubmissions.status,
-      grade: assignmentSubmissions.grade,
-      submittedAt: assignmentSubmissions.submittedAt,
-      projectId: assignmentSubmissions.projectId,
-    })
-    .from(assignmentSubmissions)
-    .where(eq(assignmentSubmissions.studentId, studentId));
-
-  const submissionMap = new Map(submissionData.map((s) => [s.assignmentId, s]));
-
-  const enriched = assignmentData.map((a) => ({
-    ...a,
-    submission: submissionMap.get(a.id) ?? null,
-  }));
+  const submissionMap = new Map((submissionData ?? []).map((s) => [s.assignment_id, s]));
+  const enriched = (assignmentData ?? []).map((a) => ({ ...a, submission: submissionMap.get(a.id) ?? null }));
 
   res.json({ assignments: enriched });
 });
 
-// GET /api/assignments/:assignmentId/submissions
 router.get("/assignments/:assignmentId/submissions", verifyToken, async (req: AuthRequest, res: Response) => {
   const { assignmentId } = req.params;
+  const db = getAuthClient(req.token!);
 
-  const [assignment] = await db
-    .select({
-      professorId: assignments.professorId,
-      title: assignments.title,
-      deadline: assignments.deadline,
-      status: assignments.status,
-      classId: assignments.classId,
-      gradingCriteria: assignments.gradingCriteria,
-      requiredPhases: assignments.requiredPhases,
-    })
-    .from(assignments)
-    .where(eq(assignments.id, assignmentId));
+  const { data: assignment } = await db
+    .from("assignments")
+    .select("professor_id,title,deadline,status,class_id,grading_criteria,required_phases")
+    .eq("id", assignmentId)
+    .single();
 
-  if (!assignment || assignment.professorId !== req.userId) {
-    res.status(403).json({ error: "Professor access only" });
-    return;
-  }
+  if (!assignment || assignment.professor_id !== req.userId) { res.status(403).json({ error: "Professor access only" }); return; }
 
-  const submissionsData = await db
-    .select({
-      id: assignmentSubmissions.id,
-      assignmentId: assignmentSubmissions.assignmentId,
-      studentId: assignmentSubmissions.studentId,
-      projectId: assignmentSubmissions.projectId,
-      status: assignmentSubmissions.status,
-      grade: assignmentSubmissions.grade,
-      submittedAt: assignmentSubmissions.submittedAt,
-      graderFeedback: assignmentSubmissions.graderFeedback,
-      fullName: profiles.fullName,
-      email: profiles.email,
-      avatarUrl: profiles.avatarUrl,
-    })
-    .from(assignmentSubmissions)
-    .leftJoin(profiles, eq(profiles.id, assignmentSubmissions.studentId))
-    .where(eq(assignmentSubmissions.assignmentId, assignmentId))
-    .orderBy(desc(assignmentSubmissions.submittedAt));
+  const { data: submissionsData } = await db
+    .from("assignment_submissions")
+    .select("id,assignment_id,student_id,project_id,status,grade,submitted_at,grader_feedback,profiles(full_name,email,avatar_url)")
+    .eq("assignment_id", assignmentId)
+    .order("submitted_at", { ascending: false });
 
-  const members = await db
-    .select({ studentId: classMembers.studentId })
-    .from(classMembers)
-    .where(eq(classMembers.classId, assignment.classId));
+  const { count: memberCount } = await db
+    .from("class_members")
+    .select("*", { count: "exact", head: true })
+    .eq("class_id", assignment.class_id);
 
-  res.json({
-    assignment,
-    submissions: submissionsData,
-    totalStudents: members.length,
-  });
+  res.json({ assignment, submissions: submissionsData ?? [], totalStudents: memberCount ?? 0 });
 });
 
-// GET /api/assignments/:assignmentId
 router.get("/assignments/:assignmentId", verifyToken, async (req: AuthRequest, res: Response) => {
   const { assignmentId } = req.params;
-
-  const [data] = await db
-    .select()
-    .from(assignments)
-    .where(eq(assignments.id, assignmentId));
-
-  if (!data) {
-    res.status(404).json({ error: "Assignment not found" });
-    return;
-  }
-
+  const db = getAuthClient(req.token!);
+  const { data, error } = await db.from("assignments").select("*").eq("id", assignmentId).single();
+  if (error || !data) { res.status(404).json({ error: "Assignment not found" }); return; }
   res.json({ assignment: data });
 });
 
-// PATCH /api/assignments/:assignmentId
 router.patch("/assignments/:assignmentId", verifyToken, async (req: AuthRequest, res: Response) => {
   const { assignmentId } = req.params;
   const { title, description, deadline, status, gradingCriteria } = req.body;
+  const db = getAuthClient(req.token!);
 
-  const [data] = await db
-    .update(assignments)
-    .set({ title, description, deadline: deadline ? new Date(deadline) : undefined, status, gradingCriteria, updatedAt: new Date() })
-    .where(and(eq(assignments.id, assignmentId), eq(assignments.professorId, req.userId!)))
-    .returning();
+  const { data, error } = await db
+    .from("assignments")
+    .update({ title, description, deadline: deadline ? new Date(deadline).toISOString() : undefined, status, grading_criteria: gradingCriteria, updated_at: new Date().toISOString() })
+    .eq("id", assignmentId)
+    .eq("professor_id", req.userId!)
+    .select()
+    .single();
 
-  if (!data) {
-    res.status(404).json({ error: "Assignment not found" });
-    return;
-  }
-
+  if (error || !data) { res.status(404).json({ error: "Assignment not found" }); return; }
   res.json({ assignment: data });
 });
 
-// DELETE /api/assignments/:assignmentId
 router.delete("/assignments/:assignmentId", verifyToken, async (req: AuthRequest, res: Response) => {
   const { assignmentId } = req.params;
-
-  await db
-    .delete(assignments)
-    .where(and(eq(assignments.id, assignmentId), eq(assignments.professorId, req.userId!)));
-
+  const db = getAuthClient(req.token!);
+  await db.from("assignments").delete().eq("id", assignmentId).eq("professor_id", req.userId!);
   res.status(204).send();
 });
 

@@ -1,72 +1,67 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { authFetch } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
+import type { User, Session } from "@supabase/supabase-js";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
 
-setAuthTokenGetter(async () => null);
+setAuthTokenGetter(async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
+});
 
 export interface UserProfile {
   id: string;
   email?: string;
-  firstName?: string;
-  lastName?: string;
-  profileImageUrl?: string;
+  full_name?: string;
   fullName?: string;
   role?: string;
+  college_name?: string;
   collegeName?: string;
   course?: string;
-  year?: string;
-  skillLevel?: string;
-  bio?: string;
+  avatar_url?: string;
+  avatarUrl?: string;
+  onboarding_complete?: boolean;
   onboardingComplete?: boolean;
+  plan?: string;
+  trial_used?: boolean;
+  skill_level?: string;
+  bio?: string;
 }
 
 interface AuthContextType {
-  user: UserProfile | null;
+  user: User | null;
   profile: UserProfile | null;
+  session: Session | null;
   loading: boolean;
-  signIn: () => void;
-  signOut: () => void;
+  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signOut: () => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<{ error: Error | null }>;
+  refreshProfile: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
+  session: null,
   loading: true,
-  signIn: () => { window.location.href = "/api/login"; },
-  signOut: () => { window.location.href = "/api/logout"; },
+  signUp: async () => ({ error: null }),
+  signIn: async () => ({ error: null }),
+  signOut: async () => {},
   updateProfile: async () => ({ error: null }),
+  refreshProfile: async () => {},
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUser = async () => {
+  const fetchProfile = async (accessToken: string) => {
     try {
-      const res = await fetch("/api/auth/user", { credentials: "include" });
-      if (res.status === 401) {
-        setUser(null);
-        setProfile(null);
-        setLoading(false);
-        return;
-      }
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data);
-        await fetchProfile();
-      }
-    } catch {
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchProfile = async () => {
-    try {
-      const res = await authFetch("/api/profiles/me");
+      const res = await fetch("/api/profiles/me", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
       if (res.ok) {
         const data = await res.json();
         setProfile(data);
@@ -77,21 +72,62 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   useEffect(() => {
-    fetchUser();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.access_token) {
+        fetchProfile(session.access_token).finally(() => setLoading(false));
+      } else {
+        setLoading(false);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.access_token) {
+        await fetchProfile(session.access_token);
+      } else {
+        setProfile(null);
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = () => {
-    window.location.href = "/api/login";
+  const signUp = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signUp({ email, password });
+    return { error: error as Error | null };
   };
 
-  const signOut = () => {
-    window.location.href = "/api/logout";
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return { error: error as Error | null };
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setProfile(null);
+    setSession(null);
+  };
+
+  const refreshProfile = async () => {
+    if (session?.access_token) {
+      await fetchProfile(session.access_token);
+    }
   };
 
   const updateProfile = async (data: Partial<UserProfile>) => {
     try {
-      const res = await authFetch("/api/profiles/me", {
+      if (!session?.access_token) throw new Error("Not authenticated");
+      const res = await fetch("/api/profiles/me", {
         method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error("Failed to update profile");
@@ -104,7 +140,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, updateProfile }}>
+    <AuthContext.Provider value={{ user, profile, session, loading, signUp, signIn, signOut, updateProfile, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
