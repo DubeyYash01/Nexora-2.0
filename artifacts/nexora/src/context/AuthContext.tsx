@@ -1,7 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User } from "@supabase/supabase-js";
 import { supabase, authFetch } from "@/lib/supabase";
-import { Profile } from "@workspace/api-client-react";
+import { Profile, setAuthTokenGetter } from "@workspace/api-client-react";
+
+// Wire up the generated API hooks to use Supabase auth tokens automatically
+setAuthTokenGetter(async () => {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+});
 
 interface AuthContextType {
   user: User | null;
