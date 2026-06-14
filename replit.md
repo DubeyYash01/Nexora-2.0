@@ -393,6 +393,18 @@ Nexora is a complete IoT project creation platform. Prompts 1–6 of 14 complete
   - Supabase tables: `classes`, `class_members`, `assignments`, `assignment_submissions`
   - `projects` table: added `assignment_id uuid` and `submitted_for_assignment boolean` columns
 
+- **Prompt 11**: Global Search System, Advanced Blueprint Discovery, Project Search & Filtering, Recently Viewed, Trending & Recommendations:
+  - `GlobalSearch` component: full-screen overlay (Ctrl+K / ⌘K), keyboard navigation, grouped results (projects, blueprints, components), search history, recent searches, all sections auto-close on Esc or backdrop click
+  - `/search` page: sidebar filters (type, difficulty, category), highlighted results, load more, mobile BottomSheet filters
+  - `RecommendationWidget`: personalized blueprint recommendations with "why" popover (fetches from `/api/blueprints/recommended`)
+  - Dashboard upgraded: search button in header (desktop) + search icon in MobileTopBar, replaced static blueprint section with `RecommendationWidget` + `RecentlyViewedDash` + `TrendingWidget` (live data from API)
+  - Blueprints page upgraded: tag cloud (20 popular IoT tags), clickable tag pills, selected tag chips with clear, URL param `?tag=X` and `?sort=X` support, Trending Now section (top 4 by score)
+  - Projects page upgraded: search bar (title+desc filter), grid/list toggle with `ProjectListItem` component, empty state for search
+  - Blueprint detail page: loads similar blueprints from `/api/blueprints/:id/similar`, Similar Blueprints section at bottom, tracks recently-viewed on load
+  - Workspace: tracks project view in `recently_viewed` on load
+  - Backend: `/api/search/global` (POST, searches projects+blueprints+components), `/api/search/history` (GET/POST/DELETE), `/api/recently-viewed` (GET/POST/clear), `/api/blueprints/trending` (score = forks×3 + likes×2 + views×0.3), `/api/blueprints/recommended`, `/api/blueprints/:id/similar`, `/api/blueprints/tags`
+  - New Supabase tables: `search_history`, `recently_viewed`, `blueprint_tags` (optional)
+
 - **Prompt 8**: Pricing Plans + Razorpay Payments + Subscription Management:
   - `/pricing` page: Free / Student Pro (₹299/month or ₹999/semester) / Maker Pro (₹499/month) / College Lab (contact)
   - 7-day free trial for Student Pro (no payment needed), `trial_used` flag prevents repeat
@@ -536,10 +548,52 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS profile_views integer DEFAULT 0;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_profile_public boolean DEFAULT true;
 ```
 
+## Supabase Setup Required (Prompt 11 additions)
+
+Run these SQL statements in Supabase SQL Editor after the Prompt 10 tables:
+
+```sql
+-- Search history table
+CREATE TABLE IF NOT EXISTS search_history (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE,
+  query text NOT NULL,
+  result_count integer DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+
+-- Recently viewed table
+CREATE TABLE IF NOT EXISTS recently_viewed (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE,
+  item_id text NOT NULL,
+  item_type text NOT NULL CHECK (item_type IN ('project','blueprint','component')),
+  item_title text,
+  viewed_at timestamptz DEFAULT now(),
+  UNIQUE(user_id, item_id, item_type)
+);
+
+-- Blueprint tags table (optional — /blueprints/tags returns empty gracefully without it)
+CREATE TABLE IF NOT EXISTS blueprint_tags (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  name text UNIQUE NOT NULL,
+  usage_count integer DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE search_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE recently_viewed ENABLE ROW LEVEL SECURITY;
+ALTER TABLE blueprint_tags ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "users own search history" ON search_history FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "users own recently viewed" ON recently_viewed FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "blueprint tags readable" ON blueprint_tags FOR SELECT USING (true);
+```
+
 ## User preferences
 
 - Design system must be consistent across every screen built in all future prompts
-- This is Prompt 10 of 14 — future prompts will build on top of this foundation
+- This is Prompt 11 of 14 — future prompts will build on top of this foundation
 
 ## Gotchas
 

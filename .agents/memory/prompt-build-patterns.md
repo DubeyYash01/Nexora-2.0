@@ -1,6 +1,6 @@
 ---
 name: Nexora build patterns
-description: Design system, auth, Supabase column shapes, route conventions, and component locations for Nexora prompts 1–9
+description: Design system, auth, Supabase column shapes, route conventions, and component locations for Nexora prompts 1–11
 ---
 
 ## Auth & API pattern
@@ -71,3 +71,20 @@ description: Design system, auth, Supabase column shapes, route conventions, and
 
 ## UserProfile type (AuthContext)
 - Includes (as of Prompt 9): id, email, full_name, role, college_name, course, avatar_url, plan, trial_used, bio, username, location, website, notification_preferences, profile_views, is_profile_public, blueprint_attribution
+
+## BottomSheet props (Prompt 11)
+- `BottomSheet` uses `isOpen` (NOT `open`) — prop is `isOpen: boolean`
+
+## blueprints trending endpoint (Prompt 11)
+- `weekly_forks/weekly_likes/weekly_views` columns do NOT exist in the blueprints table
+- Trending score = `fork_count × 3 + like_count × 2 + view_count × 0.3` using regular columns
+
+## Global Search event bus (Prompt 11)
+- GlobalSearch overlay opens via `document.dispatchEvent(new CustomEvent("nexora:open-search"))`
+- Ctrl+K in `useKeyboardShortcuts.ts` dispatches this event (not a direct state setter)
+- This allows the search button in DashboardLayout header + MobileTopBar to open it without prop drilling
+
+## Recently Viewed / Search History tables (Prompt 11)
+- Require manual creation in Supabase: `search_history`, `recently_viewed`, `blueprint_tags`
+- Routes: `POST /api/recently-viewed` with `{ itemId, itemType, item_title }` body
+- All routes silently fail (`.catch(() => {})`) if tables don't exist yet

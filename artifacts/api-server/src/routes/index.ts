@@ -18,6 +18,8 @@ import usageRouter from "./usage";
 import contactRouter from "./contact";
 import settingsRouter from "./settings";
 import notificationsRouter from "./notifications";
+import searchRouter from "./search";
+import recentlyViewedRouter from "./recently-viewed";
 
 const router: IRouter = Router();
 
@@ -39,6 +41,8 @@ router.use(analyticsRouter);
 router.use(paymentsRouter);
 router.use(usageRouter);
 router.use(contactRouter);
+router.use(searchRouter);
+router.use(recentlyViewedRouter);
 router.use(projectsRouter);
 
 export default router;

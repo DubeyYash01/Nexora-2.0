@@ -41,7 +41,7 @@ export function useKeyboardShortcuts() {
             break;
           case "k":
             e.preventDefault();
-            document.dispatchEvent(new CustomEvent("nexora:open-ai"));
+            document.dispatchEvent(new CustomEvent("nexora:open-search"));
             break;
           case "/":
             e.preventDefault();

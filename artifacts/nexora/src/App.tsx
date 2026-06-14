@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect } from "react";
+import React, { lazy, Suspense, useEffect, useState } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -9,6 +9,7 @@ import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import FloatingAI from "@/components/ai/FloatingAI";
 import { InstallPrompt } from "@/components/ui/InstallPrompt";
+import GlobalSearch from "@/components/search/GlobalSearch";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Landing = lazy(() => import("@/pages/landing"));
@@ -24,6 +25,7 @@ const BlueprintsPage = lazy(() => import("@/pages/blueprints"));
 const BlueprintDetailPage = lazy(() => import("@/pages/blueprint-detail"));
 const PublicProjectPage = lazy(() => import("@/pages/public-project"));
 const StudentAssignments = lazy(() => import("@/pages/assignments"));
+const SearchPage = lazy(() => import("@/pages/search"));
 const PricingPage = lazy(() => import("@/pages/pricing"));
 const BillingPage = lazy(() => import("@/pages/billing"));
 const IDEPage = lazy(() => import("@/pages/ide"));
@@ -88,10 +90,21 @@ function KeyboardShortcutsProvider() {
   return null;
 }
 
+function GlobalSearchWrapper() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    document.addEventListener("nexora:open-search", handler);
+    return () => document.removeEventListener("nexora:open-search", handler);
+  }, []);
+  return <GlobalSearch open={open} onClose={() => setOpen(false)} />;
+}
+
 function Router() {
   return (
     <>
       <KeyboardShortcutsProvider />
+      <GlobalSearchWrapper />
       <Suspense fallback={<PageLoader />}>
         <Switch>
           <Route path="/" component={Landing} />
@@ -128,6 +141,9 @@ function Router() {
           </Route>
           <Route path="/assignments">
             <ProtectedRoute component={StudentAssignments} />
+          </Route>
+          <Route path="/search">
+            <ProtectedRoute component={SearchPage} />
           </Route>
           <Route path="/ide">
             <ProtectedRoute component={IDEPage} />

@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { authFetch } from "@/lib/supabase";
 import { DashboardLayout } from "./dashboard";
 import {
   Search, GitFork, ChevronDown, Loader2, Sparkles,
-  Users, BookOpen, Layers,
+  Users, BookOpen, Layers, TrendingUp, Tag, X,
 } from "lucide-react";
 import FeaturedBlueprintCard from "@/components/blueprints/FeaturedBlueprintCard";
 import BlueprintCard, { type Blueprint } from "@/components/blueprints/BlueprintCard";
@@ -24,9 +24,16 @@ const SORTS = [
   { value: "cost", label: "Lowest Cost" },
 ];
 
+const POPULAR_TAGS = [
+  "ESP32", "Arduino", "WiFi", "Bluetooth", "MQTT", "Temperature", "Humidity",
+  "LED", "LCD", "Servo", "Relay", "PIR", "Ultrasonic", "DHT11", "Raspberry Pi",
+  "Home Automation", "Weather Station", "Security", "Garden", "Energy Monitor",
+];
+
 export default function BlueprintsPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const searchStr = useSearch();
 
   const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,12 +41,37 @@ export default function BlueprintsPage() {
   const [difficulty, setDifficulty] = useState("All");
   const [category, setCategory] = useState("All Categories");
   const [sort, setSort] = useState("popular");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [forkTarget, setForkTarget] = useState<Blueprint | null>(null);
   const [showPublish, setShowPublish] = useState(false);
   const [stats, setStats] = useState({ blueprints: 0, projects: 0, makers: 0 });
+  const [trendingBlueprints, setTrendingBlueprints] = useState<Blueprint[]>([]);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const hasFilters = search || difficulty !== "All" || category !== "All Categories";
+  // Read URL params on mount
+  useEffect(() => {
+    const params = new URLSearchParams(searchStr);
+    const tagParam = params.get("tag");
+    if (tagParam) setSelectedTags([tagParam]);
+    const sortParam = params.get("sort");
+    if (sortParam) setSort(sortParam);
+  }, []);
+
+  // Load trending
+  useEffect(() => {
+    fetch("/api/blueprints/trending")
+      .then((r) => r.json())
+      .then((d: { blueprints?: Blueprint[] }) => setTrendingBlueprints(d.blueprints ?? []))
+      .catch(() => {});
+  }, []);
+
+  const hasFilters = search || difficulty !== "All" || category !== "All Categories" || selectedTags.length > 0;
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  };
 
   const loadBlueprints = useCallback(async (q?: string) => {
     const params = new URLSearchParams();
@@ -53,7 +85,14 @@ export default function BlueprintsPage() {
     try {
       const res = await fetchFn(`/api/blueprints?${params}`);
       const data = await res.json() as { blueprints?: Blueprint[] };
-      const all = data.blueprints ?? [];
+      let all = data.blueprints ?? [];
+      // Client-side tag filtering
+      if (selectedTags.length > 0) {
+        all = all.filter((b) => {
+          const bpTags = (b.tags ?? []).map((t: string) => t.toLowerCase());
+          return selectedTags.some((t) => bpTags.some((bt) => bt.includes(t.toLowerCase()) || t.toLowerCase().includes(bt)));
+        });
+      }
       setBlueprints(all);
       setStats({
         blueprints: all.length,
@@ -65,7 +104,7 @@ export default function BlueprintsPage() {
     } finally {
       setLoading(false);
     }
-  }, [difficulty, category, sort, user]);
+  }, [difficulty, category, sort, user, selectedTags]);
 
   // Seed + load on mount
   useEffect(() => {
@@ -200,14 +239,84 @@ export default function BlueprintsPage() {
           </div>
         </div>
 
+        {/* ── Tag cloud + active tags ── */}
+        <div className="px-6 pt-4 pb-2 max-w-5xl mx-auto">
+          {/* Selected tags chips */}
+          {selectedTags.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span className="text-xs" style={{ color: "#9090B0" }}>Filtered by:</span>
+              {selectedTags.map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border transition-all"
+                  style={{ background: "rgba(108,99,255,0.15)", borderColor: "#6C63FF", color: "#8A80FF" }}
+                >
+                  {tag} <X className="w-3 h-3" />
+                </button>
+              ))}
+              <button onClick={() => setSelectedTags([])} className="text-xs" style={{ color: "#5A5A7A" }}>
+                Clear all
+              </button>
+            </div>
+          )}
+
+          {/* Popular tag cloud — visible when no filters */}
+          {!hasFilters && (
+            <div className="flex flex-wrap gap-2 items-center">
+              <Tag className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#5A5A7A" }} />
+              {POPULAR_TAGS.map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  className="text-xs px-2.5 py-1 rounded-full border transition-all"
+                  style={{ background: "#12121A", borderColor: "#2A2A3E", color: "#7070A0" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#6C63FF"; e.currentTarget.style.color = "#8A80FF"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A3E"; e.currentTarget.style.color = "#7070A0"; }}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* ── Content ── */}
-        <div className="px-6 py-8 max-w-5xl mx-auto space-y-10">
+        <div className="px-6 py-6 max-w-5xl mx-auto space-y-10">
           {loading ? (
             <div className="flex justify-center py-20">
               <Loader2 className="w-7 h-7 animate-spin" style={{ color: "#6C63FF" }} />
             </div>
           ) : (
             <>
+              {/* Trending — only when no filters */}
+              {!hasFilters && trendingBlueprints.length > 0 && (
+                <div className="space-y-4">
+                  <h2 className="text-base font-bold flex items-center gap-2" style={{ color: "#F0F0FF" }}>
+                    <TrendingUp className="w-4 h-4" style={{ color: "#00D4FF" }} /> Trending Now
+                  </h2>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {trendingBlueprints.map((bp, i) => (
+                      <button
+                        key={bp.id}
+                        onClick={() => setLocation(`/blueprints/${bp.id}`)}
+                        className="p-3 rounded-xl border text-left transition-all flex flex-col gap-2"
+                        style={{ background: "#12121A", borderColor: "#2A2A3E" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#00D4FF")}
+                        onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#2A2A3E")}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold" style={{ color: "#00D4FF" }}>#{i + 1}</span>
+                          <span className="text-xs" style={{ color: "#5A5A7A" }}>{bp.fork_count ?? 0} forks</span>
+                        </div>
+                        <p className="text-xs font-semibold leading-snug" style={{ color: "#F0F0FF" }}>{bp.title}</p>
+                        <p className="text-[11px]" style={{ color: "#00C896" }}>₹{bp.estimated_cost_min}–{bp.estimated_cost_max}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Featured — only when no filters */}
               {!hasFilters && featured.length > 0 && (
                 <div className="space-y-4">
@@ -238,7 +347,7 @@ export default function BlueprintsPage() {
                     style={{ borderColor: "#2A2A3E" }}>
                     <BookOpen className="w-12 h-12 mb-4" style={{ color: "#3A3A5A" }} />
                     <p className="text-muted-foreground">No blueprints match your search</p>
-                    <button onClick={() => { setSearch(""); setDifficulty("All"); setCategory("All Categories"); }}
+                    <button onClick={() => { setSearch(""); setDifficulty("All"); setCategory("All Categories"); setSelectedTags([]); }}
                       className="mt-3 text-sm" style={{ color: "#6C63FF" }}>
                       Clear filters
                     </button>

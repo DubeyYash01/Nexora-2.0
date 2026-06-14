@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import {
   LayoutDashboard, Folder, Grid2x2, Code2,
   Menu, X, Settings, LogOut, ClipboardList, Cpu,
-  Plus, Sparkles, ChevronRight,
+  Plus, Sparkles, ChevronRight, Search,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import NotificationBell from "@/components/notifications/NotificationBell";
@@ -51,6 +51,14 @@ export function MobileTopBar({ onMenuClick }: { onMenuClick: () => void }) {
       </div>
 
       <div className="flex items-center gap-2">
+        <button
+          onClick={() => document.dispatchEvent(new CustomEvent("nexora:open-search"))}
+          className="flex items-center justify-center rounded-lg"
+          style={{ width: 36, height: 36 }}
+          aria-label="Search"
+        >
+          <Search className="w-4.5 h-4.5" style={{ color: "#9090B0" }} />
+        </button>
         <NotificationBell />
         <div
           className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs"

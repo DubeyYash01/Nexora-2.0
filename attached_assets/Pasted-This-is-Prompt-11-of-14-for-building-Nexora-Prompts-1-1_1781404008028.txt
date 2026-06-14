@@ -1,0 +1,1337 @@
+This is Prompt 11 of 14 for building Nexora.
+Prompts 1-10 plus IDE fix are already built.
+Do NOT touch or recreate anything already built.
+Only ADD and IMPROVE what exists.
+
+═══════════════════════════════════════
+WHAT THIS PROMPT BUILDS
+═══════════════════════════════════════
+
+1. Global Search System
+   (search everything from anywhere)
+2. Advanced Blueprint Discovery
+   (better filtering, sorting, 
+    recommendations)
+3. Project Search & Filtering
+4. Component Search Intelligence
+5. Search Results Page
+6. Recently Viewed System
+7. Trending & Popular Content
+8. Personalized Recommendations Engine
+9. Tag System for Blueprints
+10. Search Analytics (basic)
+
+═══════════════════════════════════════
+SUPABASE CHANGES NEEDED
+═══════════════════════════════════════
+
+Run in Supabase SQL Editor:
+
+-- Search history table
+CREATE TABLE IF NOT EXISTS 
+  search_history (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id),
+  query text NOT NULL,
+  search_type text DEFAULT 'global'
+    CHECK (search_type IN (
+      'global','blueprints',
+      'projects','components'
+    )),
+  results_count integer DEFAULT 0,
+  clicked_result_id uuid,
+  clicked_result_type text,
+  created_at timestamptz DEFAULT now()
+);
+
+-- Recently viewed table
+CREATE TABLE IF NOT EXISTS 
+  recently_viewed (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id),
+  item_id uuid NOT NULL,
+  item_type text NOT NULL
+    CHECK (item_type IN (
+      'project','blueprint',
+      'component'
+    )),
+  item_title text,
+  viewed_at timestamptz DEFAULT now(),
+  UNIQUE(user_id, item_id, item_type)
+);
+
+-- Blueprint tags table
+CREATE TABLE IF NOT EXISTS 
+  blueprint_tags (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  name text UNIQUE NOT NULL,
+  slug text UNIQUE NOT NULL,
+  usage_count integer DEFAULT 0,
+  category text,
+  created_at timestamptz DEFAULT now()
+);
+
+-- Add full text search to blueprints
+ALTER TABLE blueprints
+  ADD COLUMN IF NOT EXISTS
+  search_vector tsvector;
+
+-- Create search index
+CREATE INDEX IF NOT EXISTS 
+  blueprints_search_idx
+  ON blueprints 
+  USING gin(search_vector);
+
+-- Function to update search vector
+CREATE OR REPLACE FUNCTION 
+  update_blueprint_search_vector()
+RETURNS trigger AS $$
+BEGIN
+  NEW.search_vector := 
+    to_tsvector('english',
+      coalesce(NEW.title, '') || ' ' ||
+      coalesce(NEW.description, '') || ' ' ||
+      coalesce(
+        array_to_string(NEW.tags, ' '), 
+        ''
+      )
+    );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to auto-update search vector
+DROP TRIGGER IF EXISTS 
+  blueprint_search_update 
+  ON blueprints;
+
+CREATE TRIGGER blueprint_search_update
+  BEFORE INSERT OR UPDATE ON blueprints
+  FOR EACH ROW
+  EXECUTE FUNCTION 
+    update_blueprint_search_vector();
+
+-- Add search vector to projects too
+ALTER TABLE projects
+  ADD COLUMN IF NOT EXISTS
+  search_vector tsvector;
+
+CREATE INDEX IF NOT EXISTS
+  projects_search_idx
+  ON projects
+  USING gin(search_vector);
+
+-- RLS
+ALTER TABLE search_history
+  ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "users own search history"
+  ON search_history FOR ALL
+  USING (auth.uid() = user_id);
+
+ALTER TABLE recently_viewed
+  ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "users own recently viewed"
+  ON recently_viewed FOR ALL
+  USING (auth.uid() = user_id);
+
+-- Seed popular tags
+INSERT INTO blueprint_tags 
+  (name, slug, category)
+VALUES
+  ('ESP32', 'esp32', 'Platform'),
+  ('Arduino', 'arduino', 'Platform'),
+  ('ESP8266', 'esp8266', 'Platform'),
+  ('Sensors', 'sensors', 'Component'),
+  ('WiFi', 'wifi', 'Feature'),
+  ('Bluetooth', 'bluetooth', 'Feature'),
+  ('MQTT', 'mqtt', 'Protocol'),
+  ('Home Automation', 
+   'home-automation', 'Category'),
+  ('Agriculture', 
+   'agriculture', 'Category'),
+  ('Security', 'security', 'Category'),
+  ('Weather', 'weather', 'Category'),
+  ('Health', 'health', 'Category'),
+  ('Smart City', 
+   'smart-city', 'Category'),
+  ('Beginner', 'beginner', 'Difficulty'),
+  ('Under ₹500', 
+   'under-500', 'Budget'),
+  ('Under ₹1000', 
+   'under-1000', 'Budget'),
+  ('DHT11', 'dht11', 'Component'),
+  ('DHT22', 'dht22', 'Component'),
+  ('OLED', 'oled', 'Component'),
+  ('Relay', 'relay', 'Component')
+ON CONFLICT (slug) DO NOTHING;
+
+═══════════════════════════════════════
+GLOBAL SEARCH SYSTEM
+═══════════════════════════════════════
+
+File: client/src/components/search/
+      GlobalSearch.jsx
+
+This is the most powerful UX feature 
+in this prompt. Search everything 
+from one place.
+
+────────────────────────────────────
+SEARCH TRIGGER
+────────────────────────────────────
+
+Three ways to open global search:
+
+1. Keyboard shortcut: Ctrl+K
+   (already defined in Prompt 9 
+   as placeholder — now implement it)
+
+2. Search icon in navbar:
+   Add magnifying glass icon to 
+   navbar right side (desktop)
+   Click → opens search
+
+3. Search bar in mobile drawer:
+   Text input at top of mobile drawer
+   On focus → opens search overlay
+
+────────────────────────────────────
+SEARCH OVERLAY UI
+────────────────────────────────────
+
+Full-screen overlay:
+  bg: rgba(0,0,0,0.8)
+  backdrop-filter: blur(8px)
+  z-index: 100
+  
+  On click outside search box:
+    Close overlay
+  
+  On Escape key:
+    Close overlay
+
+Search box container:
+  Position: top 15% of screen
+  Width: 640px (max-width: 90vw)
+  margin: 0 auto
+  
+  bg: #12121A
+  border: 1px solid #6C63FF
+  border-radius: 16px
+  overflow: hidden
+  box-shadow: 
+    0 24px 64px rgba(0,0,0,0.6),
+    0 0 0 1px #6C63FF
+
+Search input row:
+  Display: flex, align-items: center
+  padding: 16px 20px
+  border-bottom: 1px solid #2A2A3E
+  
+  Left: search icon (#6C63FF, 20px)
+  
+  Input:
+    flex-1, margin: 0 12px
+    bg: transparent
+    border: none, outline: none
+    font-size: 18px
+    color: #F0F0FF
+    placeholder: 
+      "Search projects, blueprints, 
+       components..."
+    placeholder color: #3A3A5A
+    
+    Auto-focus when overlay opens
+  
+  Right: 
+    If input has text:
+      Clear button (X icon, 
+                    #5A5A7A, 16px)
+    
+    "ESC" key hint:
+      kbd style pill
+      "ESC" text
+      color: #5A5A7A
+
+────────────────────────────────────
+SEARCH RESULTS DISPLAY
+────────────────────────────────────
+
+Below input, scrollable results area:
+  max-height: 480px
+  overflow-y: auto
+
+EMPTY INPUT STATE 
+(when search box opens, no query):
+
+  Section: "Recent Searches"
+  (if user has search history)
+    List of last 5 searches
+    Each: clock icon + query text
+    X button to remove from history
+    Click → fills search input
+  
+  Section: "Recently Viewed"
+    Last 4 viewed items
+    Each: item type icon + title
+    Click → navigates to item
+  
+  Section: "Popular Tags"
+    Horizontal scroll of tag pills
+    Click tag → searches for it
+
+LOADING STATE (typing, API call):
+  3 skeleton result rows
+  Shimmer animation
+  (same as from Prompt 9)
+
+RESULTS STATE (has results):
+
+Results are grouped by type:
+
+  Group: "Blueprints" 
+  (if blueprint results exist)
+    Show up to 4 blueprint results
+    "View all [X] blueprints →" 
+    if more than 4
+
+  Group: "Your Projects"
+  (if project results exist)
+    Show up to 3 project results
+    "View all [X] projects →"
+    if more than 4
+
+  Group: "Components"
+  (if component results exist)
+    Show up to 3 component results
+
+Each group heading:
+  text-xs, uppercase, 
+  letter-spacing: 2px
+  color: #5A5A7A
+  padding: 8px 16px 4px
+  border-top: 1px solid #1A1A2E
+  (except first group)
+
+RESULT ITEM design:
+  padding: 10px 16px
+  display: flex
+  align-items: center
+  gap: 12px
+  cursor: pointer
+  border-radius: 8px
+  margin: 2px 8px
+  
+  Hover/keyboard-focused:
+    bg: rgba(108,99,255,0.12)
+  
+  Left: type icon in colored circle:
+    Blueprint: git-branch 
+               (bg purple, 32px)
+    Project: folder 
+             (bg blue, 32px)
+    Component: cpu 
+               (bg cyan, 32px)
+  
+  Middle (flex-1):
+    Title (bold, #F0F0FF, 14px)
+    Subtitle (small, #9090B0, 12px):
+      Blueprint: "[difficulty] · 
+                  ₹[cost range]"
+      Project: "[status] · 
+                [step X of Y]"
+      Component: "[category] · 
+                  [quantity] owned"
+  
+  Right:
+    Arrow icon (#5A5A7A, 16px)
+    
+    For blueprints:
+      Fork count (small, muted)
+
+KEYBOARD NAVIGATION:
+  Arrow keys: move between results
+  Enter: navigate to selected result
+  
+  Track selected index with state:
+  const [selectedIdx, setSelectedIdx]
+    = useState(-1)
+  
+  Highlighted item gets same 
+  style as hover.
+
+NO RESULTS STATE:
+  Centered in results area:
+  
+  Icon: search (large, muted)
+  
+  "No results for "[query]""
+  (#F0F0FF, bold)
+  
+  Suggestions:
+    "Try searching for:"
+    • A component name (ESP32, DHT11)
+    • A project type (temperature, 
+      security, garden)
+    • A category (home automation, 
+      agriculture)
+  
+  Button: "Browse all blueprints"
+  → /blueprints
+
+────────────────────────────────────
+SEARCH LOGIC
+────────────────────────────────────
+
+File: client/src/hooks/useSearch.js
+
+Debounced search: 250ms
+
+On query change (after debounce):
+  If query length < 2: 
+    show empty input state
+  
+  If query length >= 2:
+    Call POST /api/search/global
+    Show loading state
+    Display results when done
+
+Also run client-side search on 
+already-loaded data:
+  If projects are loaded in memory:
+    Filter immediately (instant)
+    Then API results supplement
+
+Save to search history:
+  After user clicks a result:
+    POST /api/search/history
+    Body: { query, 
+            clickedId, 
+            clickedType,
+            resultsCount }
+
+═══════════════════════════════════════
+SEARCH RESULTS PAGE — /search
+═══════════════════════════════════════
+
+When user presses Enter in global 
+search OR clicks "View all X →":
+
+Navigate to /search?q=[query]
+&type=[type] (optional)
+
+Full search results page.
+
+────────────────────────────────────
+PAGE LAYOUT
+────────────────────────────────────
+
+Top: Search bar (pre-filled with query)
+     Large, full width
+     Searching again updates URL
+
+Below: Results layout:
+  Left sidebar (240px): 
+    Filters panel
+  Right (flex-1): 
+    Results
+
+────────────────────────────────────
+FILTERS SIDEBAR
+────────────────────────────────────
+
+Filter by type:
+  Checkboxes:
+  ☑ Blueprints
+  ☑ My Projects  
+  ☑ Components
+  
+  Each shows count in brackets:
+  ☑ Blueprints (12)
+  ☑ My Projects (3)
+
+Filter by difficulty 
+(when blueprints included):
+  ☐ Beginner
+  ☐ Intermediate
+  ☐ Advanced
+
+Filter by cost (blueprints):
+  ☐ Under ₹500
+  ☐ ₹500 – ₹1,000
+  ☐ ₹1,000 – ₹2,000
+  ☐ Above ₹2,000
+
+Filter by platform (blueprints):
+  ☐ ESP32
+  ☐ Arduino Uno
+  ☐ Arduino Nano
+  ☐ Raspberry Pi
+
+Filter by tags:
+  Scrollable tag cloud
+  Popular tags as pills
+  Click to toggle filter
+  Active tags: filled purple
+  Inactive: outlined
+
+Sort options (dropdown at top 
+of results area):
+  Most Relevant (default)
+  Most Popular
+  Newest First
+  Lowest Cost
+  Most Forked
+
+"Clear all filters" button
+(only shown when filters active)
+
+────────────────────────────────────
+RESULTS AREA
+────────────────────────────────────
+
+Results count:
+  "[X] results for "[query]""
+  If filtered: "Showing [X] of [Y]"
+
+Results are flat (not grouped) 
+on the full results page.
+
+Each result uses full-width 
+card layout (not grid):
+
+Full-width result card:
+  bg: #12121A
+  border: 1px solid #2A2A3E
+  border-radius: 12px
+  padding: 20px
+  margin-bottom: 12px
+  hover: border #6C63FF
+  
+  Left: Large type icon (48px circle)
+  
+  Middle (flex-1):
+    Type badge (small, colored)
+    Title (bold, 18px, #F0F0FF, mt-1)
+    Description (14px, #9090B0, 
+                 2 lines, mt-1)
+    
+    Tags row (mt-2):
+      Blueprint tags as small pills
+    
+    Stats row (mt-2):
+      Relevant stats for type:
+      Blueprint: forks · likes · cost
+      Project: status · last updated
+      Component: quantity · condition
+  
+  Right (flex column, align-end):
+    Primary action button:
+      Blueprint: "Fork Blueprint"
+      Project: "Open in IDE"
+      Component: "View Details"
+    
+    Secondary: bookmark/save icon
+
+Query highlighting:
+  In titles and descriptions,
+  highlight the matching query words:
+  
+  Wrap matching text in:
+  <mark> styled as:
+    bg: rgba(108,99,255,0.3)
+    color: #F0F0FF
+    border-radius: 3px
+    padding: 0 2px
+
+Pagination:
+  Show 20 results per page
+  "Load more" button at bottom
+  (not traditional pagination —
+   append results to existing list)
+  
+  Shows: "Showing 20 of [total]. 
+          Load 20 more."
+
+Mobile search results:
+  Filters: hidden behind 
+  "Filters" button that opens 
+  BottomSheet
+  Results: full width cards
+
+═══════════════════════════════════════
+ADVANCED BLUEPRINT DISCOVERY
+═══════════════════════════════════════
+
+Enhance the /blueprints page 
+with better discovery features.
+
+────────────────────────────────────
+TAG CLOUD SECTION
+────────────────────────────────────
+
+Add below the filter bar,
+above blueprint grid:
+
+"Browse by Tag" section:
+  Horizontally scrollable 
+  tag pills row.
+  
+  Tags grouped and colored:
+    Platform tags: blue
+    Category tags: purple
+    Component tags: cyan
+    Budget tags: green
+    Difficulty tags: orange
+  
+  Each tag pill:
+    bg: rgba(color, 0.12)
+    border: 1px solid rgba(color, 0.3)
+    color: tag color
+    border-radius: full
+    padding: 6px 14px
+    font-size: 13px
+    cursor: pointer
+    
+    Hover: bg rgba(color, 0.25)
+    
+    Active (selected):
+      bg: tag color
+      color: white
+  
+  Show usage count on hover:
+    tooltip: "[X] blueprints"
+  
+  Multiple tags can be selected.
+  AND logic (blueprint must have 
+  ALL selected tags).
+
+────────────────────────────────────
+BLUEPRINT RECOMMENDATIONS
+────────────────────────────────────
+
+Add "Recommended for You" section
+above blueprint grid.
+(Only shown when no search active)
+
+Horizontal scrollable row:
+  5 recommended blueprints
+
+Recommendation logic 
+(computed on backend):
+
+GET /api/blueprints/recommended
+  
+  Backend logic:
+  1. Get user's profile 
+     (skill level, role)
+  2. Get user's project history 
+     (what have they built)
+  3. Get user's component inventory
+  4. Score blueprints:
+     
+     +30 if matches skill level
+     +20 if uses components 
+          they own
+     +15 if in a category they've 
+          built before
+     +10 if beginner and 
+          has no projects yet
+     -10 if they've already 
+          forked it
+     -20 if too advanced for 
+          their level
+  
+  5. Return top 5 by score
+  
+  If user has no history:
+    Return top 5 featured 
+    blueprints (fallback)
+
+Each card in row:
+  Width: 260px, flex-shrink: 0
+  Same card design as blueprints page
+  Small "Recommended" badge:
+    (star icon + "For You")
+    bg: rgba(255,184,77,0.15)
+    color: #FFB84D
+
+────────────────────────────────────
+SIMILAR BLUEPRINTS
+────────────────────────────────────
+
+On Blueprint Detail page (/blueprints/:id):
+
+Add section at bottom:
+"Similar Blueprints"
+
+3 cards in a row (1 on mobile)
+
+Backend logic:
+GET /api/blueprints/:id/similar
+
+  Score other blueprints:
+  +40 if same category
+  +20 if same difficulty
+  +15 if shares 2+ components
+  +10 if same platform
+  
+  Return top 3 excluding current
+
+════════════════════════════════
+RECENTLY VIEWED SYSTEM
+════════════════════════════════
+
+Track and display recently 
+viewed content across the app.
+
+────────────────────────────────────
+TRACKING (automatic)
+────────────────────────────────────
+
+When user views any of these:
+  Blueprint detail page → track
+  Project workspace → track
+  Component detail → track
+
+Tracking call:
+POST /api/recently-viewed
+Body: { 
+  userId, 
+  itemId, 
+  itemType, 
+  itemTitle 
+}
+
+Backend:
+  UPSERT into recently_viewed:
+    (user_id, item_id, item_type)
+    → unique constraint so same 
+      item updates viewed_at 
+      instead of creating duplicate
+  
+  Keep only last 20 per user:
+    DELETE oldest if count > 20
+
+────────────────────────────────────
+RECENTLY VIEWED UI
+────────────────────────────────────
+
+Show in these places:
+
+1. Global search empty state
+   (already mentioned above)
+
+2. New section on Dashboard:
+   "Recently Viewed"
+   
+   Horizontal scrollable row:
+   Show last 6 viewed items
+   
+   Mini cards (140px wide):
+     Type icon (large, colored)
+     Item title (small, 2 lines)
+     Type badge (blueprint/project)
+     "View →" link
+   
+   Only shown if user has 
+   viewed 2+ items.
+   
+   "Clear history" link 
+   (top right, small, muted)
+
+3. /ide page recently viewed:
+   "Recently in IDE"
+   Shows last 3 projects opened
+   in IDE specifically
+   (filter recently_viewed by 
+    type = 'project')
+
+═══════════════════════════════════════
+TRENDING CONTENT
+═══════════════════════════════════════
+
+────────────────────────────────────
+TRENDING BLUEPRINTS
+────────────────────────────────────
+
+Add "Trending This Week" section 
+to /blueprints page.
+(Show above tag cloud, 
+ below filter bar)
+
+Backend: GET /api/blueprints/trending
+
+Logic:
+  Score blueprints:
+  Points = (fork_count * 3) + 
+           (like_count * 2) + 
+           (view_count * 0.5)
+  
+  Only count activity from 
+  last 7 days:
+    Need to track this properly.
+    
+    Add to blueprints table:
+    ALTER TABLE blueprints
+      ADD COLUMN IF NOT EXISTS
+      weekly_forks integer DEFAULT 0;
+    ALTER TABLE blueprints
+      ADD COLUMN IF NOT EXISTS
+      weekly_views integer DEFAULT 0;
+    ALTER TABLE blueprints
+      ADD COLUMN IF NOT EXISTS
+      weekly_likes integer DEFAULT 0;
+    
+    Reset weekly counts every Monday.
+    (Add a scheduled job or 
+     check/reset on API call)
+  
+  Return top 4 by weekly score
+
+UI: Horizontal scroll row
+Small "🔥 Trending" badge on cards
+
+────────────────────────────────────
+TRENDING TAGS
+────────────────────────────────────
+
+In tag cloud on /blueprints:
+
+Sort tags by usage_count desc.
+Top 3 tags get "Hot" badge:
+  Small flame icon next to tag name
+
+────────────────────────────────────
+POPULAR THIS WEEK WIDGET
+────────────────────────────────────
+
+On Dashboard, add small widget
+in right column (if 2-column 
+layout on desktop):
+
+"Popular This Week" sidebar card:
+  bg: #12121A
+  border: #2A2A3E
+  border-radius: 12px
+  padding: 16px
+  
+  Heading: "🔥 Trending Blueprints"
+  
+  List of 3 trending blueprints:
+    Each: rank number + title + 
+          fork count
+    
+    Rank number style:
+      1st: color #FFB84D (gold)
+      2nd: color #9090B0 (silver)
+      3rd: color #C87533 (bronze)
+  
+  "View all →" link → /blueprints
+
+═══════════════════════════════════════
+PROJECT SEARCH & FILTERING
+═══════════════════════════════════════
+
+Enhance /projects page with 
+better search and filtering.
+
+────────────────────────────────────
+SEARCH BAR
+────────────────────────────────────
+
+Already exists in some form.
+Enhance it:
+
+Full-width search input at top:
+  Icon: search (left inside input)
+  Placeholder: "Search your projects..."
+  
+  Real-time filtering:
+    Searches: title, description, 
+    platform, component names
+    
+    Client-side (instant, no API):
+    Filter already-loaded projects
+    array by search term
+
+────────────────────────────────────
+ADVANCED FILTERS
+────────────────────────────────────
+
+Add collapsible filter row 
+below search:
+
+"Filters" button (secondary, small)
+On click: filter row expands:
+
+  Status filter:
+    Pills: All | Draft | 
+           In Progress | Completed |
+           Archived
+  
+  Platform filter:
+    Pills: All | ESP32 | 
+           Arduino Uno | 
+           Arduino Nano | Other
+  
+  Date filter:
+    Dropdown: All time | 
+              This week | 
+              This month | 
+              Last 3 months
+  
+  Sort:
+    Dropdown: Last Updated |
+              Newest | 
+              Oldest |
+              Most Progress |
+              Alphabetical
+
+Active filter count badge:
+  Show on "Filters" button 
+  when filters are active:
+  "Filters (3)" in purple
+
+Clear all: appears when 
+any filter is active
+
+────────────────────────────────────
+PROJECT LIST VIEW TOGGLE
+────────────────────────────────────
+
+Add view toggle to projects page:
+  Top right: [⊞ Grid] [☰ List]
+  
+  Grid view (current):
+    2 columns desktop
+    1 column mobile
+    ProjectCard component
+  
+  List view (new):
+    Single column
+    Compact rows
+    
+    Row layout:
+      Status dot | Title | 
+      Platform | Progress | 
+      Last updated | Actions
+    
+    More information density
+    Better for power users 
+    with many projects
+
+Save preference:
+  localStorage.setItem(
+    'nexora_projects_view', 
+    'grid'|'list'
+  )
+
+═══════════════════════════════════════
+COMPONENT SEARCH INTELLIGENCE
+═══════════════════════════════════════
+
+Enhance component search 
+on /components page.
+
+────────────────────────────────────
+SMART SEARCH
+────────────────────────────────────
+
+Current: basic name search.
+Enhance with:
+
+Fuzzy search:
+  "esp" matches "ESP32 DevKit V1"
+  "dht" matches "DHT22 Temperature"
+  "ultra" matches "HC-SR04 Ultrasonic"
+  
+  Simple implementation:
+  Filter where component.name
+    .toLowerCase()
+    .includes(query.toLowerCase())
+  OR
+  component.name
+    .toLowerCase()
+    .split(' ')
+    .some(word => 
+      word.startsWith(
+        query.toLowerCase()
+      )
+    )
+
+Search also covers notes field:
+  If user wrote "bought from Robu"
+  in notes, searching "robu" finds it
+
+────────────────────────────────────
+COMPONENT USAGE INSIGHTS
+────────────────────────────────────
+
+On /components page, 
+add "Insights" section at top:
+
+Collapsed by default.
+"Show Insights" toggle button.
+
+When expanded:
+
+  "Your Most Used Components"
+  Bar chart (CSS bars, horizontal):
+    Top 5 components by 
+    project appearances
+    Bar: bg #6C63FF, 
+         width proportional to count
+    Label: component name + count
+
+  "Components You Haven't Used"
+  List of components in inventory
+  that appear in 0 projects:
+    "These components are sitting idle.
+     Find a project for them:"
+    Each: component name + 
+          "Find Projects" button
+    → Triggers suggestion AI from 
+      Prompt 5
+
+  "Recently Added"
+    Last 3 components added
+    with "X days ago" timestamp
+
+═══════════════════════════════════════
+PERSONALIZED RECOMMENDATIONS
+═══════════════════════════════════════
+
+File: server/services/
+      recommendations.js
+
+Service that computes personalized
+content for each user.
+
+────────────────────────────────────
+RECOMMENDATION DATA INPUTS
+────────────────────────────────────
+
+For each user, collect:
+  - Profile: role, skill level, 
+             college, course
+  - Projects: categories built, 
+               components used,
+               completion rate
+  - Blueprint interactions: 
+      viewed, liked, forked
+  - Component inventory: 
+      what they own
+  - Search history: 
+      what they've searched for
+
+────────────────────────────────────
+RECOMMENDATION OUTPUTS
+────────────────────────────────────
+
+The recommendation service 
+produces 3 outputs:
+
+1. Recommended Blueprints (top 5)
+   Used in: /blueprints page,
+            dashboard widget
+
+2. "You might need" Components
+   Components commonly used with
+   components they already own
+   but they don't have yet
+   
+   Example: 
+   User has ESP32 + DHT22
+   → Suggest: OLED Display, 
+              because 70% of 
+              ESP32+DHT22 projects 
+              also use OLED
+
+3. Next Project Suggestion
+   Based on their skill progression:
+   If they've built 2 beginner projects:
+     → Suggest an intermediate one
+   If they keep building sensors:
+     → Suggest an actuator project
+
+────────────────────────────────────
+RECOMMENDATION UI
+────────────────────────────────────
+
+File: client/src/components/
+      recommendations/
+      RecommendationWidget.jsx
+
+On Dashboard, replace the current 
+hardcoded blueprint suggestions 
+with this personalized widget:
+
+Widget header:
+  "✦ Recommended for You"
+  Subtext: "Based on your projects 
+            and components"
+  "Refresh" button (refresh icon, 
+   small, calls API again)
+
+3 blueprint cards in a row
+(same as current dashboard cards)
+But with personalization reasons:
+
+Below each card:
+  Small tag:
+    "💡 You own 3/4 components"
+    or "🎯 Matches your skill level"
+    or "📈 Next step in your journey"
+
+"Why these?" link:
+  Opens small popover explaining
+  the recommendation logic simply.
+
+═══════════════════════════════════════
+BACKEND ROUTES TO ADD
+═══════════════════════════════════════
+
+POST /api/search/global
+  Body: { 
+    query, 
+    userId,
+    types: ['blueprints', 
+            'projects', 
+            'components'],
+    limit: 10
+  }
+  
+  Backend search logic:
+  
+  For blueprints:
+    Use PostgreSQL full-text search:
+    SELECT * FROM blueprints
+    WHERE search_vector @@ 
+      plainto_tsquery('english', query)
+    AND is_public = true
+    ORDER BY 
+      ts_rank(search_vector, 
+        plainto_tsquery(query)) DESC
+    LIMIT 4
+    
+    Also do ILIKE fallback:
+    WHERE title ILIKE '%query%'
+    OR description ILIKE '%query%'
+  
+  For projects:
+    SELECT * FROM projects
+    WHERE user_id = userId
+    AND (
+      title ILIKE '%query%' OR
+      description ILIKE '%query%'
+    )
+    LIMIT 3
+  
+  For components:
+    SELECT * FROM user_components
+    WHERE user_id = userId
+    AND name ILIKE '%query%'
+    LIMIT 3
+  
+  Combine results with type labels.
+  Return { results, totalCount }
+
+POST /api/search/history
+  Body: { userId, query, 
+          clickedId, clickedType,
+          resultsCount }
+  → Saves to search_history
+  → Returns { success }
+
+GET /api/search/history/:userId
+  → Returns last 10 searches
+  → Distinct queries only
+  → Returns { history }
+
+DELETE /api/search/history/:userId
+  → Clears search history
+  → Returns { success }
+
+POST /api/recently-viewed
+  Body: { userId, itemId, 
+          itemType, itemTitle }
+  → Upserts recently_viewed
+  → Keeps last 20 per user
+  → Returns { success }
+
+GET /api/recently-viewed/:userId
+  Query: type (optional filter)
+  → Returns last 20 viewed items
+  → Ordered by viewed_at desc
+
+GET /api/blueprints/recommended
+  Query: userId
+  → Runs recommendation scoring
+  → Returns top 5 blueprints
+  → Includes personalization reasons
+
+GET /api/blueprints/trending
+  → Scores by weekly activity
+  → Returns top 4 blueprints
+  → Includes trending score
+
+GET /api/blueprints/:id/similar
+  → Scores other blueprints 
+    by similarity
+  → Returns top 3
+
+GET /api/blueprints/tags
+  → Returns all tags ordered 
+    by usage_count desc
+  → Grouped by category
+
+GET /api/blueprints?tags[]=esp32
+  &tags[]=beginner
+  → Filter blueprints by tags
+    (AND logic)
+  → Returns matching blueprints
+
+POST /api/recently-viewed/clear
+  Body: { userId }
+  → Deletes all recently_viewed 
+    for user
+
+GET /api/recommendations/components
+  Query: userId
+  → Returns component suggestions
+    based on inventory
+
+═══════════════════════════════════════
+CONNECT TO EXISTING FEATURES
+═══════════════════════════════════════
+
+1. Navbar: Add search icon button
+   Desktop: magnifying glass icon
+   in navbar right side
+   Click → opens GlobalSearch overlay
+
+2. App.jsx: 
+   Ctrl+K shortcut now opens 
+   GlobalSearch overlay
+   (replace the placeholder 
+    from Prompt 9)
+   
+   Add global state for search:
+   const [searchOpen, setSearchOpen]
+     = useState(false)
+   
+   Pass to GlobalSearch component
+   that renders at App level
+
+3. /blueprints page:
+   Wire existing search bar to 
+   new full-text search API
+   Add tag cloud section
+   Add trending section
+   Add recommended section
+   Replace hardcoded seed data 
+   display with API-driven content
+
+4. Dashboard:
+   Replace hardcoded blueprint 
+   suggestions with 
+   RecommendationWidget
+   Add "Recently Viewed" section
+   Add "Popular This Week" widget
+
+5. Blueprint detail page:
+   Add "Similar Blueprints" section
+   Track view in recently_viewed
+
+6. Workspace page:
+   Track project view in 
+   recently_viewed on mount
+
+7. /projects page:
+   Add view toggle (grid/list)
+   Add advanced filters
+   Wire search to client-side filter
+
+═══════════════════════════════════════
+IMPORTANT RULES
+═══════════════════════════════════════
+
+1. Global search overlay must open
+   INSTANTLY when Ctrl+K is pressed.
+   No loading delay for the overlay.
+   Results load after typing starts.
+
+2. Search must feel fast.
+   Client-side filtering for 
+   already-loaded data is instant.
+   API search for full database 
+   is debounced at 250ms.
+   Show client-side results 
+   immediately while API loads.
+
+3. Keyboard navigation in search
+   (arrow keys + Enter) is 
+   non-negotiable. Many power users
+   never use the mouse.
+
+4. Recommendations must NEVER 
+   show content the user has 
+   already forked or created.
+   Filter these out in the 
+   backend query.
+
+5. Search history is personal.
+   Never show one user's 
+   search history to another.
+   RLS handles this but double-check.
+
+6. The tag system must work
+   both ways:
+   - Click tag on blueprint → 
+     goes to /blueprints?tag=X
+   - Click tag in filter → 
+     filters current results
+   
+   URL params must be readable:
+   /blueprints?tag=esp32&tag=beginner
+   should pre-select those filters
+   on page load.
+
+7. "Load more" on search results 
+   must append, not replace results.
+   Never lose the user's scroll 
+   position when loading more.
+
+8. After building confirm:
+   ✓ Ctrl+K opens search overlay
+   ✓ Typing shows results in 
+     under 500ms
+   ✓ Results grouped by type
+   ✓ Keyboard navigation works
+   ✓ Clicking result navigates 
+     and closes overlay
+   ✓ ESC closes overlay
+   ✓ /search page loads with 
+     filters sidebar
+   ✓ Tag filtering works on 
+     /blueprints
+   ✓ Trending section shows 
+     on /blueprints
+   ✓ Recommended section shows 
+     on dashboard
+   ✓ Recently viewed tracks 
+     blueprint views
+   ✓ Recently viewed shows 
+     on dashboard
+   ✓ Similar blueprints show 
+     on detail page
+   ✓ Project list/grid toggle works
+   ✓ Project advanced filters work
+   ✓ Component fuzzy search works
+   ✓ Search history saves and 
+     shows in overlay
+   ✓ Search history can be cleared

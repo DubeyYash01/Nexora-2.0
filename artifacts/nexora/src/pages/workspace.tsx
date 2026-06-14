@@ -428,6 +428,12 @@ export default function Workspace() {
         setIdeCode(p.ide_code ?? "");
         setInstructionChecks(p.instruction_checks ?? {});
 
+        // Track project view in recently-viewed
+        authFetch("/api/recently-viewed", {
+          method: "POST",
+          body: JSON.stringify({ itemId: projectId, itemType: "project", itemTitle: p.title }),
+        }).catch(() => {});
+
         // Restore accumulated libraries
         if (p.build_plan?.buildPlan?.steps) {
           const libs: LibraryType[] = [];

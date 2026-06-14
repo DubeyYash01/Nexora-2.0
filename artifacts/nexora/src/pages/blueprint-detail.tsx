@@ -67,6 +67,8 @@ export default function BlueprintDetailPage() {
   const [showInventoryMatch, setShowInventoryMatch] = useState(false);
   const [matchingInventory, setMatchingInventory] = useState(false);
 
+  const [similarBlueprints, setSimilarBlueprints] = useState<Blueprint[]>([]);
+
   useEffect(() => {
     if (!id) return;
     const fetchFn = user ? authFetch : fetch;
@@ -77,9 +79,21 @@ export default function BlueprintDetailPage() {
           setBlueprint(data.blueprint);
           setLiked(data.blueprint.userLiked ?? false);
           setLikeCount(data.blueprint.like_count ?? 0);
+          // Track recently viewed
+          if (user) {
+            authFetch("/api/recently-viewed", {
+              method: "POST",
+              body: JSON.stringify({ itemId: id, itemType: "blueprint", itemTitle: data.blueprint.title }),
+            }).catch(() => {});
+          }
         }
       })
       .finally(() => setLoading(false));
+    // Load similar blueprints
+    fetch(`/api/blueprints/${id}/similar`)
+      .then((r) => r.json())
+      .then((d: { blueprints?: Blueprint[] }) => setSimilarBlueprints(d.blueprints ?? []))
+      .catch(() => {});
   }, [id, user]);
 
   const handleLike = async () => {
@@ -493,6 +507,43 @@ export default function BlueprintDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Similar Blueprints */}
+      {similarBlueprints.length > 0 && (
+        <div className="mt-8 pt-8 border-t" style={{ borderColor: "#2A2A3E" }}>
+          <h2 className="text-lg font-bold mb-4" style={{ color: "#F0F0FF" }}>Similar Blueprints</h2>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {similarBlueprints.map((b) => {
+              const diffs: Record<string, { bg: string; color: string }> = {
+                Beginner: { bg: "rgba(0,200,150,0.1)", color: "#00C896" },
+                Intermediate: { bg: "rgba(255,184,77,0.1)", color: "#FFB84D" },
+                Advanced: { bg: "rgba(255,90,90,0.1)", color: "#FF5A5A" },
+              };
+              const d = diffs[b.difficulty ?? "Beginner"] ?? diffs.Beginner;
+              return (
+                <div
+                  key={b.id}
+                  onClick={() => setLocation(`/blueprints/${b.id}`)}
+                  className="p-4 rounded-xl border cursor-pointer transition-all"
+                  style={{ background: "#12121A", borderColor: "#2A2A3E" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#6C63FF")}
+                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#2A2A3E")}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <h4 className="font-semibold text-sm" style={{ color: "#F0F0FF" }}>{b.title}</h4>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: d.bg, color: d.color }}>{b.difficulty}</span>
+                  </div>
+                  <p className="text-xs line-clamp-2" style={{ color: "#9090B0" }}>{b.description}</p>
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t text-xs" style={{ borderColor: "#2A2A3E" }}>
+                    <span style={{ color: "#00C896" }}>₹{b.estimated_cost_min}–₹{b.estimated_cost_max}</span>
+                    <span style={{ color: "#5A5A7A" }}>{b.platform}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {forkOpen && blueprint && (
         <ForkModal blueprint={blueprint} onClose={() => setForkOpen(false)} />

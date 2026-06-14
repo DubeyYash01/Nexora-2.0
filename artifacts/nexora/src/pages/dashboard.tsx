@@ -12,14 +12,14 @@ import {
   LayoutDashboard, Folder, Plus, Grid2x2, Cpu,
   Sparkles, Settings, LogOut, Loader2,
   FolderOpen, Zap, CheckCircle2, Package,
-  Lightbulb, ThermometerSun, ParkingSquare, Droplets,
-  ClipboardList, Code2,
+  ClipboardList, Code2, Search, TrendingUp, GitFork, Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ProjectCard from "@/components/ui/ProjectCard";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import MobileNav from "@/components/ui/MobileNav";
+import RecommendationWidget from "@/components/search/RecommendationWidget";
 
 export function DashboardLayout({
   children,
@@ -146,6 +146,18 @@ export function DashboardLayout({
         <header className="h-16 border-b border-border bg-card items-center justify-between px-6 flex-shrink-0 hidden lg:flex">
           <h1 className="text-lg font-semibold text-foreground">{title}</h1>
           <div className="flex items-center gap-3">
+            {/* Search button */}
+            <button
+              onClick={() => document.dispatchEvent(new CustomEvent("nexora:open-search"))}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-all"
+              style={{ background: "#12121A", borderColor: "#2A2A3E", color: "#5A5A7A" }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#6C63FF"; e.currentTarget.style.color = "#9090B0"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A3E"; e.currentTarget.style.color = "#5A5A7A"; }}
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span className="hidden xl:inline">Search</span>
+              <kbd className="text-[10px] px-1.5 py-0.5 rounded border hidden xl:inline-block" style={{ background: "#1A1A2E", borderColor: "#3A3A5E", color: "#5A5A7A" }}>⌘K</kbd>
+            </button>
             <NotificationBell />
             <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
               {initials}
@@ -178,6 +190,101 @@ interface DashBlueprint {
   components: { list?: Array<{ name: string }> };
 }
 
+function RecentlyViewedDash() {
+  const [items, setItems] = useState<{ id: string; item_id: string; item_type: string; item_title: string; viewed_at: string }[]>([]);
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    authFetch("/api/recently-viewed")
+      .then((r) => r.json())
+      .then((d: { items?: typeof items }) => setItems((d.items ?? []).slice(0, 6)))
+      .catch(() => {});
+  }, []);
+
+  if (!items.length) return null;
+
+  const typeIcons: Record<string, string> = { blueprint: "🧩", project: "📁", component: "🔌" };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-base lg:text-lg font-semibold text-foreground flex items-center gap-2">
+          <Clock className="w-4 h-4" style={{ color: "#9090B0" }} /> Recently Viewed
+        </h3>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        {items.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => {
+              const url = item.item_type === "blueprint" ? `/blueprints/${item.item_id}` : item.item_type === "project" ? `/workspace/${item.item_id}` : `/components`;
+              setLocation(url);
+            }}
+            className="p-3 rounded-xl border text-left transition-all"
+            style={{ background: "#12121A", borderColor: "#2A2A3E" }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#6C63FF")}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#2A2A3E")}
+          >
+            <div className="text-base mb-1">{typeIcons[item.item_type] ?? "📌"}</div>
+            <p className="text-xs font-medium truncate" style={{ color: "#F0F0FF" }}>{item.item_title}</p>
+            <p className="text-[10px] mt-0.5 capitalize" style={{ color: "#5A5A7A" }}>{item.item_type}</p>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TrendingWidget() {
+  const [blueprints, setBlueprints] = useState<DashBlueprint[]>([]);
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    fetch("/api/blueprints/trending")
+      .then((r) => r.json())
+      .then((d: { blueprints?: DashBlueprint[] }) => setBlueprints((d.blueprints ?? []).slice(0, 4)))
+      .catch(() => {});
+  }, []);
+
+  if (!blueprints.length) return null;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-base lg:text-lg font-semibold text-foreground flex items-center gap-2">
+          <TrendingUp className="w-4 h-4" style={{ color: "#00D4FF" }} /> Popular This Week
+        </h3>
+        <button onClick={() => setLocation("/blueprints?sort=popular")} className="text-sm transition-colors" style={{ color: "#6C63FF" }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "#5854E0")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "#6C63FF")}>
+          View all →
+        </button>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {blueprints.map((bp, i) => (
+          <button
+            key={bp.id}
+            onClick={() => setLocation(`/blueprints/${bp.id}`)}
+            className="p-3 rounded-xl border text-left transition-all flex flex-col gap-2"
+            style={{ background: "#12121A", borderColor: "#2A2A3E" }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#00D4FF")}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#2A2A3E")}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold" style={{ color: "#00D4FF" }}>#{i + 1}</span>
+              <div className="flex items-center gap-1 text-xs" style={{ color: "#5A5A7A" }}>
+                <GitFork className="w-3 h-3" /> {bp.fork_count ?? 0}
+              </div>
+            </div>
+            <p className="text-xs font-semibold leading-snug" style={{ color: "#F0F0FF" }}>{bp.title}</p>
+            <p className="text-[11px]" style={{ color: "#00C896" }}>₹{bp.estimated_cost_min}–{bp.estimated_cost_max}</p>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Greeting ───────────────────────────────────────────── */
 function getGreeting() {
   const h = new Date().getHours();
@@ -206,19 +313,9 @@ export default function Dashboard() {
       .catch(() => {});
   }, []);
 
-  const [featuredBlueprints, setFeaturedBlueprints] = useState<DashBlueprint[]>([]);
-  const [blueprintsLoading, setBlueprintsLoading] = useState(true);
   useEffect(() => {
-    const loadBlueprints = async () => {
-      try {
-        await fetch("/api/blueprints/seed");
-        const res = await authFetch("/api/blueprints?is_featured=true&limit=3&sort=popular");
-        const data = await res.json() as { blueprints?: DashBlueprint[] };
-        setFeaturedBlueprints((data.blueprints ?? []).slice(0, 3));
-      } catch { /* silent */ }
-      finally { setBlueprintsLoading(false); }
-    };
-    loadBlueprints();
+    // Seed blueprints on first load
+    fetch("/api/blueprints/seed").catch(() => {});
   }, []);
 
   const firstName = profile?.full_name?.split(" ")[0] || "Builder";
@@ -358,82 +455,14 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Blueprints */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-base lg:text-lg font-semibold text-foreground">Start from a Blueprint</h3>
-              <p className="text-xs lg:text-sm text-muted-foreground mt-0.5 hidden sm:block">
-                Pre-built IoT project templates you can customize
-              </p>
-            </div>
-            <button onClick={() => setLocation("/blueprints")}
-              className="text-sm transition-colors flex items-center gap-1"
-              style={{ color: "#6C63FF" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#5854E0")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#6C63FF")}>
-              View all →
-            </button>
-          </div>
-          {blueprintsLoading ? (
-            <div className="flex justify-center py-10">
-              <Loader2 className="w-6 h-6 animate-spin" style={{ color: "#6C63FF" }} />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {featuredBlueprints.map((bp) => {
-                const diffColors: Record<string, { bg: string; color: string }> = {
-                  Beginner: { bg: "rgba(0,200,150,0.1)", color: "#00C896" },
-                  Intermediate: { bg: "rgba(255,184,77,0.1)", color: "#FFB84D" },
-                  Advanced: { bg: "rgba(255,90,90,0.1)", color: "#FF5A5A" },
-                };
-                const d = diffColors[bp.difficulty] ?? diffColors.Beginner;
-                const compList = bp.components?.list ?? [];
-                return (
-                  <div
-                    key={bp.id}
-                    className="p-4 lg:p-5 rounded-xl border flex flex-col gap-3 transition-all duration-200 cursor-pointer"
-                    style={{ background: "#12121A", borderColor: "#2A2A3E" }}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#6C63FF"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A3E"; }}
-                    onClick={() => setLocation(`/blueprints/${bp.id}`)}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <h4 className="font-semibold text-foreground text-sm leading-snug">{bp.title}</h4>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-                        style={{ background: d.bg, color: d.color }}>
-                        {bp.difficulty}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{bp.description}</p>
-                    <div className="flex flex-wrap gap-1">
-                      {compList.slice(0, 3).map((c) => (
-                        <span key={c.name} className="text-[10px] px-1.5 py-0.5 rounded border"
-                          style={{ background: "#1A1A2E", color: "#9090B0", borderColor: "#2A2A3E" }}>
-                          {c.name}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="flex items-center justify-between mt-auto pt-2 border-t"
-                      style={{ borderColor: "#2A2A3E" }}>
-                      <span className="text-xs font-semibold" style={{ color: "#00C896" }}>
-                        ₹{bp.estimated_cost_min}–₹{bp.estimated_cost_max}
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs px-3"
-                        onClick={(e) => { e.stopPropagation(); setLocation(`/blueprints/${bp.id}`); }}
-                      >
-                        Use Blueprint
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        {/* Recommendations */}
+        <RecommendationWidget />
+
+        {/* Recently Viewed */}
+        <RecentlyViewedDash />
+
+        {/* Trending This Week */}
+        <TrendingWidget />
 
       </div>
 

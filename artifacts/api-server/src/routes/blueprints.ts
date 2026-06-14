@@ -248,4 +248,115 @@ router.post("/blueprints/review", verifyToken, async (req: AuthRequest, res: Res
   res.json({ review });
 });
 
+router.get("/blueprints/tags", async (_req, res: Response) => {
+  const { data } = await supabase
+    .from("blueprint_tags")
+    .select("id,name,slug,usage_count,category")
+    .order("usage_count", { ascending: false });
+  res.json({ tags: data ?? [] });
+});
+
+router.get("/blueprints/trending", async (_req, res: Response) => {
+  const { data } = await supabase
+    .from("blueprints")
+    .select("id,title,description,difficulty,category,platform,fork_count,like_count,view_count,estimated_cost_min,estimated_cost_max,estimated_time,tags,components")
+    .eq("is_public", true);
+
+  const blueprints = data ?? [];
+  const scored = blueprints
+    .map((b) => ({
+      ...b,
+      score: ((b.fork_count ?? 0) * 3) + ((b.like_count ?? 0) * 2) + ((b.view_count ?? 0) * 0.3),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4);
+
+  res.json({ blueprints: scored });
+});
+
+router.get("/blueprints/recommended", verifyToken, async (req: AuthRequest, res: Response) => {
+  const userId = req.userId!;
+
+  const [{ data: profile }, { data: projects }, { data: components }, { data: forks }] = await Promise.all([
+    supabase.from("profiles").select("role,plan").eq("id", userId).single(),
+    supabase.from("projects").select("ai_analysis,components,status").eq("user_id", userId),
+    supabase.from("user_components").select("name,category").eq("user_id", userId),
+    supabase.from("blueprint_forks").select("blueprint_id").eq("forked_by", userId),
+  ]);
+
+  const { data: allBlueprints } = await supabase
+    .from("blueprints")
+    .select("id,title,description,difficulty,category,platform,fork_count,like_count,estimated_cost_min,estimated_cost_max,estimated_time,tags,components,is_featured")
+    .eq("is_public", true);
+
+  const forkedIds = new Set((forks ?? []).map((f) => f.blueprint_id));
+  const userComps = new Set((components ?? []).map((c) => c.name.toLowerCase()));
+  const builtCategories = new Set((projects ?? []).map((p) => (p.ai_analysis as { category?: string })?.category ?? "").filter(Boolean));
+  const isNewUser = (projects ?? []).length === 0;
+  const userDifficulty = (projects ?? []).some((p) => p.status === "completed") ? "Intermediate" : "Beginner";
+
+  const scored = (allBlueprints ?? [])
+    .filter((b) => !forkedIds.has(b.id))
+    .map((b) => {
+      let score = 0;
+      const reasons: string[] = [];
+      const bpComps: string[] = ((b.components as { list?: { name: string }[] })?.list ?? []).map((c) => c.name.toLowerCase());
+      const owned = bpComps.filter((c) => userComps.has(c)).length;
+
+      if (b.difficulty === userDifficulty) { score += 30; reasons.push("Matches your skill level"); }
+      if (owned > 0) { score += 20; reasons.push(`You own ${owned}/${bpComps.length} components`); }
+      if (builtCategories.has(b.category ?? "")) { score += 15; reasons.push("Category you've built before"); }
+      if (isNewUser && b.difficulty === "Beginner") { score += 10; reasons.push("Great for beginners"); }
+      if (b.difficulty === "Advanced" && userDifficulty === "Beginner") score -= 20;
+      if (b.is_featured) score += 5;
+
+      return { ...b, score, reason: reasons[0] ?? "Recommended for you" };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+
+  if (scored.length < 5) {
+    const { data: featured } = await supabase
+      .from("blueprints")
+      .select("id,title,description,difficulty,category,platform,fork_count,like_count,estimated_cost_min,estimated_cost_max,estimated_time,tags,components,is_featured")
+      .eq("is_public", true)
+      .eq("is_featured", true)
+      .order("fork_count", { ascending: false })
+      .limit(5);
+    const extraIds = new Set(scored.map((b) => b.id));
+    const extras = (featured ?? []).filter((b) => !extraIds.has(b.id) && !forkedIds.has(b.id)).slice(0, 5 - scored.length).map((b) => ({ ...b, score: 0, reason: "Featured blueprint" }));
+    res.json({ blueprints: [...scored, ...extras] });
+    return;
+  }
+
+  res.json({ blueprints: scored });
+});
+
+router.get("/blueprints/:id/similar", async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  const { data: current } = await supabase.from("blueprints").select("id,category,difficulty,platform,components").eq("id", id).single();
+  if (!current) { res.json({ blueprints: [] }); return; }
+
+  const { data: others } = await supabase
+    .from("blueprints")
+    .select("id,title,description,difficulty,category,platform,fork_count,like_count,estimated_cost_min,estimated_cost_max,estimated_time,tags,components")
+    .eq("is_public", true)
+    .neq("id", id);
+
+  const currentComps = new Set(((current.components as { list?: { name: string }[] })?.list ?? []).map((c) => c.name.toLowerCase()));
+
+  const scored = (others ?? []).map((b) => {
+    let score = 0;
+    if (b.category === current.category) score += 40;
+    if (b.difficulty === current.difficulty) score += 20;
+    if (b.platform === current.platform) score += 10;
+    const shared = ((b.components as { list?: { name: string }[] })?.list ?? []).filter((c) => currentComps.has(c.name.toLowerCase())).length;
+    if (shared >= 2) score += 15;
+    return { ...b, score };
+  }).sort((a, b) => b.score - a.score).slice(0, 3);
+
+  res.json({ blueprints: scored });
+});
+
 export default router;
