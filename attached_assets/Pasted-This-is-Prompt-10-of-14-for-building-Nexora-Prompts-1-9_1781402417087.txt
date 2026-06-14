@@ -1,0 +1,1310 @@
+This is Prompt 10 of 14 for building Nexora.
+Prompts 1-9 plus IDE fix are already built.
+Do NOT touch or recreate anything already built.
+Only ADD and IMPROVE what exists.
+
+═══════════════════════════════════════
+WHAT THIS PROMPT BUILDS
+═══════════════════════════════════════
+
+1. Full mobile responsiveness 
+   (every page, every component)
+2. PWA (Progressive Web App) setup
+   (install on phone like an app)
+3. Performance optimizations
+4. Mobile-specific navigation
+5. Touch-friendly interactions
+6. Mobile workspace layout
+7. Offline support basics
+
+═══════════════════════════════════════
+MOBILE BREAKPOINTS TO USE
+═══════════════════════════════════════
+
+Use these Tailwind breakpoints 
+consistently throughout:
+
+Mobile:    < 640px   (default/base)
+Tablet:    640px+    (sm:)
+Laptop:    1024px+   (lg:)
+Desktop:   1280px+   (xl:)
+
+Design philosophy:
+  Mobile first — base styles are 
+  for mobile, then scale up.
+  
+  Critical rule: NOTHING should 
+  overflow or require horizontal 
+  scrolling on mobile.
+  
+  Touch targets: minimum 44x44px
+  for all clickable elements.
+  Buttons and nav items must be 
+  easy to tap with a thumb.
+
+═══════════════════════════════════════
+MOBILE NAVIGATION
+═══════════════════════════════════════
+
+The current sidebar does not work 
+on mobile. Replace with:
+
+────────────────────────────────────
+MOBILE TOP BAR
+────────────────────────────────────
+
+On mobile (< 1024px):
+  Hide the left sidebar completely.
+  
+  Show a mobile top bar:
+    Height: 56px
+    bg: #0A0A0F
+    border-bottom: 1px solid #2A2A3E
+    padding: 0 16px
+    position: fixed
+    top: 0, left: 0, right: 0
+    z-index: 50
+    
+    Left side:
+      Hamburger menu button 
+      (three horizontal lines icon)
+      Width/height: 44px
+      On click: opens mobile drawer
+    
+    Center:
+      "Nexora" logo text
+      (gradient purple, same as desktop)
+    
+    Right side:
+      Notification bell 
+      (with unread badge)
+      User avatar (small, 32px circle)
+
+────────────────────────────────────
+MOBILE DRAWER (slide-in sidebar)
+────────────────────────────────────
+
+When hamburger clicked:
+  Overlay appears:
+    Full screen
+    bg: rgba(0,0,0,0.6)
+    z-index: 60
+    On click overlay: close drawer
+  
+  Drawer slides in from LEFT:
+    Width: 280px
+    Height: 100vh
+    bg: #0A0A0F
+    border-right: 1px solid #2A2A3E
+    position: fixed
+    top: 0, left: 0
+    z-index: 70
+    
+    Slide animation:
+      Closed: translateX(-100%)
+      Open: translateX(0)
+      Transition: 0.25s ease-out
+  
+  Drawer content:
+    
+    Header (top of drawer):
+      padding: 20px 16px
+      border-bottom: 1px solid #2A2A3E
+      
+      User avatar (48px circle)
+      User full name (bold, #F0F0FF)
+      Plan badge (colored by plan)
+      "@username" (small, #9090B0)
+    
+    Nav items (same as desktop sidebar):
+      Each item: 
+        height: 52px (touch friendly)
+        padding: 0 16px
+        Display: flex, align-items: center
+        gap: 12px
+        
+        Icon: 20px
+        Label: 15px, #9090B0
+        
+        Active: 
+          bg: rgba(108,99,255,0.12)
+          color: #F0F0FF
+          border-left: 3px solid #6C63FF
+        
+        On click: 
+          Navigate to route
+          Close drawer
+    
+    Bottom of drawer:
+      border-top: 1px solid #2A2A3E
+      padding: 16px
+      
+      "Settings" item
+      "Sign Out" item (red text)
+
+────────────────────────────────────
+MOBILE BOTTOM TAB BAR
+────────────────────────────────────
+
+Fixed at bottom of screen on mobile.
+Shows 5 most important navigation items.
+
+Height: 64px
+bg: #0A0A0F
+border-top: 1px solid #2A2A3E
+position: fixed
+bottom: 0, left: 0, right: 0
+z-index: 50
+
+5 tabs:
+  Home (dashboard icon)
+  Projects (folder icon)
+  IDE (code-2 icon)
+  Blueprints (grid icon)
+  More (menu icon → opens drawer)
+
+Each tab:
+  Flex: 1
+  Display: flex flex-col
+  align-items: center
+  justify-content: center
+  gap: 4px
+  
+  Icon: 22px
+  Label: 10px, font-weight 500
+  
+  Inactive: color #5A5A7A
+  Active: color #6C63FF
+  
+  Active indicator:
+    Small purple dot above icon
+    OR
+    bg: rgba(108,99,255,0.12)
+    border-radius: 8px
+    padding: 6px 16px
+
+Safe area for iPhone:
+  Add padding-bottom for 
+  home indicator:
+  padding-bottom: 
+    env(safe-area-inset-bottom)
+
+IMPORTANT: Add padding to main 
+content area on mobile to account 
+for fixed top bar (56px) and 
+bottom tab bar (64px):
+
+Main content wrapper on mobile:
+  padding-top: 56px
+  padding-bottom: 64px
+
+═══════════════════════════════════════
+PAGE-BY-PAGE MOBILE FIXES
+═══════════════════════════════════════
+
+────────────────────────────────────
+LANDING PAGE (/) mobile:
+────────────────────────────────────
+
+Hero section:
+  Headline: font-size 32px 
+            (vs 56px desktop)
+  Subheadline: font-size 16px
+  
+  CTA buttons: 
+    Stack vertically on mobile
+    Full width each
+    Height: 48px (touch friendly)
+
+Problem section:
+  "5 tools → 1" cards:
+    Scroll horizontally on mobile
+    Each card: min-width 200px
+    Show scroll hint (fade on right)
+
+Features section:
+  3 cards → stack to 1 column
+  Each card: full width
+
+Stats/social proof:
+  Wrap to 2 columns on mobile
+  (vs 4 columns desktop)
+
+────────────────────────────────────
+DASHBOARD (/dashboard) mobile:
+────────────────────────────────────
+
+Stats row:
+  Desktop: 4 cards in a row
+  Mobile: 2x2 grid
+
+Recent projects:
+  Desktop: 2-3 column grid
+  Mobile: 1 column, full width
+
+Quick IDE section:
+  Stack layout vertically
+  Button: full width
+
+Blueprint suggestions:
+  Horizontal scroll on mobile
+  Each card: 280px min-width
+
+────────────────────────────────────
+NEW PROJECT (/projects/new) mobile:
+────────────────────────────────────
+
+Step indicator:
+  Desktop: full step labels
+  Mobile: only show numbers,
+          no labels
+          Smaller dots
+
+Idea input (Step 1):
+  Full width textarea
+  Keyboard doesn't cover content:
+    Add scroll behavior when 
+    keyboard opens (iOS issue)
+  
+  Example chips:
+    Horizontal scroll
+    No wrapping
+
+Skill level selector:
+  3 buttons: full width each,
+  stacked vertically on mobile
+
+Step 2 (AI Results):
+  Feasibility cards:
+    2x2 grid → 1 column on mobile
+  
+  Component list:
+    Each component card 
+    full width on mobile
+    "I own this" toggle 
+    on right side of row
+    (make sure it doesn't overflow)
+  
+  Fixed bottom action bar:
+    bg: #0A0A0F
+    border-top: 1px solid #2A2A3E
+    padding: 12px 16px
+    Add safe-area-inset-bottom
+
+────────────────────────────────────
+WORKSPACE mobile:
+────────────────────────────────────
+
+The 3-panel workspace layout 
+CANNOT work on mobile as-is.
+Replace with tab-based mobile layout.
+
+MOBILE WORKSPACE LAYOUT:
+
+Fixed top bar (workspace specific):
+  Height: 52px
+  "← Back" | Project title | 
+  "Share" button
+
+Below top bar: Tab navigation
+  4 tabs (full width):
+  [Steps] [IDE] [AI] [Budget]
+  
+  Tab style:
+    border-bottom: 2px solid 
+    Active: #6C63FF
+    Inactive: #2A2A3E
+  
+  Each tab shows its panel content
+  when active.
+  
+  Default active tab: "Steps"
+  
+  When step is completed:
+    Automatically switch to "IDE" tab
+    to show code being pushed
+    After 2 seconds: 
+    switch back to "Steps" tab
+    (so user can continue to next step)
+
+STEPS TAB (mobile):
+  Full screen scrollable
+  Same step cards as desktop
+  but full width
+  
+  "Complete Step" button:
+    Fixed at bottom of screen
+    Full width, height: 52px
+    bg: #6C63FF (enabled)
+    bg: #1A1A2E (disabled)
+
+IDE TAB (mobile):
+  Monaco Editor full screen
+  Top bar with filename + copy button
+  
+  Note: Monaco on mobile is limited.
+  Add a note below editor:
+  "For the best coding experience,
+   use Nexora on desktop."
+  (small, muted, centered)
+  
+  Still fully functional —
+  users can scroll and view code
+  Copy button works
+
+AI TAB (mobile):
+  Full screen chat interface
+  Messages take full width
+  Input bar fixed at bottom
+  
+  Keyboard behavior:
+    When keyboard opens on iOS/Android:
+    Input bar stays above keyboard
+    Messages scroll to latest
+    
+    Use: 
+    position: fixed
+    bottom: 0
+    And adjust with 
+    window.visualViewport
+
+BUDGET TAB (mobile):
+  Full width table
+  Columns simplified for mobile:
+    Component name
+    Cost
+    Owned toggle
+  (hide less important columns)
+
+────────────────────────────────────
+BLUEPRINTS (/blueprints) mobile:
+────────────────────────────────────
+
+Filter bar:
+  Horizontal scroll for pills
+  Search bar full width
+
+Blueprint grid:
+  Desktop: 3 columns
+  Tablet: 2 columns
+  Mobile: 1 column
+
+Blueprint detail page:
+  Tabs scroll horizontally
+  Components list: full width cards
+  Build plan steps: full width
+
+────────────────────────────────────
+MY COMPONENTS (/components) mobile:
+────────────────────────────────────
+
+Stats row: 
+  Horizontal scroll
+
+Component grid:
+  Mobile: 1 column
+
+Add Component modal:
+  Full screen on mobile
+  (not slide-in drawer — 
+   full screen sheet)
+  
+  Fixed header with title + close
+  Scrollable form body
+  Fixed "Add" button at bottom
+
+────────────────────────────────────
+SETTINGS (/settings) mobile:
+────────────────────────────────────
+
+Desktop: 2 columns 
+  (nav left, content right)
+
+Mobile: 
+  Show settings nav as 
+  horizontal pills at top
+  (scrollable)
+  
+  Content below fills screen
+
+────────────────────────────────────
+PROFESSOR DASHBOARD mobile:
+────────────────────────────────────
+
+Show banner at top:
+  bg: rgba(255,184,77,0.08)
+  border: #FFB84D
+  
+  "Professor dashboard works 
+   best on desktop. Some features 
+   may be limited on mobile."
+
+Tables → card list on mobile:
+  Each table row becomes a card
+  showing the same data vertically
+
+Create assignment modal:
+  Full screen on mobile
+  Step indicator at top
+  Scrollable content
+  Fixed action buttons at bottom
+
+═══════════════════════════════════════
+PWA SETUP
+═══════════════════════════════════════
+
+Make Nexora installable as an app
+on Android and iOS.
+
+────────────────────────────────────
+MANIFEST FILE
+────────────────────────────────────
+
+File: client/public/manifest.json
+
+{
+  "name": "Nexora",
+  "short_name": "Nexora",
+  "description": "AI-powered IoT 
+    project creation platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A0A0F",
+  "theme_color": "#6C63FF",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/dashboard.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ],
+  "categories": [
+    "education", 
+    "productivity", 
+    "utilities"
+  ]
+}
+
+────────────────────────────────────
+APP ICONS
+────────────────────────────────────
+
+Since we cannot generate real PNG files,
+create SVG-based icons using code:
+
+File: client/public/icons/
+      generate-icons.html
+
+Create a simple SVG icon for Nexora:
+  Square, rounded corners (20%)
+  bg: #6C63FF
+  Center: "N" letter 
+          OR circuit/chip icon
+          in white
+
+Create icons programmatically 
+using canvas or reference these
+as placeholder paths.
+
+For now, create a single 
+icon SVG and reference it:
+
+File: client/public/icons/nexora-icon.svg
+<svg viewBox="0 0 512 512" 
+     xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" 
+        rx="100" fill="#6C63FF"/>
+  <text x="256" y="340" 
+        font-family="Arial" 
+        font-size="280" 
+        font-weight="900"
+        fill="white" 
+        text-anchor="middle">N</text>
+</svg>
+
+Reference this in manifest as fallback.
+Note to user: "Replace icons in 
+/public/icons/ with real PNG icons 
+for production."
+
+────────────────────────────────────
+LINK MANIFEST IN HTML
+────────────────────────────────────
+
+In client/index.html:
+Add to <head>:
+
+<link rel="manifest" 
+      href="/manifest.json">
+<meta name="theme-color" 
+      content="#6C63FF">
+<meta name="apple-mobile-web-app-capable"
+      content="yes">
+<meta name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent">
+<meta name="apple-mobile-web-app-title"
+      content="Nexora">
+<link rel="apple-touch-icon"
+      href="/icons/nexora-icon.svg">
+<meta name="viewport"
+      content="width=device-width, 
+      initial-scale=1.0, 
+      maximum-scale=1.0,
+      user-scalable=no,
+      viewport-fit=cover">
+
+────────────────────────────────────
+SERVICE WORKER (Basic)
+────────────────────────────────────
+
+File: client/public/sw.js
+
+Basic service worker for 
+offline support and caching:
+
+const CACHE_NAME = 'nexora-v1'
+const STATIC_ASSETS = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+]
+
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => 
+        cache.addAll(STATIC_ASSETS)
+      )
+  )
+})
+
+self.addEventListener('fetch', e => {
+  // Network first for API calls
+  if (e.request.url.includes('/api/')) {
+    e.respondWith(
+      fetch(e.request)
+        .catch(() => 
+          caches.match(e.request)
+        )
+    )
+    return
+  }
+  
+  // Cache first for static assets
+  e.respondWith(
+    caches.match(e.request)
+      .then(cached => 
+        cached || fetch(e.request)
+          .then(response => {
+            const clone = 
+              response.clone()
+            caches.open(CACHE_NAME)
+              .then(cache => 
+                cache.put(
+                  e.request, clone
+                )
+              )
+            return response
+          })
+      )
+  )
+})
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(
+        keys
+          .filter(k => k !== CACHE_NAME)
+          .map(k => caches.delete(k))
+      )
+    )
+  )
+})
+
+Register service worker in main.jsx:
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then(reg => 
+        console.log('SW registered:', reg)
+      )
+      .catch(err => 
+        console.log('SW failed:', err)
+      )
+  })
+}
+
+────────────────────────────────────
+PWA INSTALL PROMPT
+────────────────────────────────────
+
+File: client/src/components/ui/
+      InstallPrompt.jsx
+
+Show a custom install banner 
+instead of browser default:
+
+Listen for beforeinstallprompt event:
+
+useEffect(() => {
+  const handler = (e) => {
+    e.preventDefault()
+    setInstallEvent(e)
+    setShowPrompt(true)
+  }
+  
+  window.addEventListener(
+    'beforeinstallprompt', handler
+  )
+  
+  return () => window.removeEventListener(
+    'beforeinstallprompt', handler
+  )
+}, [])
+
+Show install banner 
+(only on mobile, after 30 seconds):
+
+Position: bottom of screen
+  (above bottom tab bar)
+  
+Card:
+  bg: #12121A
+  border: 1px solid #6C63FF
+  border-radius: 16px 16px 0 0
+  padding: 20px 16px
+  
+  Row:
+    Left: Nexora icon (40px)
+    Right:
+      "Install Nexora"
+      (bold, #F0F0FF)
+      "Add to your home screen 
+       for quick access"
+      (small, #9090B0)
+  
+  Buttons (mt-3):
+    "Install App" (primary, full width)
+    "Not now" (ghost, small, below)
+  
+  On "Install App":
+    installEvent.prompt()
+    installEvent.userChoice.then(
+      choice => {
+        if (choice.outcome === 
+            'accepted') {
+          setShowPrompt(false)
+          toast({
+            type: 'success',
+            message: 'Nexora installed!'
+          })
+        }
+      }
+    )
+  
+  On "Not now":
+    setShowPrompt(false)
+    localStorage.setItem(
+      'nexora_install_dismissed',
+      Date.now().toString()
+    )
+    (Don't show again for 7 days)
+
+═══════════════════════════════════════
+PERFORMANCE OPTIMIZATIONS
+═══════════════════════════════════════
+
+────────────────────────────────────
+LAZY LOADING ROUTES
+────────────────────────────────────
+
+In App.jsx, use React.lazy 
+for all page components:
+
+import { lazy, Suspense } from 'react'
+
+const Dashboard = lazy(() => 
+  import('./pages/Dashboard'))
+const Projects = lazy(() => 
+  import('./pages/Projects'))
+const Workspace = lazy(() => 
+  import('./pages/Workspace'))
+const IDEPage = lazy(() => 
+  import('./pages/IDEPage'))
+const Blueprints = lazy(() => 
+  import('./pages/Blueprints'))
+const Components = lazy(() => 
+  import('./pages/Components'))
+const Settings = lazy(() => 
+  import('./pages/Settings'))
+const Pricing = lazy(() => 
+  import('./pages/Pricing'))
+const Professor = lazy(() => 
+  import('./pages/Professor'))
+const NotFound = lazy(() => 
+  import('./pages/NotFound'))
+
+Wrap routes in Suspense:
+<Suspense fallback={
+  <div className="flex items-center 
+    justify-center h-screen">
+    <LoadingSpinner size="xl" />
+  </div>
+}>
+  <Routes>
+    ...all routes...
+  </Routes>
+</Suspense>
+
+────────────────────────────────────
+IMAGE OPTIMIZATION
+────────────────────────────────────
+
+Since Nexora uses mostly icons 
+(no heavy images):
+
+All lucide icons are already 
+SVG-based — no optimization needed.
+
+For any future images:
+  Use loading="lazy" attribute
+  Use proper width/height to 
+  prevent layout shift
+
+────────────────────────────────────
+MEMO AND CALLBACK OPTIMIZATION
+────────────────────────────────────
+
+Wrap expensive components with 
+React.memo to prevent re-renders:
+
+export default React.memo(ProjectCard)
+export default React.memo(BlueprintCard)
+export default React.memo(ComponentCard)
+export default React.memo(NexoraIDE)
+
+Use useCallback for event handlers 
+passed as props:
+
+In Workspace.jsx:
+const handleCompleteStep = 
+  useCallback(async (stepNumber) => {
+    await completeStep(stepNumber)
+  }, [completeStep])
+
+Use useMemo for expensive calculations:
+
+const filteredProjects = useMemo(() =>
+  projects.filter(p => 
+    p.title.toLowerCase()
+      .includes(search.toLowerCase())
+  ),
+  [projects, search]
+)
+
+────────────────────────────────────
+DEBOUNCED SEARCH
+────────────────────────────────────
+
+File: client/src/hooks/useDebounce.js
+
+export function useDebounce(value, delay) {
+  const [debounced, setDebounced] = 
+    useState(value)
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebounced(value)
+    }, delay)
+    
+    return () => clearTimeout(timer)
+  }, [value, delay])
+  
+  return debounced
+}
+
+Apply to all search inputs:
+  /blueprints search: 300ms
+  /components search: 200ms
+  /projects search: 200ms
+  Username validation: 500ms
+
+────────────────────────────────────
+VIRTUALIZED LISTS
+────────────────────────────────────
+
+For lists with 50+ items 
+(component inventory, 
+ large project lists):
+
+Install: 
+npm install @tanstack/react-virtual
+
+Apply to component inventory list
+when count exceeds 30 items.
+
+For smaller lists: standard 
+React rendering is fine.
+
+────────────────────────────────────
+BUNDLE SIZE OPTIMIZATION
+────────────────────────────────────
+
+In vite.config.js, add:
+
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: [
+            'react', 
+            'react-dom', 
+            'react-router-dom'
+          ],
+          monaco: [
+            '@monaco-editor/react'
+          ],
+          supabase: [
+            '@supabase/supabase-js'
+          ]
+        }
+      }
+    },
+    chunkSizeWarningLimit: 1000
+  }
+})
+
+This splits Monaco Editor into its 
+own chunk so it only loads when 
+the workspace is visited.
+
+────────────────────────────────────
+FONT LOADING OPTIMIZATION
+────────────────────────────────────
+
+In index.html, update font loading:
+
+Replace any @import in CSS with:
+<link rel="preconnect" 
+      href="https://fonts.googleapis.com">
+<link rel="preconnect" 
+      href="https://fonts.gstatic.com" 
+      crossorigin>
+<link rel="preload"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      as="style"
+      onload="this.onload=null;
+              this.rel='stylesheet'">
+
+This loads fonts without 
+blocking rendering.
+
+═══════════════════════════════════════
+TOUCH INTERACTION IMPROVEMENTS
+═══════════════════════════════════════
+
+────────────────────────────────────
+SWIPE GESTURES (workspace mobile)
+────────────────────────────────────
+
+In mobile workspace tab view,
+add swipe to change tabs:
+
+File: client/src/hooks/useSwipe.js
+
+export function useSwipe(
+  onSwipeLeft, onSwipeRight
+) {
+  const touchStart = useRef(null)
+  const touchEnd = useRef(null)
+  const minSwipeDistance = 50
+  
+  const onTouchStart = (e) => {
+    touchEnd.current = null
+    touchStart.current = 
+      e.targetTouches[0].clientX
+  }
+  
+  const onTouchMove = (e) => {
+    touchEnd.current = 
+      e.targetTouches[0].clientX
+  }
+  
+  const onTouchEnd = () => {
+    if (!touchStart.current || 
+        !touchEnd.current) return
+    
+    const distance = 
+      touchStart.current - 
+      touchEnd.current
+    
+    const isLeftSwipe = 
+      distance > minSwipeDistance
+    const isRightSwipe = 
+      distance < -minSwipeDistance
+    
+    if (isLeftSwipe) onSwipeLeft?.()
+    if (isRightSwipe) onSwipeRight?.()
+  }
+  
+  return { 
+    onTouchStart, 
+    onTouchMove, 
+    onTouchEnd 
+  }
+}
+
+Apply to workspace mobile tabs:
+  Swipe left → next tab
+  Swipe right → previous tab
+
+────────────────────────────────────
+HAPTIC FEEDBACK (if supported)
+────────────────────────────────────
+
+On step completion (mobile):
+  if (navigator.vibrate) {
+    navigator.vibrate([50, 30, 50])
+    // two short pulses = success feel
+  }
+
+On error:
+  if (navigator.vibrate) {
+    navigator.vibrate(200)
+    // single long = error
+  }
+
+────────────────────────────────────
+PULL TO REFRESH
+────────────────────────────────────
+
+On mobile dashboard and projects page:
+
+Simple pull-to-refresh implementation:
+
+When user pulls down 60px+ 
+from top of scrollable content:
+  Show refresh indicator 
+  (spinning arrow, purple)
+  Trigger data refetch
+  
+  Use touch events:
+  touchstart → record startY
+  touchmove → calculate pullDistance
+    if pullDistance > 60 && 
+       scrollTop === 0:
+      setIsPulling(true)
+      show indicator
+  touchend → if isPulling:
+    setIsRefreshing(true)
+    refetchData()
+    after refetch: 
+      setIsRefreshing(false)
+      setIsPulling(false)
+
+═══════════════════════════════════════
+MOBILE-SPECIFIC COMPONENTS
+═══════════════════════════════════════
+
+────────────────────────────────────
+BOTTOM SHEET COMPONENT
+────────────────────────────────────
+
+File: client/src/components/ui/
+      BottomSheet.jsx
+
+Reusable component for mobile modals.
+Replaces centered modals on mobile.
+
+Props:
+  isOpen: boolean
+  onClose: function
+  title: string
+  children: React children
+  height: 'auto' | 'half' | 'full'
+
+Design:
+  Overlay: rgba(0,0,0,0.6), full screen
+  Sheet slides up from bottom:
+    bg: #12121A
+    border-radius: 20px 20px 0 0
+    border-top: 1px solid #2A2A3E
+    
+    height options:
+      auto: fits content
+      half: 50vh
+      full: 90vh
+    
+    Slide animation:
+      Closed: translateY(100%)
+      Open: translateY(0)
+      Transition: 0.3s ease-out
+  
+  Drag handle at top:
+    width: 40px, height: 4px
+    bg: #2A2A3E
+    border-radius: 2px
+    margin: 12px auto
+  
+  Header (if title):
+    padding: 0 16px 16px
+    border-bottom: 1px solid #2A2A3E
+    Title (bold, #F0F0FF)
+    Close button (X, top right)
+  
+  Content:
+    padding: 16px
+    overflow-y: auto
+    max-height: calc(height - 80px)
+
+Drag to close:
+  If user drags sheet down 80px+:
+    Snap closed with animation
+    Call onClose()
+
+Apply BottomSheet to these on mobile:
+  Add Component modal
+  Import Code modal
+  Blueprint fork modal
+  Share project modal
+  Assignment submission modal
+
+────────────────────────────────────
+MOBILE PROJECT CARD
+────────────────────────────────────
+
+On mobile, ProjectCard layout changes:
+
+Horizontal layout (not vertical):
+  Left: 
+    Color accent bar (4px wide, 
+    full height, plan/status color)
+  
+  Content (flex-1):
+    Top: Title + Status badge (row)
+    Middle: Description (1 line only)
+    Bottom: Progress bar + 
+            "Step X of Y" + 
+            "Open in IDE" button
+
+More compact — shows more projects 
+in viewport without scrolling.
+
+────────────────────────────────────
+FLOATING ACTION BUTTON (mobile)
+────────────────────────────────────
+
+On mobile dashboard and /projects:
+
+FAB button (+ New Project):
+  Position: fixed
+  Bottom: 80px (above tab bar)
+  Right: 16px
+  
+  Circle: 56px
+  bg: #6C63FF
+  shadow: 0 4px 20px 
+          rgba(108,99,255,0.5)
+  
+  Icon: plus (white, 24px)
+  
+  On click: navigate to /projects/new
+  
+  Pulse animation:
+    Subtle expanding ring every 4s
+    Stops after user clicks once
+
+This ensures "New Project" is 
+always one tap away on mobile.
+
+═══════════════════════════════════════
+RESPONSIVE TABLES
+═══════════════════════════════════════
+
+All tables in the app (professor 
+dashboard, submission lists, 
+payment history) must work on mobile.
+
+Strategy: card view on mobile
+
+Create a responsive table wrapper:
+
+File: client/src/components/ui/
+      ResponsiveTable.jsx
+
+Props:
+  columns: array of 
+    { key, label, mobileVisible }
+  data: array of objects
+  onRowClick: function
+
+Desktop (lg+): 
+  Normal HTML table
+  All columns visible
+
+Mobile (< lg):
+  Card list view
+  Only mobileVisible columns shown
+  Each row becomes a card:
+    Primary value (first column): 
+      large, bold
+    Secondary values: 
+      label: value pairs
+      2-column grid inside card
+  
+  Row action (if onRowClick):
+    Chevron-right on card right side
+
+Apply to:
+  Professor submissions table
+  Payment history table
+  Students table
+
+═══════════════════════════════════════
+META TAGS FOR MOBILE
+═══════════════════════════════════════
+
+In client/index.html,
+ensure these meta tags exist:
+
+<meta charset="UTF-8">
+<meta name="viewport" 
+      content="width=device-width, 
+      initial-scale=1.0,
+      viewport-fit=cover">
+<meta name="description" 
+      content="Nexora — AI-powered IoT 
+      project creation. From idea to 
+      working project, guided by AI.">
+<meta name="keywords"
+      content="IoT, Arduino, ESP32, 
+      AI, projects, students, makers">
+<meta property="og:title" 
+      content="Nexora — Build IoT 
+      Projects with AI">
+<meta property="og:description"
+      content="Turn any IoT idea into 
+      a working project. Step-by-step 
+      AI guidance, built-in IDE, 
+      and component management.">
+<meta property="og:type" 
+      content="website">
+<meta name="twitter:card" 
+      content="summary_large_image">
+
+═══════════════════════════════════════
+IMPORTANT RULES
+═══════════════════════════════════════
+
+1. NEVER break desktop experience
+   while fixing mobile.
+   Test both after every change.
+   Mobile-first means base styles
+   for mobile, THEN add desktop
+   with lg: or xl: prefixes.
+
+2. The workspace mobile tab layout
+   is the most critical change.
+   The 3-panel layout literally
+   cannot work on a phone screen.
+   The tab approach is the right 
+   solution — execute it well.
+
+3. Touch targets MUST be minimum
+   44x44px. This is Apple's 
+   HIG requirement and prevents 
+   accidental taps.
+   Check every button, every 
+   nav item, every toggle.
+
+4. iOS Safari specific issues to fix:
+   a) Input zoom: add font-size 16px
+      to all inputs (iOS zooms in 
+      on inputs smaller than 16px)
+   b) Bounce scroll: add 
+      overscroll-behavior: none
+      to panels that shouldn't bounce
+   c) Safe area: use 
+      env(safe-area-inset-bottom)
+      for bottom-fixed elements
+
+5. Android Chrome specific:
+   Bottom tab bar must not be 
+   covered by Android navigation bar.
+   Use: padding-bottom: 
+   max(16px, env(safe-area-inset-bottom))
+
+6. Service worker must NOT break
+   the Gemini API calls.
+   API routes use network-first 
+   strategy (already specified above).
+   Never cache API responses.
+
+7. PWA manifest must be valid.
+   Test with Chrome DevTools →
+   Application → Manifest
+   All icons must be reachable.
+
+8. After building confirm:
+   ✓ Mobile navigation drawer works
+   ✓ Bottom tab bar shows on mobile
+   ✓ Hamburger opens/closes drawer
+   ✓ Dashboard is readable on mobile
+   ✓ New project flow works on mobile
+   ✓ Workspace shows tab layout 
+     on mobile
+   ✓ Swiping between tabs works
+   ✓ Completing a step switches 
+     to IDE tab automatically
+   ✓ Blueprint cards are 1 column
+     on mobile
+   ✓ Settings page nav is scrollable
+     on mobile
+   ✓ All modals use BottomSheet 
+     on mobile
+   ✓ FAB shows on mobile
+   ✓ PWA manifest is valid
+   ✓ Service worker registers
+   ✓ Install prompt appears 
+     on mobile
+   ✓ Lazy loading works 
+     (check Network tab)
+   ✓ No horizontal scroll anywhere
+   ✓ All buttons are tappable
+     (min 44px height)

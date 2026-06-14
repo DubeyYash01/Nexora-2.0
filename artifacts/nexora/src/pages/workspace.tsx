@@ -5,8 +5,10 @@ import {
   AlertTriangle, Zap, ChevronDown, ChevronRight,
   Loader2, Cpu, Timer, Library, BookOpen,
   CheckSquare, Square, Edit2, Save, DollarSign,
-  ClipboardList, Send, X,
+  ClipboardList, Send, X, ListChecks, Code2, MessageSquare,
 } from "lucide-react";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { useSwipe } from "@/hooks/useSwipe";
 import BudgetTracker from "@/components/budget/BudgetTracker";
 import { useAuth } from "@/hooks/useAuth";
 import { authFetch } from "@/lib/supabase";
@@ -339,6 +341,23 @@ export default function Workspace() {
   // Left panel tab
   const [leftTab, setLeftTab] = useState<"steps" | "budget">("steps");
 
+  // Mobile tab
+  const isMobile = useMediaQuery("(max-width: 1023px)");
+  const MOBILE_TABS = ["steps", "ide", "ai", "budget"] as const;
+  type MobileTab = typeof MOBILE_TABS[number];
+  const [mobileTab, setMobileTab] = useState<MobileTab>("steps");
+
+  const swipeHandlers = useSwipe(
+    () => {
+      const idx = MOBILE_TABS.indexOf(mobileTab);
+      if (idx < MOBILE_TABS.length - 1) setMobileTab(MOBILE_TABS[idx + 1]);
+    },
+    () => {
+      const idx = MOBILE_TABS.indexOf(mobileTab);
+      if (idx > 0) setMobileTab(MOBILE_TABS[idx - 1]);
+    }
+  );
+
   // AI explain-this bridge
   const [explainMessage, setExplainMessage] = useState<string | undefined>(undefined);
 
@@ -516,11 +535,19 @@ export default function Workspace() {
         }, 300);
       }
 
+        // Haptic feedback on mobile
+      if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
+      // Auto-switch to IDE tab on mobile then back
+      if (isMobile) {
+        setMobileTab("ide");
+        setTimeout(() => setMobileTab("steps"), 2000);
+      }
       toast({
         title: `✓ Step ${step.stepNumber} complete — code updated in IDE`,
         description: newLibs.length > 0 ? `${newLibs.length} new librar${newLibs.length === 1 ? "y" : "ies"} added` : undefined,
       });
     } catch {
+      if (navigator.vibrate) navigator.vibrate(200);
       toast({ title: "Failed to complete step", variant: "destructive" });
     } finally {
       setCompletingStep(false);
@@ -577,6 +604,14 @@ export default function Workspace() {
     return new Array(instructionCount).fill(false);
   };
 
+  // Mobile tab definitions
+  const mobileTabs = [
+    { id: "steps" as MobileTab, icon: ListChecks, label: "Steps" },
+    { id: "ide" as MobileTab, icon: Code2, label: "IDE" },
+    { id: "ai" as MobileTab, icon: MessageSquare, label: "AI" },
+    { id: "budget" as MobileTab, icon: DollarSign, label: "Budget" },
+  ];
+
   return (
     <div className="flex flex-col" style={{ height: "100vh", background: "#0A0A0F", overflow: "hidden" }}>
       {/* ── Top Bar ── */}
@@ -591,7 +626,7 @@ export default function Workspace() {
           onMouseEnter={(e) => (e.currentTarget.style.color = "#F0F0FF")}
           onMouseLeave={(e) => (e.currentTarget.style.color = "#5A5A7A")}
         >
-          <ArrowLeft className="w-4 h-4" /> Projects
+          <ArrowLeft className="w-4 h-4" /> <span className="hidden sm:inline">Projects</span>
         </button>
 
         <div className="flex-1 flex items-center justify-center">
@@ -650,8 +685,122 @@ export default function Workspace() {
         </div>
       </div>
 
-      {/* ── Main panels ── */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* ── Mobile tab bar — only on mobile ── */}
+      <div
+        className="lg:hidden flex flex-shrink-0"
+        style={{ background: "#0D0D14", borderBottom: "1px solid #2A2A3E" }}
+      >
+        {mobileTabs.map(({ id, icon: Icon, label }) => (
+          <button
+            key={id}
+            onClick={() => setMobileTab(id)}
+            className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-all"
+            style={{
+              color: mobileTab === id ? "#6C63FF" : "#5A5A7A",
+              borderBottom: mobileTab === id ? "2px solid #6C63FF" : "2px solid transparent",
+            }}
+          >
+            <Icon className="w-4 h-4" />
+            <span className="text-[10px] font-medium">{label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── Mobile content panels ── */}
+      <div
+        className="lg:hidden flex-1 flex flex-col overflow-hidden"
+        {...swipeHandlers}
+      >
+        {/* Steps tab */}
+        {mobileTab === "steps" && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-3 pt-3 pb-2 flex-shrink-0" style={{ borderBottom: "1px solid #2A2A3E" }}>
+              <div className="w-full rounded-full overflow-hidden mb-1.5" style={{ background: "#1A1A2E", height: 4 }}>
+                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progressPct}%`, background: "#6C63FF" }} />
+              </div>
+              <p className="text-xs" style={{ color: "#5A5A7A" }}>{completedCount} of {totalSteps} steps complete</p>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {steps.map((step) => {
+                const state = completedSteps.has(step.stepNumber) ? "completed" : step.stepNumber === currentStep ? "active" : "locked";
+                const checks = getStepChecks(step.stepNumber, step.instructions.length);
+                return (
+                  <div key={step.stepNumber} ref={(el) => { stepRefs.current[step.stepNumber] = el; }}>
+                    <StepCard step={step} state={state} checks={checks} onToggleCheck={(i) => handleToggleCheck(step.stepNumber, i)} onComplete={() => handleCompleteStep(step)} completing={completingStep} />
+                  </div>
+                );
+              })}
+            </div>
+            {assignment && (
+              <div className="px-3 py-2 flex-shrink-0" style={{ borderTop: "1px solid #2A2A3E" }}>
+                {alreadySubmitted ? (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium" style={{ background: "rgba(0,200,150,0.1)", color: "#00C896" }}>
+                    <CheckCircle className="w-3.5 h-3.5" /> Assignment Submitted
+                  </div>
+                ) : (
+                  <button onClick={() => setSubmitModalOpen(true)} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold" style={{ background: "rgba(0,200,150,0.12)", color: "#00C896", border: "1px solid rgba(0,200,150,0.3)" }}>
+                    <Send className="w-3.5 h-3.5" /> Submit Assignment
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* IDE tab */}
+        {mobileTab === "ide" && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <NexoraIDE
+              code={ideCode}
+              filename={filename}
+              platform={`${platform} · ${buildPlan?.programmingLanguage ?? "C++ Arduino"}`}
+              highlightLines={highlightLines}
+              libraries={accumulatedLibraries}
+              onCodeChange={handleCodeChange}
+              onExplainCode={(selected) => { setExplainMessage(selected); setMobileTab("ai"); }}
+            />
+            <div className="px-4 py-2 flex-shrink-0 text-center" style={{ borderTop: "1px solid #2A2A3E" }}>
+              <p className="text-xs" style={{ color: "#5A5A7A" }}>For the best coding experience, use Nexora on desktop.</p>
+            </div>
+          </div>
+        )}
+
+        {/* AI tab */}
+        {mobileTab === "ai" && project && (
+          <div className="flex-1 overflow-hidden">
+            <AIAssistant
+              project={project}
+              currentStep={currentStep}
+              ideCode={ideCode}
+              libraryNames={accumulatedLibraries.map((l) => l.name)}
+              completedSteps={Array.from(completedSteps)}
+              userName={user?.user_metadata?.full_name ?? user?.email ?? ""}
+              onPushCode={(code, mode) => {
+                if (mode === "replace") { setIdeCode(code); setHighlightLines(code.split("\n").map((_, i) => i + 1)); setTimeout(() => setHighlightLines([]), 3600); }
+                else { setIdeCode((prev) => prev + "\n" + code); }
+                setSaveStatus("unsaved");
+                setMobileTab("ide");
+                toast({ title: "Code pushed to IDE" });
+              }}
+              externalMessage={explainMessage}
+              onExternalMessageHandled={() => setExplainMessage(undefined)}
+            />
+          </div>
+        )}
+
+        {/* Budget tab */}
+        {mobileTab === "budget" && (
+          <div className="flex-1 overflow-y-auto">
+            <BudgetTracker
+              projectId={projectId}
+              projectComponents={project.components?.list?.map((c) => ({ name: c.name, purpose: c.purpose })) ?? []}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* ── Desktop Main panels — hidden on mobile ── */}
+      <div className="hidden lg:flex flex-1 overflow-hidden">
 
         {/* ── LEFT: Steps panel ── */}
         <div

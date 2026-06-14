@@ -112,9 +112,31 @@ export default function SettingsPage() {
           <div className="mt-4 h-px" style={{ background: "#2A2A3E" }} />
         </div>
 
+        {/* Mobile: horizontal scrollable tabs */}
+        <div className="lg:hidden overflow-x-auto flex gap-1 mb-6 pb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
+          {navItems.map(({ id, label, icon: Icon }) => {
+            const isActive = section === id;
+            return (
+              <button
+                key={id}
+                onClick={() => { if (id === "billing") { setLocation("/settings/billing"); } else { setSection(id); } }}
+                className="flex-shrink-0 flex items-center gap-1.5 text-xs font-medium transition-all rounded-full px-3 py-2"
+                style={{
+                  background: isActive ? "#6C63FF" : "#1A1A2E",
+                  color: isActive ? "#fff" : "#9090B0",
+                  border: isActive ? "1px solid #6C63FF" : "1px solid #2A2A3E",
+                }}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
         <div className="flex gap-6">
-          {/* Left nav */}
-          <nav className="w-48 flex-shrink-0 flex flex-col gap-0.5">
+          {/* Left nav — desktop only */}
+          <nav className="hidden lg:flex w-48 flex-shrink-0 flex-col gap-0.5">
             {navItems.map(({ id, label, icon: Icon }) => {
               const isActive = section === id;
               return (

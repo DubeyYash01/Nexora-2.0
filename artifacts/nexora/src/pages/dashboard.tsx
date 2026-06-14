@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import ProjectCard from "@/components/ui/ProjectCard";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import OnboardingTour from "@/components/onboarding/OnboardingTour";
+import MobileNav from "@/components/ui/MobileNav";
 
 export function DashboardLayout({
   children,
@@ -29,13 +30,12 @@ export function DashboardLayout({
 }) {
   const { user, profile, signOut } = useAuth();
   const [location, setLocation] = useLocation();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
     setLocation("/login");
   };
-
-  const isStudentOrProfessor = profile?.role === "student" || profile?.role === "professor";
 
   const navItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
@@ -73,8 +73,8 @@ export function DashboardLayout({
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-border bg-sidebar flex-shrink-0 flex-col hidden md:flex">
+      {/* Desktop Sidebar — hidden on mobile */}
+      <aside className="w-64 border-r border-border bg-sidebar flex-shrink-0 flex-col hidden lg:flex">
         <div className="h-16 flex items-center px-6 border-b border-border">
           <div className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
             Nexora
@@ -137,9 +137,13 @@ export function DashboardLayout({
         </div>
       </aside>
 
+      {/* Mobile Navigation */}
+      <MobileNav navItems={navItems} />
+
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 border-b border-border bg-card flex items-center justify-between px-6 flex-shrink-0">
+        {/* Desktop header — hidden on mobile */}
+        <header className="h-16 border-b border-border bg-card items-center justify-between px-6 flex-shrink-0 hidden lg:flex">
           <h1 className="text-lg font-semibold text-foreground">{title}</h1>
           <div className="flex items-center gap-3">
             <NotificationBell />
@@ -152,7 +156,10 @@ export function DashboardLayout({
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        {/* Main content — mobile padding accounts for fixed top/bottom bars */}
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6 pt-[calc(56px+16px)] pb-[calc(64px+16px)] lg:pt-6 lg:pb-6">
+          {children}
+        </main>
       </div>
       <OnboardingTour />
     </div>
@@ -226,39 +233,39 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout title="Dashboard">
-      <div className="max-w-5xl mx-auto space-y-8">
+      <div className="max-w-5xl mx-auto space-y-6 lg:space-y-8">
 
         {/* Greeting */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">
+            <h2 className="text-xl lg:text-2xl font-bold tracking-tight text-foreground">
               {getGreeting()}, {firstName} 👋
             </h2>
-            <p className="text-muted-foreground mt-1">What are you building today?</p>
+            <p className="text-muted-foreground mt-1 text-sm">What are you building today?</p>
           </div>
           <Button
             data-testid="btn-new-project"
             onClick={() => setLocation("/projects/new")}
-            className="flex-shrink-0"
+            className="flex-shrink-0 hidden sm:flex"
           >
             <Plus className="w-4 h-4 mr-2" /> New Project
           </Button>
         </div>
 
-        {/* Stats */}
-        <div data-tour="stats-row" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Stats — 2x2 on mobile, 4-col on desktop */}
+        <div data-tour="stats-row" className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
           {statCards.map(({ icon: Icon, label, value }) => (
             <div
               key={label}
               data-testid={`stat-${label.toLowerCase().replace(/\s+/g, "-")}`}
-              className="p-5 rounded-xl border transition-all duration-200 hover:border-primary/50"
+              className="p-4 lg:p-5 rounded-xl border transition-all duration-200 hover:border-primary/50"
               style={{ background: "#12121A", borderColor: "#2A2A3E" }}
             >
-              <Icon className="w-5 h-5 mb-3" style={{ color: "#6C63FF" }} />
-              <div className="text-3xl font-bold text-foreground mb-1">
-                {statsLoading ? <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /> : value}
+              <Icon className="w-5 h-5 mb-2 lg:mb-3" style={{ color: "#6C63FF" }} />
+              <div className="text-2xl lg:text-3xl font-bold text-foreground mb-1">
+                {statsLoading ? <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /> : value}
               </div>
-              <div className="text-sm text-muted-foreground">{label}</div>
+              <div className="text-xs lg:text-sm text-muted-foreground">{label}</div>
             </div>
           ))}
         </div>
@@ -266,7 +273,7 @@ export default function Dashboard() {
         {/* Recent Projects */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-foreground">Recent Projects</h3>
+            <h3 className="text-base lg:text-lg font-semibold text-foreground">Recent Projects</h3>
             <button
               data-testid="link-view-all-projects"
               onClick={() => setLocation("/projects")}
@@ -281,16 +288,16 @@ export default function Dashboard() {
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : recentProjects.length > 0 ? (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {recentProjects.map((p: Parameters<typeof ProjectCard>[0]["project"]) => (
                 <ProjectCard key={p.id} project={p} />
               ))}
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed p-10 flex flex-col items-center text-center"
+            <div className="rounded-xl border border-dashed p-8 lg:p-10 flex flex-col items-center text-center"
               style={{ borderColor: "#2A2A3E", background: "#12121A" }}>
-              <Sparkles className="w-12 h-12 mb-4" style={{ color: "#6C63FF" }} />
-              <h4 className="text-lg font-semibold text-foreground mb-2">No projects yet</h4>
+              <Sparkles className="w-10 h-10 lg:w-12 lg:h-12 mb-4" style={{ color: "#6C63FF" }} />
+              <h4 className="text-base lg:text-lg font-semibold text-foreground mb-2">No projects yet</h4>
               <p className="text-muted-foreground text-sm max-w-xs mb-6">
                 Start by describing your IoT idea and let Nexora do the rest.
               </p>
@@ -303,9 +310,9 @@ export default function Dashboard() {
 
         {/* Continue in IDE */}
         <div>
-          <h3 className="text-lg font-semibold text-foreground mb-4">Continue in IDE</h3>
+          <h3 className="text-base lg:text-lg font-semibold text-foreground mb-4">Continue in IDE</h3>
           <div
-            className="flex items-center justify-between p-5 rounded-xl border cursor-pointer transition-all duration-200"
+            className="flex items-center justify-between p-4 lg:p-5 rounded-xl border cursor-pointer transition-all duration-200"
             style={{
               background: "linear-gradient(135deg, rgba(108,99,255,0.08) 0%, rgba(0,212,255,0.04) 100%)",
               borderColor: "#2A2A3E",
@@ -314,15 +321,15 @@ export default function Dashboard() {
             onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#6C63FF")}
             onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#2A2A3E")}
           >
-            <div className="flex items-center gap-4">
-              <Code2 className="w-6 h-6 flex-shrink-0" style={{ color: "#6C63FF" }} />
+            <div className="flex items-center gap-3 lg:gap-4">
+              <Code2 className="w-5 h-5 lg:w-6 lg:h-6 flex-shrink-0" style={{ color: "#6C63FF" }} />
               <div>
-                <p className="font-bold text-foreground" style={{ fontSize: 16 }}>Nexora IDE</p>
+                <p className="font-bold text-foreground text-sm lg:text-base">Nexora IDE</p>
                 {(() => {
                   const inProgress = (projects ?? []).find((p: { status: string }) => p.status === "in_progress");
                   if (inProgress) {
                     return (
-                      <p className="text-sm mt-0.5" style={{ color: "#9090B0" }}>
+                      <p className="text-xs lg:text-sm mt-0.5" style={{ color: "#9090B0" }}>
                         Continue:{" "}
                         <span style={{ color: "#00D4FF" }}>
                           {(inProgress as { title: string }).title}
@@ -330,7 +337,7 @@ export default function Dashboard() {
                       </p>
                     );
                   }
-                  return <p className="text-sm mt-0.5" style={{ color: "#9090B0" }}>Open the standalone code editor</p>;
+                  return <p className="text-xs lg:text-sm mt-0.5" style={{ color: "#9090B0" }}>Open the standalone code editor</p>;
                 })()}
               </div>
             </div>
@@ -341,12 +348,12 @@ export default function Dashboard() {
                 if (inProgress) setLocation(`/workspace/${(inProgress as { id: string }).id}?panel=ide`);
                 else setLocation("/ide");
               }}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all flex-shrink-0"
+              className="flex items-center gap-2 px-3 lg:px-4 py-2 rounded-xl text-sm font-semibold transition-all flex-shrink-0"
               style={{ background: "#6C63FF", color: "#fff" }}
               onMouseEnter={(e) => (e.currentTarget.style.background = "#5A52E0")}
               onMouseLeave={(e) => (e.currentTarget.style.background = "#6C63FF")}
             >
-              <Code2 className="w-3.5 h-3.5" />Open IDE
+              <Code2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">Open </span>IDE
             </button>
           </div>
         </div>
@@ -355,8 +362,8 @@ export default function Dashboard() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-lg font-semibold text-foreground">Start from a Blueprint</h3>
-              <p className="text-sm text-muted-foreground mt-0.5">
+              <h3 className="text-base lg:text-lg font-semibold text-foreground">Start from a Blueprint</h3>
+              <p className="text-xs lg:text-sm text-muted-foreground mt-0.5 hidden sm:block">
                 Pre-built IoT project templates you can customize
               </p>
             </div>
@@ -373,7 +380,7 @@ export default function Dashboard() {
               <Loader2 className="w-6 h-6 animate-spin" style={{ color: "#6C63FF" }} />
             </div>
           ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {featuredBlueprints.map((bp) => {
                 const diffColors: Record<string, { bg: string; color: string }> = {
                   Beginner: { bg: "rgba(0,200,150,0.1)", color: "#00C896" },
@@ -385,7 +392,7 @@ export default function Dashboard() {
                 return (
                   <div
                     key={bp.id}
-                    className="p-5 rounded-xl border flex flex-col gap-3 transition-all duration-200 cursor-pointer"
+                    className="p-4 lg:p-5 rounded-xl border flex flex-col gap-3 transition-all duration-200 cursor-pointer"
                     style={{ background: "#12121A", borderColor: "#2A2A3E" }}
                     onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#6C63FF"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A3E"; }}
@@ -429,6 +436,23 @@ export default function Dashboard() {
         </div>
 
       </div>
+
+      {/* Mobile FAB — New Project */}
+      <button
+        onClick={() => setLocation("/projects/new")}
+        className="lg:hidden fixed z-40 flex items-center justify-center rounded-full shadow-lg"
+        style={{
+          bottom: 80,
+          right: 16,
+          width: 56,
+          height: 56,
+          background: "#6C63FF",
+          boxShadow: "0 4px 20px rgba(108,99,255,0.5)",
+        }}
+        aria-label="New Project"
+      >
+        <Plus className="w-6 h-6 text-white" />
+      </button>
     </DashboardLayout>
   );
 }

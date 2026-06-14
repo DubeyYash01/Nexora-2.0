@@ -117,6 +117,23 @@ export default function Projects() {
           />
         )}
       </div>
+
+      {/* Mobile FAB */}
+      <button
+        onClick={() => setLocation("/projects/new")}
+        className="lg:hidden fixed z-40 flex items-center justify-center rounded-full shadow-lg"
+        style={{
+          bottom: 80,
+          right: 16,
+          width: 56,
+          height: 56,
+          background: "#6C63FF",
+          boxShadow: "0 4px 20px rgba(108,99,255,0.5)",
+        }}
+        aria-label="New Project"
+      >
+        <Plus className="w-6 h-6 text-white" />
+      </button>
     </DashboardLayout>
   );
 }

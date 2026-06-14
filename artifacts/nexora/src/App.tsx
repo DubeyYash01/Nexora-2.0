@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import React, { lazy, Suspense, useEffect } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -8,41 +8,53 @@ import { useAuth } from "@/hooks/useAuth";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import FloatingAI from "@/components/ai/FloatingAI";
+import { InstallPrompt } from "@/components/ui/InstallPrompt";
 
-import NotFound from "@/pages/not-found";
-import Landing from "@/pages/landing";
-import Login from "@/pages/login";
-import Signup from "@/pages/signup";
-import RoleSelect from "@/pages/role-select";
-import Dashboard from "@/pages/dashboard";
-import Projects from "@/pages/projects";
-import NewProject from "@/pages/new-project";
-import Workspace from "@/pages/workspace";
-import ComponentsPage from "@/pages/components-page";
-import BlueprintsPage from "@/pages/blueprints";
-import BlueprintDetailPage from "@/pages/blueprint-detail";
-import PublicProjectPage from "@/pages/public-project";
-import StudentAssignments from "@/pages/assignments";
-import PricingPage from "@/pages/pricing";
-import BillingPage from "@/pages/billing";
-import IDEPage from "@/pages/ide";
-import SettingsPage from "@/pages/settings";
-import ProfilePage from "@/pages/profile";
+const NotFound = lazy(() => import("@/pages/not-found"));
+const Landing = lazy(() => import("@/pages/landing"));
+const Login = lazy(() => import("@/pages/login"));
+const Signup = lazy(() => import("@/pages/signup"));
+const RoleSelect = lazy(() => import("@/pages/role-select"));
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const Projects = lazy(() => import("@/pages/projects"));
+const NewProject = lazy(() => import("@/pages/new-project"));
+const Workspace = lazy(() => import("@/pages/workspace"));
+const ComponentsPage = lazy(() => import("@/pages/components-page"));
+const BlueprintsPage = lazy(() => import("@/pages/blueprints"));
+const BlueprintDetailPage = lazy(() => import("@/pages/blueprint-detail"));
+const PublicProjectPage = lazy(() => import("@/pages/public-project"));
+const StudentAssignments = lazy(() => import("@/pages/assignments"));
+const PricingPage = lazy(() => import("@/pages/pricing"));
+const BillingPage = lazy(() => import("@/pages/billing"));
+const IDEPage = lazy(() => import("@/pages/ide"));
+const SettingsPage = lazy(() => import("@/pages/settings"));
+const ProfilePage = lazy(() => import("@/pages/profile"));
 
-import ProfessorOverview from "@/pages/professor/index";
-import ProfessorClasses from "@/pages/professor/classes";
-import ProfessorAssignments from "@/pages/professor/assignments";
-import ProfessorSubmissions from "@/pages/professor/submissions";
-import ProfessorReview from "@/pages/professor/review";
-import ProfessorAnalytics from "@/pages/professor/analytics";
-import ProfessorStudents from "@/pages/professor/students";
+const ProfessorOverview = lazy(() => import("@/pages/professor/index"));
+const ProfessorClasses = lazy(() => import("@/pages/professor/classes"));
+const ProfessorAssignments = lazy(() => import("@/pages/professor/assignments"));
+const ProfessorSubmissions = lazy(() => import("@/pages/professor/submissions"));
+const ProfessorReview = lazy(() => import("@/pages/professor/review"));
+const ProfessorAnalytics = lazy(() => import("@/pages/professor/analytics"));
+const ProfessorStudents = lazy(() => import("@/pages/professor/students"));
 import { ProtectedProfessorRoute } from "@/components/professor/ProfessorLayout";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
 });
 
-function ProtectedRoute({ component: Component }: { component: () => ReactNode }) {
+const PageLoader = () => (
+  <div className="min-h-screen w-full flex items-center justify-center bg-background">
+    <div className="flex flex-col items-center gap-3">
+      <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#6C63FF" }}>
+        <span className="text-white font-bold text-lg">N</span>
+      </div>
+      <div className="animate-pulse w-6 h-1 rounded-full bg-primary/50" />
+    </div>
+  </div>
+);
+
+function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
   const [, setLocation] = useLocation();
 
@@ -80,83 +92,84 @@ function Router() {
   return (
     <>
       <KeyboardShortcutsProvider />
-      <Switch>
-        <Route path="/" component={Landing} />
-        <Route path="/login" component={Login} />
-        <Route path="/signup" component={Signup} />
-        <Route path="/pricing" component={PricingPage} />
-        <Route path="/profile/:username" component={ProfilePage} />
+      <Suspense fallback={<PageLoader />}>
+        <Switch>
+          <Route path="/" component={Landing} />
+          <Route path="/login" component={Login} />
+          <Route path="/signup" component={Signup} />
+          <Route path="/pricing" component={PricingPage} />
+          <Route path="/profile/:username" component={ProfilePage} />
 
-        <Route path="/role-select">
-          <ProtectedRoute component={RoleSelect} />
-        </Route>
-        <Route path="/dashboard">
-          <ProtectedRoute component={Dashboard} />
-        </Route>
-        <Route path="/projects">
-          <ProtectedRoute component={Projects} />
-        </Route>
-        <Route path="/projects/new">
-          <ProtectedRoute component={NewProject} />
-        </Route>
-        <Route path="/workspace/:projectId">
-          <ErrorBoundary>
-            <ProtectedRoute component={Workspace} />
-          </ErrorBoundary>
-        </Route>
-        <Route path="/components">
-          <ProtectedRoute component={ComponentsPage} />
-        </Route>
-        <Route path="/blueprints">
-          <ProtectedRoute component={BlueprintsPage} />
-        </Route>
-        <Route path="/blueprints/:id">
-          <ProtectedRoute component={BlueprintDetailPage} />
-        </Route>
-        <Route path="/assignments">
-          <ProtectedRoute component={StudentAssignments} />
-        </Route>
-        <Route path="/ide">
-          <ProtectedRoute component={IDEPage} />
-        </Route>
-        <Route path="/settings/billing">
-          <ProtectedRoute component={BillingPage} />
-        </Route>
-        <Route path="/settings">
-          <ProtectedRoute component={SettingsPage} />
-        </Route>
-        <Route path="/p/:shareToken" component={PublicProjectPage} />
+          <Route path="/role-select">
+            <ProtectedRoute component={RoleSelect} />
+          </Route>
+          <Route path="/dashboard">
+            <ProtectedRoute component={Dashboard} />
+          </Route>
+          <Route path="/projects">
+            <ProtectedRoute component={Projects} />
+          </Route>
+          <Route path="/projects/new">
+            <ProtectedRoute component={NewProject} />
+          </Route>
+          <Route path="/workspace/:projectId">
+            <ErrorBoundary>
+              <ProtectedRoute component={Workspace} />
+            </ErrorBoundary>
+          </Route>
+          <Route path="/components">
+            <ProtectedRoute component={ComponentsPage} />
+          </Route>
+          <Route path="/blueprints">
+            <ProtectedRoute component={BlueprintsPage} />
+          </Route>
+          <Route path="/blueprints/:id">
+            <ProtectedRoute component={BlueprintDetailPage} />
+          </Route>
+          <Route path="/assignments">
+            <ProtectedRoute component={StudentAssignments} />
+          </Route>
+          <Route path="/ide">
+            <ProtectedRoute component={IDEPage} />
+          </Route>
+          <Route path="/settings/billing">
+            <ProtectedRoute component={BillingPage} />
+          </Route>
+          <Route path="/settings">
+            <ProtectedRoute component={SettingsPage} />
+          </Route>
+          <Route path="/p/:shareToken" component={PublicProjectPage} />
 
-        {/* Professor routes */}
-        <Route path="/professor">
-          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorOverview} />} />
-        </Route>
-        <Route path="/professor/classes">
-          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorClasses} />} />
-        </Route>
-        <Route path="/professor/assignments">
-          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorAssignments} />} />
-        </Route>
-        <Route path="/professor/submissions/:assignmentId">
-          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorSubmissions} />} />
-        </Route>
-        <Route path="/professor/submissions">
-          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorAssignments} />} />
-        </Route>
-        <Route path="/professor/review/:submissionId">
-          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorReview} />} />
-        </Route>
-        <Route path="/professor/analytics">
-          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorAnalytics} />} />
-        </Route>
-        <Route path="/professor/students">
-          <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorStudents} />} />
-        </Route>
+          <Route path="/professor">
+            <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorOverview} />} />
+          </Route>
+          <Route path="/professor/classes">
+            <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorClasses} />} />
+          </Route>
+          <Route path="/professor/assignments">
+            <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorAssignments} />} />
+          </Route>
+          <Route path="/professor/submissions/:assignmentId">
+            <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorSubmissions} />} />
+          </Route>
+          <Route path="/professor/submissions">
+            <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorAssignments} />} />
+          </Route>
+          <Route path="/professor/review/:submissionId">
+            <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorReview} />} />
+          </Route>
+          <Route path="/professor/analytics">
+            <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorAnalytics} />} />
+          </Route>
+          <Route path="/professor/students">
+            <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorStudents} />} />
+          </Route>
 
-        {/* 404 — must be last */}
-        <Route component={NotFound} />
-      </Switch>
+          <Route component={NotFound} />
+        </Switch>
+      </Suspense>
       <FloatingAIWrapper />
+      <InstallPrompt />
     </>
   );
 }

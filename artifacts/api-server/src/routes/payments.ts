@@ -46,7 +46,8 @@ router.post("/payments/create-order", verifyToken, async (req: AuthRequest, res)
       return;
     }
 
-    const Razorpay = (await import("razorpay")).default;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const Razorpay = (await import("razorpay" as any)).default;
     const razorpay = new Razorpay({ key_id: RAZORPAY_KEY_ID, key_secret: RAZORPAY_KEY_SECRET });
 
     const order = await razorpay.orders.create({

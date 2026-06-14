@@ -198,3 +198,26 @@
 .phase-testing  { background: rgba(0,200,150,0.15);   color: #00C896; }
 .phase-integration { background: rgba(0,212,255,0.15); color: #00D4FF; }
 .phase-deployment  { background: rgba(255,140,108,0.15); color: #FF8C6C; }
+
+/* Mobile animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* Mobile workspace tab active indicator */
+.mobile-tab-active {
+  color: #6C63FF !important;
+  border-bottom: 2px solid #6C63FF;
+}
+
+/* Prevent horizontal overflow on mobile */
+@media (max-width: 639px) {
+  .container { padding-left: 16px; padding-right: 16px; }
+  * { max-width: 100vw; }
+  body { overflow-x: hidden; }
+}

@@ -2,20 +2,36 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Nexora</title>
-    <meta name="description" content="Nexora — built on Replit. Update this description to reflect the app." />
+    <meta name="description" content="Nexora — AI-powered IoT project creation. From idea to working project, guided by AI." />
+    <meta name="keywords" content="IoT, Arduino, ESP32, AI, projects, students, makers" />
     <meta name="robots" content="index, follow" />
-    <meta property="og:title" content="Nexora" />
-    <meta property="og:description" content="Nexora — built on Replit. Update this description to reflect the app." />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#6C63FF" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Nexora" />
+    <link rel="apple-touch-icon" href="/icons/nexora-icon.svg" />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="Nexora — Build IoT Projects with AI" />
+    <meta property="og:description" content="Turn any IoT idea into a working project. Step-by-step AI guidance, built-in IDE, and component management." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Nexora" />
-    <meta name="twitter:description" content="Nexora — built on Replit. Update this description to reflect the app." />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="twitter:title" content="Nexora — Build IoT Projects with AI" />
+    <meta name="twitter:description" content="Turn any IoT idea into a working project. Step-by-step AI guidance." />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/icons/nexora-icon.svg" />
+
+    <!-- Fonts (non-blocking) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" /></noscript>
   </head>
   <body>
     <div id="root"></div>

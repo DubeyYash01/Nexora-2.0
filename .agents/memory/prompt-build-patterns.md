@@ -35,8 +35,20 @@ description: Design system, auth, Supabase column shapes, route conventions, and
 ## ProjectCard local Project interface
 - `artifacts/nexora/src/components/ui/ProjectCard.tsx` defines its own local `Project` interface — must include all fields used in sort/filter (including `updated_at`) or TS errors appear in pages that use `Parameters<typeof ProjectCard>[0]["project"]`
 
-## Supabase Node.js ws fix
-- `supabaseAdmin` and `verifyToken` must import `ws` from `"ws"` and pass `{ realtime: { transport: ws } }` to createClient — required on Node.js 20+ where WebSocket is not global
+## Supabase Node.js ws fix (updated Prompt 10)
+- The `ws` npm package is blocked by Replit's package firewall (es5-ext dependency blocked)
+- Fix: use a `FakeWebSocket` stub class in `supabaseAdmin.ts` instead — passes to `{ realtime: { transport: FakeWebSocket } }`
+- API server does NOT use realtime, so this is safe
+
+## Mobile / PWA patterns (Prompt 10)
+- Breakpoints: base=mobile, `lg:` (1024px) for sidebar/desktop panels — NOT `md:`. All DashboardLayout responsive padding uses `lg:`.
+- `DashboardLayout` (dashboard.tsx): sidebar `hidden lg:flex`, mobile nav `<MobileNav>` above content, mobile padding `pt-[calc(56px+16px)] pb-[calc(64px+16px)] lg:pt-6 lg:pb-6`
+- Mobile hooks: `useMediaQuery`, `useSwipe`, `useDebounce` in `src/hooks/`
+- Mobile components: `MobileNav.tsx` (MobileTopBar + MobileDrawer + MobileBottomTabBar), `BottomSheet.tsx`, `InstallPrompt.tsx`
+- PWA: `manifest.json` and `sw.js` in `public/`; service worker registered in `main.tsx`; meta tags in `index.html`
+- Workspace mobile: 4 tabs (steps/ide/ai/budget) with `mobileTab` state; desktop `hidden lg:flex`; swipe via `useSwipe`
+- Settings mobile: horizontal scrollable pill tabs (hidden `lg:hidden`), desktop sidebar `hidden lg:flex`
+- `ProtectedRoute` and `ProtectedProfessorRoute`: use `React.ComponentType` (not `() => ReactNode`) so lazy components typecheck correctly
 
 ## IDE page patterns (Prompt 8)
 - `/ide` page uses `DashboardLayout` directly; it lists all user projects with "Open in IDE" → `/workspace/:id?panel=ide`

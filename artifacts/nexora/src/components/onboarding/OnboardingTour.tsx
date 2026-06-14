@@ -50,6 +50,7 @@ export default function OnboardingTour() {
       const timer = setTimeout(() => setActive(true), 1200);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, []);
 
   useEffect(() => {

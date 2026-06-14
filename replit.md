@@ -539,7 +539,7 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_profile_public boolean DEFAULT 
 ## User preferences
 
 - Design system must be consistent across every screen built in all future prompts
-- This is Prompt 9 of 14 — future prompts will build on top of this foundation
+- This is Prompt 10 of 14 — future prompts will build on top of this foundation
 
 ## Gotchas
 

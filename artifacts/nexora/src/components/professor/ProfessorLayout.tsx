@@ -149,7 +149,7 @@ export default function ProfessorLayout({ children }: { children: React.ReactNod
   );
 }
 
-export function ProtectedProfessorRoute({ component: Component }: { component: () => React.ReactNode }) {
+export function ProtectedProfessorRoute({ component: Component }: { component: React.ComponentType }) {
   const { profile, loading } = useAuth();
   const [, setLocation] = useLocation();
 
