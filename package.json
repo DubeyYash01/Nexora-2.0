@@ -12,13 +12,5 @@
   "devDependencies": {
     "prettier": "^3.8.3",
     "typescript": "~5.9.3"
-  },
-  "dependencies": {
-    "connect-pg-simple": "^10.0.0",
-    "express-session": "^1.19.0",
-    "memoizee": "^0.4.17",
-    "openid-client": "^6.8.4",
-    "passport": "^0.7.0",
-    "passport-openid-connect": "^0.1.0"
   }
 }
