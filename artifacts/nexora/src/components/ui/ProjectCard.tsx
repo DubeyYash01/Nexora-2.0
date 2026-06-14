@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { ArrowRight, Cpu, Activity, Zap, Monitor, Wifi, Battery, Package } from "lucide-react";
+import { ArrowRight, Code2, Cpu, Activity, Zap, Monitor, Wifi, Battery, Package } from "lucide-react";
 
 interface Component {
   id: string;
@@ -154,6 +154,27 @@ export default function ProjectCard({ project }: { project: Project }) {
           {formattedDate && (
             <span className="text-xs" style={{ color: "#5A5A7A" }}>{formattedDate}</span>
           )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setLocation(`/workspace/${project.id}?panel=ide`);
+            }}
+            className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-all"
+            style={{ background: "transparent", color: "#9090B0", borderColor: "#2A2A3E" }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = "#6C63FF";
+              e.currentTarget.style.color = "#6C63FF";
+              e.currentTarget.style.background = "rgba(108,99,255,0.08)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "#2A2A3E";
+              e.currentTarget.style.color = "#9090B0";
+              e.currentTarget.style.background = "transparent";
+            }}
+            title="Open in IDE"
+          >
+            <Code2 className="w-3 h-3" />IDE
+          </button>
           <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-0.5"
             style={{ color: "#6C63FF" }} />
         </div>

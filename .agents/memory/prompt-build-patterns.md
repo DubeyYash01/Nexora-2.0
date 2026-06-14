@@ -37,3 +37,10 @@ description: Design system, auth, Supabase column shapes, and route conventions 
 
 ## Supabase Node.js ws fix
 - `supabaseAdmin` and `verifyToken` must import `ws` from `"ws"` and pass `{ realtime: { transport: ws } }` to createClient — required on Node.js 20+ where WebSocket is not global
+
+## Prompt 9 — IDE page patterns
+- `/ide` page uses `DashboardLayout` directly; it lists all user projects with "Open in IDE" → `/workspace/:id?panel=ide`
+- `useSearch()` from wouter reads query params in workspace; `?panel=ide` triggers a 2.2s inset glow (`boxShadow: inset 0 0 0 2px #6C63FF`) on the IDE panel div
+- Auto-save debounce is **2s** (not 30s) — applies both to `handleCodeChange` and AI push code path
+- NexoraIDE download button: check `isPro` from `usePlan()` hook; non-pro clicks open `UpgradeModal` instead of downloading
+- `.new-code-line` Monaco decoration class: purple bg + left border + `fadeCodeLine` keyframe animation (2s fade-out)

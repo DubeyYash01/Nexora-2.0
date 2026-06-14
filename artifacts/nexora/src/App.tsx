@@ -23,6 +23,7 @@ import PublicProjectPage from "@/pages/public-project";
 import StudentAssignments from "@/pages/assignments";
 import PricingPage from "@/pages/pricing";
 import BillingPage from "@/pages/billing";
+import IDEPage from "@/pages/ide";
 
 import ProfessorOverview from "@/pages/professor/index";
 import ProfessorClasses from "@/pages/professor/classes";
@@ -101,6 +102,9 @@ function Router() {
         </Route>
         <Route path="/assignments">
           <ProtectedRoute component={StudentAssignments} />
+        </Route>
+        <Route path="/ide">
+          <ProtectedRoute component={IDEPage} />
         </Route>
         <Route path="/settings/billing">
           <ProtectedRoute component={BillingPage} />

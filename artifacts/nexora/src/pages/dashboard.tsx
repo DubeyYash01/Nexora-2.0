@@ -13,7 +13,7 @@ import {
   Sparkles, Settings, Bell, LogOut, Loader2,
   FolderOpen, Zap, CheckCircle2, Package,
   Lightbulb, ThermometerSun, ParkingSquare, Droplets,
-  ClipboardList,
+  ClipboardList, Code2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ProjectCard from "@/components/ui/ProjectCard";
@@ -39,6 +39,7 @@ export function DashboardLayout({
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
     { icon: Folder, label: "My Projects", href: "/projects" },
     { icon: Plus, label: "New Project", href: "/projects/new" },
+    { icon: Code2, label: "IDE", href: "/ide", badge: "NEW" },
     { icon: Grid2x2, label: "Blueprints", href: "/blueprints" },
     { icon: Cpu, label: "My Components", href: "/components" },
     ...(profile?.role === "student" ? [{ icon: ClipboardList, label: "Assignments", href: "/assignments" }] : []),
@@ -81,6 +82,7 @@ export function DashboardLayout({
         <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
           {navItems.map((item) => {
             const isActive = location === item.href;
+            const hasBadge = "badge" in item && item.badge;
             return (
               <button
                 key={item.href}
@@ -94,6 +96,14 @@ export function DashboardLayout({
               >
                 <item.icon className="w-4 h-4 flex-shrink-0" />
                 <span className="font-medium text-sm">{item.label}</span>
+                {hasBadge && (
+                  <span
+                    className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded"
+                    style={{ background: "#00D4FF", color: "#0A0A0F" }}
+                  >
+                    {String(item.badge)}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -288,6 +298,56 @@ export default function Dashboard() {
               </Button>
             </div>
           )}
+        </div>
+
+        {/* Continue in IDE */}
+        <div>
+          <h3 className="text-lg font-semibold text-foreground mb-4">Continue in IDE</h3>
+          <div
+            className="flex items-center justify-between p-5 rounded-xl border cursor-pointer transition-all duration-200"
+            style={{
+              background: "linear-gradient(135deg, rgba(108,99,255,0.08) 0%, rgba(0,212,255,0.04) 100%)",
+              borderColor: "#2A2A3E",
+            }}
+            onClick={() => setLocation("/ide")}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#6C63FF")}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#2A2A3E")}
+          >
+            <div className="flex items-center gap-4">
+              <Code2 className="w-6 h-6 flex-shrink-0" style={{ color: "#6C63FF" }} />
+              <div>
+                <p className="font-bold text-foreground" style={{ fontSize: 16 }}>Nexora IDE</p>
+                {(() => {
+                  const inProgress = (projects ?? []).find((p: { status: string }) => p.status === "in_progress");
+                  if (inProgress) {
+                    return (
+                      <p className="text-sm mt-0.5" style={{ color: "#9090B0" }}>
+                        Continue:{" "}
+                        <span style={{ color: "#00D4FF" }}>
+                          {(inProgress as { title: string }).title}
+                        </span>
+                      </p>
+                    );
+                  }
+                  return <p className="text-sm mt-0.5" style={{ color: "#9090B0" }}>Open the standalone code editor</p>;
+                })()}
+              </div>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const inProgress = (projects ?? []).find((p: { status: string }) => p.status === "in_progress");
+                if (inProgress) setLocation(`/workspace/${(inProgress as { id: string }).id}?panel=ide`);
+                else setLocation("/ide");
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all flex-shrink-0"
+              style={{ background: "#6C63FF", color: "#fff" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#5A52E0")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "#6C63FF")}
+            >
+              <Code2 className="w-3.5 h-3.5" />Open IDE
+            </button>
+          </div>
         </div>
 
         {/* Blueprints */}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useRoute, useLocation } from "wouter";
+import { useRoute, useLocation, useSearch } from "wouter";
 import {
   ArrowLeft, CheckCircle, Lock, Clock,
   AlertTriangle, Zap, ChevronDown, ChevronRight,
@@ -302,7 +302,7 @@ function StepCard({
           {completing ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : null}
-          Complete Step →
+          Complete Step & Push Code →
         </button>
         {!allChecked && (
           <p className="text-xs text-center" style={{ color: "#3A3A5A" }}>
@@ -362,6 +362,17 @@ export default function Workspace() {
   // Save status
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ?panel=ide glow
+  const searchString = useSearch();
+  const [idePanelGlow, setIdePanelGlow] = useState(false);
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    if (params.get("panel") === "ide") {
+      setIdePanelGlow(true);
+      setTimeout(() => setIdePanelGlow(false), 2200);
+    }
+  }, [searchString]);
 
   // Step panel scroll ref
   const stepsEndRef = useRef<HTMLDivElement>(null);
@@ -440,7 +451,7 @@ export default function Workspace() {
     setIdeCode(code);
     setSaveStatus("unsaved");
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => saveCode(code), 30000);
+    saveTimerRef.current = setTimeout(() => saveCode(code), 2000);
   }, [saveCode]);
 
   /* ── Instruction checks ───────────────────── */
@@ -819,7 +830,13 @@ export default function Workspace() {
         <div className="flex-1 flex flex-col overflow-hidden">
 
           {/* IDE panel */}
-          <div className="flex-1 overflow-hidden">
+          <div
+            className="flex-1 overflow-hidden transition-all duration-500"
+            style={{
+              boxShadow: idePanelGlow ? "inset 0 0 0 2px #6C63FF" : "none",
+              borderRadius: idePanelGlow ? 8 : 0,
+            }}
+          >
             <NexoraIDE
               code={ideCode}
               filename={filename}
@@ -855,7 +872,7 @@ export default function Workspace() {
                 }
                 setSaveStatus("unsaved");
                 if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-                saveTimerRef.current = setTimeout(() => saveCode(ideCode + "\n" + code), 30000);
+                saveTimerRef.current = setTimeout(() => saveCode(ideCode + "\n" + code), 2000);
                 toast({ title: "Code pushed to IDE" });
               }}
               externalMessage={explainMessage}

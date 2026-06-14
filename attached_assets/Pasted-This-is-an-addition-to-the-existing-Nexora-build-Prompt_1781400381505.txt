@@ -1,0 +1,1255 @@
+This is an addition to the existing Nexora build.
+Prompts 1-8 are already built.
+Do NOT change anything already built unless 
+specifically told to fix it.
+
+This prompt does 4 things:
+1. Fixes/rebuilds the Nexora IDE 
+   and incremental code push system
+2. Adds standalone /ide page
+3. Adds IDE button to sidebar
+4. Adds dashboard quick access to IDE
+
+═══════════════════════════════════════
+PART 1 — FIX THE NEXORA IDE
+═══════════════════════════════════════
+
+Install Monaco Editor if not installed:
+npm install @monaco-editor/react
+
+File: client/src/components/ide/NexoraIDE.jsx
+
+CREATE or REPLACE this file completely:
+
+import Editor from '@monaco-editor/react'
+import { useRef, useState, useEffect } 
+  from 'react'
+
+The NexoraIDE component receives these props:
+  code: string (current code to display)
+  language: string (default 'cpp')
+  onCodeChange: function(newCode)
+  newHighlightLines: array of line numbers
+    to highlight when new code is pushed
+  readOnly: boolean (default false)
+  filename: string (default 'main.ino')
+
+MONACO EDITOR SETUP:
+
+Custom theme called "nexora-dark":
+Define before editor mounts using:
+monaco.editor.defineTheme('nexora-dark', {
+  base: 'vs-dark',
+  inherit: true,
+  rules: [
+    { token: 'comment', 
+      foreground: '546E7A', 
+      fontStyle: 'italic' },
+    { token: 'keyword', 
+      foreground: 'C792EA' },
+    { token: 'string', 
+      foreground: 'C3E88D' },
+    { token: 'number', 
+      foreground: 'F78C6C' },
+    { token: 'type', 
+      foreground: '82AAFF' },
+  ],
+  colors: {
+    'editor.background': '#0D0D14',
+    'editor.foreground': '#E0E0FF',
+    'editorLineNumber.foreground': 
+      '#3A3A5A',
+    'editor.lineHighlightBackground': 
+      'rgba(108,99,255,0.06)',
+    'editor.selectionBackground': 
+      'rgba(108,99,255,0.25)',
+    'editorCursor.foreground': '#6C63FF',
+  }
+})
+
+Monaco Editor options:
+{
+  theme: 'nexora-dark',
+  fontSize: 14,
+  fontFamily: 
+    "'JetBrains Mono', 'Fira Code', 
+     'Courier New', monospace",
+  lineNumbers: 'on',
+  minimap: { enabled: false },
+  scrollBeyondLastLine: false,
+  wordWrap: 'on',
+  automaticLayout: true,
+  readOnly: readOnly,
+  padding: { top: 16, bottom: 16 },
+  smoothScrolling: true,
+  cursorBlinking: 'smooth',
+  renderLineHighlight: 'all',
+  scrollbar: {
+    verticalScrollbarSize: 6,
+    horizontalScrollbarSize: 6,
+  }
+}
+
+HIGHLIGHT SYSTEM:
+When newHighlightLines prop changes
+and has values:
+  Use editor.deltaDecorations to add:
+    className: 'new-code-line'
+    isWholeLine: true
+  
+  Store decoration IDs in a ref.
+  
+  After 2000ms:
+    Remove decorations using 
+    stored IDs
+  
+  Auto-scroll to first highlighted line:
+    editor.revealLineInCenter(
+      newHighlightLines[0]
+    )
+
+Add to global CSS:
+.new-code-line {
+  background: rgba(108,99,255,0.25) !important;
+  border-left: 3px solid #6C63FF !important;
+  transition: background 2s ease-out;
+}
+
+INITIAL PLACEHOLDER:
+When code prop is empty or null,
+show this in editor:
+
+// ╔══════════════════════════════════════╗
+// ║         Welcome to Nexora IDE        ║
+// ║                                      ║
+// ║  Complete Step 1 in the build plan   ║
+// ║  and your first code will appear     ║
+// ║  here automatically.                 ║
+// ║                                      ║
+// ║  Each step adds new code on top      ║
+// ║  of the previous — building your     ║
+// ║  complete project step by step.      ║
+// ╚══════════════════════════════════════╝
+
+IDE TOP BAR (above Monaco Editor):
+  Height: 44px
+  bg: #0D0D14
+  border-bottom: 1px solid #2A2A3E
+  
+  Left side:
+    File icon (small, #6C63FF)
+    Filename text (JetBrains Mono, 
+    small, #9090B0)
+    e.g. "main.ino"
+  
+  Center:
+    Platform badge: "ESP32 · C++ Arduino"
+    bg: #1A1A2E, color: #9090B0
+    border-radius: 4px
+    padding: 2px 8px
+    font-size: 11px
+  
+  Right side:
+    Lines counter: "[X] lines"
+    (small, muted, updates live)
+    
+    Copy button (copy icon, small):
+      Copies all code to clipboard
+      On click: icon changes to 
+      checkmark for 2 seconds
+      Toast: "Code copied!"
+    
+    Download button (download icon):
+      Wrapped in PaywallGate 
+      feature="canDownloadCode"
+      On click (if allowed):
+        Creates blob from code
+        Downloads as filename 
+        (e.g. main.ino)
+
+IDE TABS (below top bar):
+  Two tabs:
+  [Code Editor] [Library Reference]
+  
+  Tab style:
+    Active: 
+      border-bottom: 2px solid #6C63FF
+      color: #F0F0FF
+      bg: transparent
+    Inactive:
+      color: #5A5A7A
+      hover color: #9090B0
+
+LIBRARY REFERENCE TAB:
+  Shows accumulated libraries list.
+  Receives prop: libraries (array)
+  
+  Each library card:
+    bg: #12121A
+    border: #2A2A3E
+    border-radius: 8px
+    padding: 16px
+    margin-bottom: 8px
+    
+    Top row:
+      Library name (bold, #F0F0FF)
+      If new: "NEW" badge 
+        (bg #6C63FF, white, 
+         text-xs, rounded-full,
+         px-2 py-0.5)
+    
+    Install name row:
+      Small label: "Library Manager:"
+      Code-style pill: installName
+      Copy icon button
+    
+    Purpose text 
+    (small, #9090B0, below)
+  
+  Empty state:
+    "Libraries will appear here 
+     as you complete build steps"
+
+═══════════════════════════════════════
+PART 2 — FIX THE WORKSPACE PAGE
+═══════════════════════════════════════
+
+File: client/src/pages/Workspace.jsx
+CREATE or REPLACE completely.
+
+This is the most important page.
+It uses NexoraIDE component above.
+
+ROUTE: /workspace/:projectId
+Also handle: ?panel=ide query param
+
+ON MOUNT:
+  1. Fetch project from Supabase
+     using projectId from URL params
+  2. Load: title, build_plan, 
+     components, ai_analysis,
+     current_step, ide_code,
+     completed_steps,
+     instruction_checks
+  3. Set all state from loaded data
+  4. If ?panel=ide in URL:
+     auto-focus right panel
+
+STATE TO MAINTAIN:
+  const [project, setProject] 
+    = useState(null)
+  const [buildPlan, setBuildPlan] 
+    = useState(null)
+  const [currentStepIndex, 
+    setCurrentStepIndex] 
+    = useState(0)
+  const [completedSteps, 
+    setCompletedSteps] 
+    = useState([])
+  const [ideCode, setIdeCode] 
+    = useState('')
+  const [newHighlightLines, 
+    setNewHighlightLines] 
+    = useState([])
+  const [libraries, setLibraries] 
+    = useState([])
+  const [instructionChecks, 
+    setInstructionChecks] 
+    = useState({})
+  const [isSaving, setIsSaving] 
+    = useState(false)
+
+LAYOUT:
+Full viewport height.
+No main app sidebar on this page.
+Own top bar + 3 panel layout.
+
+TOP BAR (52px, full width):
+  bg: #0A0A0F
+  border-bottom: 1px solid #2A2A3E
+  
+  Left:
+    "← Projects" link 
+    → navigates to /projects
+    (chevron-left icon + text)
+  
+  Center:
+    Project title
+    (editable on click:
+     click → becomes input → 
+     blur → saves to Supabase)
+  
+  Right:
+    Save indicator:
+      When saving: 
+        spinner icon + "Saving..."
+        color: #9090B0
+      When saved:
+        check icon + "Saved"
+        color: #00C896
+    
+    "Share" button (secondary, small)
+    → opens share modal from Prompt 6
+    
+    User avatar (small circle, 
+    shows initials)
+
+3-PANEL LAYOUT:
+  Display: flex, flex-row
+  Height: calc(100vh - 52px)
+
+LEFT PANEL (320px fixed width):
+  bg: #0A0A0F
+  border-right: 1px solid #2A2A3E
+  overflow-y: auto
+  flex-shrink: 0
+  
+  Contains: Build Steps (see below)
+
+CENTER/RIGHT PANEL (flex-1):
+  Contains: NexoraIDE component
+  Display: flex, flex-col
+  
+  Top section (flex-1):
+    NexoraIDE fills this area
+  
+  Bottom section (260px height):
+    border-top: 1px solid #2A2A3E
+    Contains: AI Assistant panel
+    (from Prompt 4)
+
+BUILD STEPS IN LEFT PANEL:
+
+Header:
+  Padding: 16px
+  "Build Plan" (bold, #F0F0FF)
+  
+  Progress bar below:
+    bg: #2A2A3E
+    fill: #6C63FF
+    height: 4px
+    border-radius: full
+    width: (completedSteps.length / 
+            totalSteps * 100)%
+    transition: width 0.5s ease
+  
+  "[X] of [Y] steps complete"
+  (small, #9090B0, mt-1)
+
+For each step in buildPlan.steps:
+
+  Step item container:
+    border-bottom: 1px solid #2A2A3E
+    padding: 16px
+    cursor: pointer
+    transition: background 0.2s
+
+  ── COMPLETED STATE:
+    background: transparent
+    Left border: 3px solid #00C896
+    
+    Shows:
+      Row: 
+        Green checkmark circle icon
+        Step title (small, #9090B0)
+        "Review" text (tiny, #5A5A7A)
+      
+      On click: expands to show 
+      read-only step details
+  
+  ── ACTIVE STATE (current step):
+    background: rgba(108,99,255,0.06)
+    Left border: 3px solid #6C63FF
+    
+    Shows full step detail:
+    
+    Top row:
+      Step number badge:
+        bg: #6C63FF
+        color: white
+        border-radius: full
+        width: 24px, height: 24px
+        font-size: 12px, centered
+      
+      Step title (bold, #F0F0FF, ml-2)
+      
+      Phase badge (right aligned):
+        text-xs, rounded-full, px-2 py-0.5
+        Colors per phase:
+          Setup: bg rgba(108,99,255,0.2) 
+                 color #6C63FF
+          Wiring: bg rgba(255,184,77,0.2) 
+                  color #FFB84D
+          Coding: bg rgba(0,212,255,0.2) 
+                  color #00D4FF
+          Testing: bg rgba(0,200,150,0.2) 
+                   color #00C896
+          Integration: bg rgba(0,212,255,0.2)
+                       color #00D4FF
+          Deployment: bg rgba(255,140,108,0.2)
+                      color #FF8C6C
+    
+    Objective text:
+      (small, #9090B0, mt-2, mb-3)
+    
+    Duration row:
+      Clock icon (12px, #5A5A7A)
+      Duration text (text-xs, #5A5A7A)
+    
+    Instructions list (mt-3):
+      For each instruction:
+        Row: checkbox + text
+        
+        Checkbox custom style:
+          Unchecked: 
+            border: 1.5px solid #2A2A3E
+            bg: transparent
+            border-radius: 4px
+            width: 16px, height: 16px
+          Checked:
+            bg: #6C63FF
+            border: #6C63FF
+            checkmark white inside
+        
+        Text: 
+          Unchecked: color #9090B0
+          Checked: 
+            color #5A5A7A
+            text-decoration: line-through
+        
+        On check: saves to 
+        instructionChecks state
+        and Supabase
+    
+    Wiring note (if exists):
+      mt-3, p-3
+      bg: rgba(255,184,77,0.08)
+      border: 1px solid 
+        rgba(255,184,77,0.3)
+      border-radius: 8px
+      
+      Row: zap icon (#FFB84D) + 
+           "Wiring Note" (bold, small)
+      Note text below (small, #FFB84D)
+    
+    Safety warnings (if any):
+      mt-2, p-3
+      bg: rgba(255,90,90,0.08)
+      border: 1px solid 
+        rgba(255,90,90,0.3)
+      border-radius: 8px
+      
+      Each warning:
+        alert-triangle icon (#FF5A5A)
+        Warning text (small, #FF5A5A)
+    
+    What you learn (mt-3):
+      Row: 
+        book-open icon (#00D4FF, 14px)
+        "You'll learn:" (text-xs, #5A5A7A)
+      Text: whatYouLearn 
+            (small, #9090B0, ml-5)
+    
+    Verification (mt-2):
+      Row:
+        check-circle icon 
+        (#00C896, 14px)
+        "Verify:" (text-xs, #5A5A7A)
+      Text: verificationCheck 
+            (small, #9090B0, ml-5)
+    
+    COMPLETE STEP BUTTON (mt-4):
+      Full width
+      Height: 40px
+      
+      DISABLED state 
+      (not all instructions checked):
+        bg: #1A1A2E
+        color: #5A5A7A
+        border: 1px solid #2A2A3E
+        cursor: not-allowed
+        text: "Check all instructions 
+               to continue"
+      
+      ENABLED state 
+      (all instructions checked):
+        bg: #6C63FF
+        color: white
+        hover: bg #5A52E0
+        cursor: pointer
+        text: "Complete Step & 
+               Push Code →"
+        
+        On click: triggers 
+        CODE PUSH SYSTEM (below)
+  
+  ── LOCKED STATE (future steps):
+    background: transparent
+    opacity: 0.4
+    Left border: 3px solid #2A2A3E
+    
+    Shows:
+      Row:
+        Lock icon (#5A5A7A, 16px)
+        Step title (#5A5A7A)
+    
+    Not clickable.
+
+Below steps list 
+(sticky at bottom of left panel):
+  border-top: 1px solid #2A2A3E
+  padding: 12px 16px
+  bg: #0A0A0F
+  
+  Small info:
+    "Platform:" + platform value
+    "Language:" + language value
+  
+  If all steps complete:
+    Green banner:
+    bg: rgba(0,200,150,0.1)
+    border: #00C896
+    "🎉 Project Complete!"
+    "Export or share your project"
+
+═══════════════════════════════════════
+PART 3 — THE CODE PUSH SYSTEM
+═══════════════════════════════════════
+
+File: client/src/hooks/useCodePush.js
+
+This hook manages all code push logic.
+
+export function useCodePush({
+  buildPlan,
+  setIdeCode,
+  setNewHighlightLines,
+  setLibraries,
+  setCompletedSteps,
+  setCurrentStepIndex,
+  projectId,
+  userId
+}) {
+
+  async function completeStep(stepNumber) {
+    
+    const step = buildPlan.steps.find(
+      s => s.stepNumber === stepNumber
+    )
+    if (!step) return
+    
+    const newCode = step.code.content
+    const highlightLines = 
+      step.code.highlightLines || []
+    
+    // 1. Update IDE code
+    setIdeCode(newCode)
+    
+    // 2. Trigger highlight animation
+    setNewHighlightLines(highlightLines)
+    
+    // Clear highlights after 2.5 seconds
+    setTimeout(() => {
+      setNewHighlightLines([])
+    }, 2500)
+    
+    // 3. Add new libraries
+    const newLibraries = 
+      (step.libraries || [])
+      .filter(lib => lib.isNew)
+    
+    setLibraries(prev => {
+      const existing = 
+        prev.map(l => l.name)
+      const toAdd = newLibraries
+        .filter(l => 
+          !existing.includes(l.name)
+        )
+      return [...prev, ...toAdd]
+    })
+    
+    // 4. Mark step complete
+    setCompletedSteps(prev => 
+      [...prev, stepNumber]
+    )
+    
+    // 5. Move to next step
+    setCurrentStepIndex(
+      stepNumber  
+      // (stepNumber is 1-based,
+      //  next step index = stepNumber)
+    )
+    
+    // 6. Save to Supabase
+    await saveProgress({
+      projectId,
+      stepNumber,
+      code: newCode,
+      libraries: newLibraries
+    })
+    
+    // 7. Show success toast
+    // (call toast from outside hook)
+    return {
+      success: true,
+      newCode,
+      highlightLines,
+      newLibraries
+    }
+  }
+  
+  async function saveProgress({
+    projectId, stepNumber, 
+    code, libraries
+  }) {
+    try {
+      await fetch(
+        '/api/projects/complete-step',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 
+              'application/json'
+          },
+          body: JSON.stringify({
+            projectId,
+            stepNumber,
+            ideCode: code,
+            completedSteps: stepNumber
+          })
+        }
+      )
+    } catch (err) {
+      console.error(
+        'Failed to save progress:', 
+        err
+      )
+    }
+  }
+  
+  return { completeStep }
+}
+
+USE THIS HOOK in Workspace.jsx:
+
+const { completeStep } = useCodePush({
+  buildPlan,
+  setIdeCode,
+  setNewHighlightLines,
+  setLibraries,
+  setCompletedSteps,
+  setCurrentStepIndex,
+  projectId,
+  userId: user?.id
+})
+
+When "Complete Step" button clicked:
+  const result = 
+    await completeStep(
+      currentStep.stepNumber
+    )
+  
+  if (result.success) {
+    showToast({
+      type: 'success',
+      message: `Step ${stepNumber} 
+        complete — code pushed to IDE!`
+    })
+    
+    // Scroll left panel to next step
+    // after 300ms delay
+    setTimeout(() => {
+      document
+        .getElementById(
+          `step-${stepNumber + 1}`
+        )
+        ?.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'start'
+        })
+    }, 300)
+  }
+
+═══════════════════════════════════════
+PART 4 — STANDALONE IDE PAGE
+═══════════════════════════════════════
+
+File: client/src/pages/IDEPage.jsx
+
+ROUTE: /ide
+
+This page is an ENTRY POINT.
+It does not render another IDE.
+It leads users to the correct workspace.
+
+LAYOUT:
+Uses main app layout 
+(with sidebar, navbar from Prompt 1)
+
+PAGE HEADER:
+  Left:
+    Heading: "IDE"
+    Subtext: "Open a project to 
+              continue building"
+  
+  Right:
+    "+ New Project" button (primary)
+    → navigates to /projects/new
+
+TWO SECTION LAYOUT:
+
+SECTION 1 — Continue Building
+(shown if user has projects):
+
+  Heading: "Your Projects"
+  Subtext: "Pick up where you left off"
+  
+  Project list (full width):
+    Show ALL user projects
+    ordered by updated_at desc
+    
+    Each project as a row card:
+      bg: #12121A
+      border: 1px solid #2A2A3E
+      border-radius: 12px
+      padding: 20px
+      margin-bottom: 12px
+      hover: border #6C63FF
+      transition: all 0.2s
+      
+      Left section:
+        Project title 
+        (bold, #F0F0FF, font-size 16px)
+        
+        Status badge (below title):
+          draft: gray
+          in_progress: 
+            cyan with pulse dot
+          completed: green
+          archived: muted
+        
+        Below badges:
+          Small text: 
+          "Last updated: [relative time]"
+          e.g. "2 hours ago"
+          color: #5A5A7A, font-size: 12px
+      
+      Middle section:
+        Progress info:
+          "Step [X] of [Y]" 
+          (if has build plan)
+          
+          Thin progress bar:
+            bg: #2A2A3E
+            fill: #6C63FF
+            height: 3px
+            border-radius: full
+            width: 
+              (currentStep/totalSteps)%
+        
+        Platform badge (if exists):
+          "ESP32" or "Arduino Uno"
+          bg: #1A1A2E
+          color: #9090B0
+          text-xs, rounded, px-2 py-0.5
+      
+      Right section:
+        Two buttons:
+        
+        "Open in IDE" button:
+          bg: #6C63FF
+          color: white
+          border-radius: 8px
+          padding: 8px 16px
+          font-size: 14px
+          font-weight: 500
+          hover: bg #5A52E0
+          
+          On click:
+            navigate(
+              `/workspace/${project.id}
+               ?panel=ide`
+            )
+        
+        "View Project" button:
+          bg: transparent
+          border: 1px solid #2A2A3E
+          color: #9090B0
+          border-radius: 8px
+          padding: 8px 16px
+          font-size: 14px
+          hover: border #6C63FF
+                 color #F0F0FF
+          
+          On click:
+            navigate(
+              `/projects/${project.id}`
+            )
+
+SECTION 2 — Import External Code:
+  
+  Heading: "Import External Code"
+  Subtext: "Paste existing code 
+            and get AI assistance"
+  
+  Card:
+    bg: #12121A
+    border: 1px dashed #2A2A3E
+    border-radius: 12px
+    padding: 32px
+    text-align: center
+    hover: border-color #6C63FF
+    cursor: pointer
+    
+    On click: opens import modal
+    
+    Icon: upload-cloud 
+          (48px, #6C63FF, opacity 0.7)
+    
+    Heading: "Import Your Code"
+    (mt-3, #F0F0FF)
+    
+    Subtext: 
+    "Paste Arduino, ESP32, or 
+     MicroPython code"
+    (#9090B0, mt-1)
+    
+    Supported: 
+    ".ino · .cpp · .py"
+    (text-xs, #5A5A7A, mt-2)
+
+EMPTY STATE 
+(if user has NO projects):
+  Centered in page:
+  
+  Icon: code-2 
+        (64px, #6C63FF, opacity 0.4)
+  
+  Heading: "No projects yet"
+  (mt-4, #F0F0FF)
+  
+  Subtext: 
+  "Create your first IoT project 
+   and the IDE will be ready 
+   for you here."
+  (#9090B0, mt-2)
+  
+  Button: "Create First Project"
+  (primary, mt-6)
+  → /projects/new
+
+IMPORT CODE MODAL:
+(Same as described in previous prompt)
+
+Opens as centered modal, 
+max-width: 680px
+
+Header:
+  "Import Code"
+  Close button (X)
+
+Code input area:
+  Label: "Paste your code:"
+  
+  Textarea:
+    font-family: JetBrains Mono
+    font-size: 13px
+    min-height: 280px
+    bg: #0D0D14
+    border: 1px solid #2A2A3E
+    border-radius: 8px
+    color: #E0E0FF
+    padding: 16px
+    resize: vertical
+    
+    On focus: border #6C63FF
+    
+    Placeholder:
+    "// Paste your Arduino or 
+     ESP32 code here...
+     
+     #include <Arduino.h>
+     
+     void setup() {
+       // Your setup code
+     }
+     
+     void loop() {
+       // Your loop code
+     }"
+
+Language selector:
+  "Language:" label
+  3 pill buttons:
+    [C++ Arduino] [MicroPython] [C]
+  Selected: bg #6C63FF, white text
+  Default: C++ Arduino
+
+File upload option:
+  Small link below textarea:
+  "Or upload a file (.ino, .cpp, .py)"
+  
+  Hidden file input triggered on click
+  On file select: read content → 
+  fill textarea
+
+Link to project:
+  Label: "Link to project (optional):"
+  
+  Dropdown:
+    Default: "— Open without linking —"
+    Then list all user projects
+  
+  If project selected:
+    Show note:
+    "Code will be loaded into 
+     [project name]'s IDE"
+
+"Open in IDE" button:
+  Primary, full width
+  Disabled if textarea empty
+  
+  On click:
+    If project selected:
+      Save code to that project's 
+      ide_code in Supabase
+      Navigate to /workspace/[id]
+                  ?panel=ide
+    
+    If no project selected:
+      Navigate to /ide with code 
+      stored in sessionStorage:
+      sessionStorage.setItem(
+        'importedCode', code
+      )
+      Then show in IDE standalone view
+
+═══════════════════════════════════════
+PART 5 — SIDEBAR & DASHBOARD CHANGES
+═══════════════════════════════════════
+
+────────────────────────────────────
+SIDEBAR ADDITION
+────────────────────────────────────
+
+File: client/src/components/layout/
+      Sidebar.jsx (or wherever sidebar is)
+
+Add new nav item:
+Position: between "My Projects" 
+          and "Blueprints"
+
+{
+  icon: Code2,  
+  // from lucide-react
+  label: 'IDE',
+  path: '/ide',
+  badge: 'NEW'
+  // show for 30 days then remove
+}
+
+Badge style:
+  bg: #00D4FF
+  color: #0A0A0F
+  font-size: 10px
+  font-weight: 700
+  border-radius: 4px
+  padding: 1px 5px
+  margin-left: 8px
+
+Show badge only if:
+  User account created less than 
+  30 days ago
+  OR always show for now during 
+  initial launch
+
+────────────────────────────────────
+DASHBOARD ADDITION
+────────────────────────────────────
+
+File: client/src/pages/Dashboard.jsx
+
+Add new section BELOW "Recent Projects"
+and ABOVE "Suggested Blueprints":
+
+Section heading: "Continue in IDE"
+
+Card:
+  bg: linear-gradient(
+    135deg,
+    rgba(108,99,255,0.08) 0%,
+    rgba(0,212,255,0.04) 100%
+  )
+  border: 1px solid #2A2A3E
+  border-radius: 12px
+  padding: 20px 24px
+  
+  Layout: flex, align-items: center,
+  justify-content: space-between
+  
+  Left side:
+    Row: 
+      code-2 icon 
+      (24px, #6C63FF, mr-3)
+      
+      Column:
+        "Nexora IDE" 
+        (bold, #F0F0FF, font-size 16px)
+        
+        If user has in_progress project:
+          "Continue: [project title]"
+          (#9090B0, font-size 13px)
+          "Last edited [relative time]"
+          (#5A5A7A, font-size 12px)
+        
+        Else if user has any project:
+          "Open your latest project 
+           in the IDE"
+          (#9090B0, font-size 13px)
+        
+        Else:
+          "Create a project to 
+           start coding"
+          (#9090B0, font-size 13px)
+  
+  Right side:
+    If user has projects:
+      "Open in IDE" button:
+        bg: #6C63FF
+        color: white
+        border-radius: 8px
+        padding: 10px 20px
+        font-weight: 500
+        hover: bg #5A52E0
+        transition: all 0.2s
+        
+        On click:
+          Find most recent 
+          in_progress project
+          Navigate to:
+          /workspace/[id]?panel=ide
+    
+    If no projects:
+      "Start Building" button:
+        secondary style
+        → /projects/new
+
+ADD "Open in IDE" TO PROJECT CARDS:
+
+In ProjectCard component,
+in the bottom row actions:
+
+Add small button alongside 
+existing "View" arrow:
+
+  Icon: code-2 (14px)
+  Text: "IDE"
+  Style:
+    bg: transparent
+    border: 1px solid #2A2A3E
+    color: #9090B0
+    border-radius: 6px
+    padding: 4px 10px
+    font-size: 12px
+    hover: border #6C63FF, 
+           color #6C63FF
+    transition: all 0.2s
+  
+  On click:
+    navigate(
+      `/workspace/${project.id}
+       ?panel=ide`
+    )
+  
+  Stop event propagation so 
+  clicking this doesn't also 
+  trigger the card's main click.
+
+═══════════════════════════════════════
+PART 6 — ROUTING UPDATES
+═══════════════════════════════════════
+
+In client/src/App.jsx,
+add these routes if not present:
+
+import Workspace from 
+  './pages/Workspace'
+import IDEPage from 
+  './pages/IDEPage'
+
+Inside router:
+<Route 
+  path="/workspace/:projectId" 
+  element={
+    <ProtectedRoute>
+      <Workspace />
+    </ProtectedRoute>
+  } 
+/>
+
+<Route 
+  path="/ide" 
+  element={
+    <ProtectedRoute>
+      <IDEPage />
+    </ProtectedRoute>
+  } 
+/>
+
+The /workspace route must NOT 
+show the main sidebar.
+Add logic to hide sidebar 
+when on /workspace/* routes:
+
+In your main layout component,
+check current path:
+  const location = useLocation()
+  const isWorkspace = 
+    location.pathname
+    .startsWith('/workspace')
+  
+  {!isWorkspace && <Sidebar />}
+
+═══════════════════════════════════════
+BACKEND ROUTES TO VERIFY/ADD
+═══════════════════════════════════════
+
+Make sure these exist and work:
+
+POST /api/projects/complete-step
+  Body: { 
+    projectId, 
+    stepNumber,
+    ideCode,
+    userId
+  }
+  → Updates in Supabase:
+    current_step = stepNumber
+    ide_code = ideCode
+    completed_steps = 
+      array_append(
+        completed_steps, 
+        stepNumber
+      )
+  → Returns { success }
+
+GET /api/projects/workspace/:projectId
+  → Returns full project data:
+    id, title, build_plan,
+    components, ai_analysis,
+    current_step, ide_code,
+    completed_steps,
+    instruction_checks,
+    status
+  → Validates user owns project
+  → Returns { project }
+
+POST /api/projects/save-ide-code
+  Body: { projectId, code, userId }
+  → Updates ide_code in Supabase
+  → Returns { success }
+
+AUTO-SAVE:
+In Workspace.jsx, set up auto-save:
+
+useEffect(() => {
+  if (!ideCode || !projectId) return
+  
+  const timer = setTimeout(() => {
+    fetch('/api/projects/save-ide-code',{
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        projectId,
+        code: ideCode,
+        userId: user?.id
+      })
+    })
+    setIsSaving(false)
+  }, 2000)
+  
+  setIsSaving(true)
+  return () => clearTimeout(timer)
+}, [ideCode])
+
+This saves 2 seconds after user 
+stops typing. Debounced.
+
+═══════════════════════════════════════
+IMPORTANT RULES
+═══════════════════════════════════════
+
+1. There is only ONE IDE renderer —
+   the NexoraIDE component.
+   It lives in /workspace/:projectId.
+   /ide page is just an entry point
+   that navigates to workspace.
+   Never create two Monaco instances.
+
+2. Code push MUST be smooth.
+   No flash of empty editor.
+   No jarring transitions.
+   The highlight animation must 
+   actually work — test it.
+
+3. Auto-save runs silently.
+   Never interrupt user with 
+   save dialogs or alerts.
+   Only show the "Saved" indicator 
+   in top bar.
+
+4. When workspace loads:
+   Restore EVERYTHING from Supabase:
+   - Current step position
+   - All completed steps
+   - IDE code (restore exactly)
+   - Instruction checkbox states
+   - Library list
+   User must land exactly where 
+   they left off.
+
+5. The "Complete Step & Push Code" 
+   button is the most important 
+   button in the product.
+   Make it feel satisfying to click.
+   The code appearing in IDE after 
+   clicking must feel like magic.
+
+6. ?panel=ide query param:
+   When present, add a subtle 
+   visual indicator that IDE 
+   is the focus:
+   Right panel gets a brief 
+   purple glow animation on load
+   (box-shadow pulse, 1 second)
+
+7. After building confirm ALL of:
+   ✓ /ide page loads with 
+     project list
+   ✓ "Open in IDE" button on 
+     each project row works
+   ✓ Navigates to workspace 
+     with IDE focused
+   ✓ "IDE" appears in sidebar
+   ✓ Dashboard shows 
+     "Continue in IDE" section
+   ✓ ProjectCard has "IDE" button
+   ✓ Import code modal opens
+   ✓ Monaco Editor renders 
+     correctly in workspace
+   ✓ Placeholder shows when 
+     no code yet
+   ✓ Completing a step pushes 
+     code to IDE
+   ✓ New lines highlight in purple
+   ✓ Highlights fade after 2.5s
+   ✓ IDE auto-scrolls to new code
+   ✓ Libraries appear in 
+     Library Reference tab
+   ✓ Auto-save works silently
+   ✓ Refreshing workspace 
+     restores all state
+   ✓ Step checkboxes restore 
+     on refresh

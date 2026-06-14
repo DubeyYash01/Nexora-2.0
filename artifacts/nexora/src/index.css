@@ -157,6 +157,17 @@
   transition: background 1.8s ease-out;
 }
 
+.new-code-line {
+  background: rgba(108, 99, 255, 0.22) !important;
+  border-left: 3px solid #6C63FF !important;
+  animation: fadeCodeLine 2s ease-out forwards;
+}
+
+@keyframes fadeCodeLine {
+  0%   { background: rgba(108, 99, 255, 0.28) !important; }
+  100% { background: rgba(108, 99, 255, 0.04) !important; }
+}
+
 .panel-resize-handle {
   width: 4px;
   background: #2A2A3E;
