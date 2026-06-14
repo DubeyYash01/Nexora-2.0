@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useGetProjects, getGetProjectsQueryKey } from "@workspace/api-client-react";
-import { Plus, Loader2, Sparkles, SlidersHorizontal } from "lucide-react";
+import { Plus, FolderOpen, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardLayout } from "./dashboard";
 import ProjectCard from "@/components/ui/ProjectCard";
+import EmptyState from "@/components/ui/EmptyState";
+import { SkeletonCards } from "@/components/ui/SkeletonCard";
 
 type FilterStatus = "all" | "in_progress" | "completed" | "draft";
 type SortOrder = "newest" | "oldest" | "updated";
@@ -88,8 +90,8 @@ export default function Projects() {
 
         {/* Project grid / states */}
         {isLoading ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          <div className="grid sm:grid-cols-2 gap-4">
+            <SkeletonCards count={3} />
           </div>
         ) : filtered.length > 0 ? (
           <div className="grid sm:grid-cols-2 gap-4">
@@ -97,24 +99,22 @@ export default function Projects() {
               <ProjectCard key={p.id} project={p} />
             ))}
           </div>
+        ) : filter !== "all" ? (
+          <EmptyState
+            icon={FolderOpen}
+            title={`No ${filter.replace("_", " ")} projects`}
+            description="Try changing the filter above to see all projects."
+            actionLabel="Show All"
+            onAction={() => setFilter("all")}
+          />
         ) : (
-          <div className="rounded-xl border border-dashed p-12 flex flex-col items-center text-center"
-            style={{ borderColor: "#2A2A3E", background: "#12121A" }}>
-            <Sparkles className="w-12 h-12 mb-4" style={{ color: "#6C63FF" }} />
-            <h4 className="text-lg font-semibold text-foreground mb-2">
-              {filter === "all" ? "No projects yet" : `No ${filter.replace("_", " ")} projects`}
-            </h4>
-            <p className="text-muted-foreground text-sm max-w-xs mb-6">
-              {filter === "all"
-                ? "Start by describing your IoT idea and let Nexora do the rest."
-                : "Try changing the filter above."}
-            </p>
-            {filter === "all" && (
-              <Button data-testid="btn-create-first-project" onClick={() => setLocation("/projects/new")}>
-                Create your first project
-              </Button>
-            )}
-          </div>
+          <EmptyState
+            icon={FolderOpen}
+            title="No projects yet"
+            description="Start by describing your IoT idea and let Nexora AI plan and guide your build."
+            actionLabel="Create First Project"
+            onAction={() => setLocation("/projects/new")}
+          />
         )}
       </div>
     </DashboardLayout>

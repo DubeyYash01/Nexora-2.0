@@ -30,7 +30,6 @@ async function buildAll() {
     external: [
       "*.node",
       "razorpay",
-      "zod",
       "sharp",
       "better-sqlite3",
       "sqlite3",

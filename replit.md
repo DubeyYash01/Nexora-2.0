@@ -407,6 +407,26 @@ Nexora is a complete IoT project creation platform. Prompts 1–6 of 14 complete
   - Supabase tables: `subscriptions`, `payment_history`, `usage_tracking`, `college_inquiries`; `profiles.plan` and `profiles.trial_used` columns
   - Razorpay env vars: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` (set in Replit secrets)
 
+- **Prompt 9**: Settings, Notifications, Onboarding, Error Handling, Loading States, 404, Keyboard Shortcuts:
+  - `/settings` page: 7-section tabbed layout (Profile, Account, Notifications, Appearance, Billing, Privacy, Keyboard Shortcuts)
+  - Profile section: full_name, username (with real-time uniqueness check + 500ms debounce), bio (160 char limit), role modal, college/course, location, website
+  - Account section: change password (with strength indicator + visibility toggle), delete account (requires typing "DELETE"), request data export
+  - Notifications section: 6 toggle preferences, auto-saved on change
+  - Appearance section: font size slider for IDE (localStorage), layout toggles
+  - Privacy section: public/private profile toggle, per-project defaults
+  - Keyboard Shortcuts section: full reference table (Ctrl+H/P/I/N/B/,/K/Enter etc.)
+  - Notification Bell: replaces placeholder Bell in navbar header; polls every 60s (paused on `visibilitychange`); unread count badge (max "9+"); dropdown with type icons, mark-all-read
+  - Onboarding Tour: 5-step spotlight system (localStorage gated at `nexora_tour_completed`); CSS box-shadow spotlight; tooltip with step dots, Back/Next/Skip
+  - 404 Page: gradient "404" text, compass icon, two action buttons, quick links row
+  - `ErrorBoundary` class component: wraps `<Workspace>` + entire app; collapsible error details; Try Again + Go to Dashboard
+  - `EmptyState` component: applied to `/projects` (no projects / filtered empty)
+  - `SkeletonCard` + `SkeletonCards`: shimmer animation, replaces spinner on `/projects` loading state
+  - `useKeyboardShortcuts` hook: activated globally via `KeyboardShortcutsProvider` in `App.tsx`; ignores INPUT/TEXTAREA targets
+  - `/profile/:username` public profile page: avatar, bio, role badge, stats, blueprints/projects tabs; no auth required
+  - Backend routes: `settings.ts` (PUT /api/settings/profile, POST /settings/change-password, DELETE /auth/delete-account, PUT /settings/notifications, POST /settings/validate-username, GET /api/profile/:username), `notifications.ts` (GET/PUT /api/notifications, POST /api/notifications)
+  - Bug fix: removed `zod` from esbuild `external` list so it bundles correctly (was failing on API server restart)
+  - New Supabase tables: `notifications`; new columns on `profiles`: `username`, `bio`, `location`, `website`, `notification_preferences`, `profile_views`, `is_profile_public`
+
 ## Supabase Setup Required (Prompt 8 additions)
 
 Run these SQL statements in Supabase SQL Editor after the Prompt 7 tables:
@@ -486,10 +506,40 @@ CREATE POLICY "users manage own usage" ON usage_tracking FOR ALL USING (auth.uid
 CREATE POLICY "users insert own inquiries" ON college_inquiries FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
 ```
 
+## Supabase Setup Required (Prompt 9 additions)
+
+Run these SQL statements in Supabase SQL Editor after the Prompt 8 tables:
+
+```sql
+-- Notifications table
+CREATE TABLE IF NOT EXISTS notifications (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id),
+  type text,
+  title text,
+  message text,
+  link text,
+  is_read boolean DEFAULT false,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "users own notifications" ON notifications FOR ALL USING (auth.uid() = user_id);
+
+-- New profile columns
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS username text UNIQUE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio text;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS location text;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS website text;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS notification_preferences jsonb DEFAULT '{}';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS profile_views integer DEFAULT 0;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_profile_public boolean DEFAULT true;
+```
+
 ## User preferences
 
 - Design system must be consistent across every screen built in all future prompts
-- This is Prompt 8 of 14 — future prompts will build on top of this foundation
+- This is Prompt 9 of 14 — future prompts will build on top of this foundation
 
 ## Gotchas
 

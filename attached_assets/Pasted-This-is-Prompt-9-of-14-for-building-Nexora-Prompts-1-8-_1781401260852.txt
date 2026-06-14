@@ -1,0 +1,1340 @@
+This is Prompt 9 of 14 for building Nexora.
+Prompts 1-8 plus the IDE fix are already built.
+Do NOT touch or recreate anything already built.
+Only ADD to what exists.
+
+═══════════════════════════════════════
+WHAT THIS PROMPT BUILDS
+═══════════════════════════════════════
+
+1. Settings Page (full, /settings)
+2. Profile Management
+3. Notification System
+4. Onboarding Experience Polish
+5. First-time user guided tour
+6. Empty state improvements
+7. Global error handling
+8. App-wide loading states
+9. 404 page
+10. Keyboard shortcuts
+
+═══════════════════════════════════════
+SETTINGS PAGE — /settings
+═══════════════════════════════════════
+
+Route: /settings
+Sidebar "Settings" item already exists.
+Wire it to this route.
+
+LAYOUT:
+Two column layout:
+  Left: Settings navigation 
+        (200px fixed)
+  Right: Settings content 
+         (flex-1, scrollable)
+
+Settings nav items (left column):
+  Profile
+  Account
+  Notifications
+  Appearance
+  Billing → /settings/billing
+            (already built Prompt 8)
+  Privacy
+  Keyboard Shortcuts
+
+Each nav item:
+  padding: 10px 16px
+  border-radius: 8px
+  color: #9090B0
+  cursor: pointer
+  
+  Active:
+    bg: rgba(108,99,255,0.12)
+    color: #F0F0FF
+    border-left: 3px solid #6C63FF
+  
+  Hover:
+    bg: rgba(255,255,255,0.04)
+    color: #F0F0FF
+
+Page header:
+  "Settings" (large, bold)
+  "Manage your account and 
+   preferences" (secondary)
+  Divider below
+
+═══════════════════════════════════════
+PROFILE SETTINGS
+═══════════════════════════════════════
+
+Section: "Profile"
+Subtext: "This is how others 
+          see you on Nexora"
+
+Avatar section:
+  Large circle (80px diameter)
+  Shows initials if no photo
+  bg: gradient #6C63FF → #00D4FF
+  
+  Initials logic:
+    Take first letter of first name
+    + first letter of last name
+    font-size: 28px, bold, white
+  
+  "Change Avatar" button below
+    (placeholder — shows toast:
+     "Avatar upload coming soon")
+
+Form fields:
+
+  Full Name *
+    Text input, pre-filled
+    
+  Display Username
+    Text input
+    Prefix shown inside input: "@"
+    Auto-generated from email 
+    on signup if not set
+    Must be unique (validate on blur)
+    
+    Validation:
+      Min 3 chars, max 20
+      Only letters, numbers, 
+      underscores
+      Real-time availability check:
+        While typing: nothing
+        On blur: show checking...
+        If taken: red "Username taken"
+        If available: green "Available"
+  
+  Bio
+    Textarea, 3 rows
+    Max 160 chars with counter
+    Placeholder: "Tell the community 
+    about yourself and your IoT 
+    interests..."
+  
+  Role (read-only display):
+    Shows current role with badge
+    "Change role" link below
+    → Opens role change modal:
+      "Changing your role will 
+       update your dashboard 
+       and recommendations."
+      Shows role selector 
+      (same as onboarding)
+      "Update Role" button
+  
+  College / Institution
+    (only shown for students 
+     and professors)
+    Text input, pre-filled
+    
+  Course / Subject
+    (only for students)
+    Text input
+  
+  Location (optional)
+    Text input
+    Placeholder: "City, India"
+  
+  Website / Portfolio (optional)
+    URL input
+    Placeholder: "https://..."
+
+"Save Profile" button (primary)
+  Shows spinner while saving
+  On success: 
+    toast "Profile updated ✓"
+  On error:
+    toast "Failed to save. 
+           Try again."
+
+═══════════════════════════════════════
+ACCOUNT SETTINGS
+═══════════════════════════════════════
+
+Section: "Account"
+
+Email address:
+  Current email displayed 
+  (read-only, with lock icon)
+  "Contact support to change email"
+  (small, muted)
+
+Change Password:
+  Card:
+    Current Password input
+    New Password input
+    Confirm New Password input
+    
+    Password strength indicator:
+      Checks: length > 8, 
+              has number,
+              has special char,
+              has uppercase
+      Shows: Weak / Fair / 
+             Strong / Very Strong
+      Color bar below input
+    
+    "Update Password" button
+    
+    Uses Supabase auth 
+    updateUser({ password })
+    
+    On success: 
+      toast "Password updated ✓"
+      Clear all password fields
+
+Danger Zone:
+  Card:
+    bg: rgba(255,90,90,0.04)
+    border: 1px solid 
+      rgba(255,90,90,0.2)
+    border-radius: 12px
+    padding: 20px
+    
+    Heading: "Danger Zone"
+    (color: #FF5A5A)
+    
+    Row 1:
+      Left:
+        "Delete Account"
+        "Permanently delete your 
+         account and all data. 
+         This cannot be undone."
+      Right:
+        "Delete Account" button
+        bg: transparent
+        border: 1px solid #FF5A5A
+        color: #FF5A5A
+        hover: bg #FF5A5A, 
+               color white
+        
+        On click: confirmation modal:
+          Heading: "Delete Your Account"
+          
+          Warning card:
+            bg: rgba(255,90,90,0.08)
+            "This will permanently delete:
+             • All your projects
+             • Your component inventory
+             • Your conversation history
+             • Your subscription data"
+          
+          "Type DELETE to confirm:"
+          Text input
+          (button only enables when 
+           user types "DELETE" exactly)
+          
+          "Cancel" (primary)
+          "Delete Forever" 
+          (red, only enabled when 
+           DELETE is typed)
+          
+          On confirm:
+            POST /api/auth/delete-account
+            Sign out
+            Redirect to landing page
+            Show: "Account deleted. 
+                   Sorry to see you go."
+
+Export Data:
+  Below danger zone:
+  "Download Your Data"
+  "Get a copy of all your 
+   Nexora data"
+  "Request Export" button
+    → Shows toast: 
+      "Export requested. We'll 
+       email you when it's ready."
+    (placeholder for now)
+
+═══════════════════════════════════════
+NOTIFICATION SETTINGS
+═══════════════════════════════════════
+
+Section: "Notifications"
+
+Notification preferences:
+
+Each preference as a row:
+  Left: label + description
+  Right: toggle switch
+
+Preferences list:
+
+  Assignment Reminders
+  "Get reminded before 
+   assignment deadlines"
+  Default: ON
+
+  Blueprint Activity
+  "When someone forks 
+   your blueprint"
+  Default: ON
+
+  Project Milestones
+  "Celebrate completing 
+   all project steps"
+  Default: ON
+
+  Nexora Updates
+  "New features and 
+   platform announcements"
+  Default: ON
+
+  Weekly Summary
+  "Weekly digest of your 
+   Nexora activity"
+  Default: OFF
+
+  AI Usage Alerts
+  "When you're close to 
+   your daily AI message limit"
+  Default: ON
+
+Toggle switch style:
+  OFF:
+    bg: #2A2A3E
+    circle: #5A5A7A
+  ON:
+    bg: #6C63FF
+    circle: white
+  Transition: 0.2s ease
+
+Save automatically on toggle.
+POST /api/settings/notifications
+Body: { userId, preferences }
+
+═══════════════════════════════════════
+APPEARANCE SETTINGS
+═══════════════════════════════════════
+
+Section: "Appearance"
+
+Theme:
+  Currently dark only.
+  Show 2 options as clickable cards:
+  
+  Dark (selected):
+    Preview card showing dark colors
+    "Dark" label below
+    Purple checkmark badge: "Active"
+  
+  Light (coming soon):
+    Same card but washed out
+    "Light" label
+    "Coming Soon" badge
+    Disabled/non-clickable
+    (placeholder for future)
+
+IDE Font Size:
+  Slider: 12 - 18px
+  Default: 14
+  Live preview text below slider:
+    "The quick brown fox" 
+    in JetBrains Mono at selected size
+  
+  Saves to localStorage:
+    localStorage.setItem(
+      'nexora_ide_font_size', 
+      value
+    )
+  
+  NexoraIDE component reads this 
+  on mount.
+
+Sidebar Collapsed:
+  Toggle: "Collapse sidebar by default"
+  Default: OFF
+  
+  When ON: sidebar starts collapsed
+  (shows only icons, no labels)
+  
+  Implement collapsed sidebar:
+    Width: 64px (vs 240px expanded)
+    Only show icons, no text labels
+    Tooltip on hover showing label
+    Toggle button at bottom 
+    of sidebar to expand
+
+Dashboard Layout:
+  "Show blueprint suggestions 
+   on dashboard"
+  Toggle, default: ON
+  
+  "Show Quick IDE section 
+   on dashboard"
+  Toggle, default: ON
+
+═══════════════════════════════════════
+PRIVACY SETTINGS
+═══════════════════════════════════════
+
+Section: "Privacy"
+
+Profile Visibility:
+  Radio options:
+    ● Public — "Anyone can see 
+                your profile and 
+                public projects"
+    ○ Private — "Only you can 
+                 see your profile"
+  Default: Public
+
+Project Defaults:
+  "New projects are public by default"
+  Toggle, default: OFF
+  "When ON, new projects get 
+   a shareable link automatically"
+
+Blueprint Attribution:
+  "Show my name on blueprints 
+   I publish"
+  Toggle, default: ON
+
+AI Data:
+  Info card:
+    bg: rgba(0,212,255,0.06)
+    border: #00D4FF
+    border-radius: 8px
+    padding: 16px
+    
+    Icon: info (small, #00D4FF)
+    
+    "Your AI conversations are 
+     private and never shared. 
+     They're used only to provide 
+     context to your AI assistant 
+     within your projects."
+
+═══════════════════════════════════════
+KEYBOARD SHORTCUTS
+═══════════════════════════════════════
+
+Section: "Keyboard Shortcuts"
+
+Display as a reference table.
+Also implement the shortcuts.
+
+Table style:
+  Full width
+  border-collapse: separate
+  border-spacing: 0 4px
+  
+  Each row:
+    bg: #12121A
+    border-radius: 8px
+    padding: 12px 16px
+    
+    Left: Action description
+    Right: Key combination shown 
+           as kbd elements:
+    
+    kbd style:
+      bg: #1A1A2E
+      border: 1px solid #2A2A3E
+      border-radius: 4px
+      padding: 2px 8px
+      font-family: JetBrains Mono
+      font-size: 12px
+      color: #9090B0
+
+Shortcuts to show AND implement:
+
+Navigation:
+  Go to Dashboard      Ctrl + H
+  Go to Projects       Ctrl + P
+  Go to IDE            Ctrl + I
+  New Project          Ctrl + N
+  Go to Blueprints     Ctrl + B
+
+IDE (when in workspace):
+  Copy Code            Ctrl + Shift + C
+  Toggle AI Panel      Ctrl + /
+  Save Code            Ctrl + S
+    (triggers manual save)
+  Complete Step        Ctrl + Enter
+    (when all checkboxes done)
+  Toggle Left Panel    Ctrl + [
+  Toggle Library Tab   Ctrl + L
+
+Global:
+  Open AI Assistant    Ctrl + K
+  Search               Ctrl + Shift + F
+    (placeholder, shows coming soon)
+  Settings             Ctrl + ,
+
+Implement using useEffect 
+with keydown event listener:
+
+useEffect(() => {
+  function handleKeyDown(e) {
+    if (e.ctrlKey && e.key === 'h') {
+      e.preventDefault()
+      navigate('/dashboard')
+    }
+    if (e.ctrlKey && e.key === 'p') {
+      e.preventDefault()
+      navigate('/projects')
+    }
+    // etc for each shortcut
+  }
+  
+  window.addEventListener(
+    'keydown', handleKeyDown
+  )
+  return () => window.removeEventListener(
+    'keydown', handleKeyDown
+  )
+}, [navigate])
+
+File: client/src/hooks/
+      useKeyboardShortcuts.js
+
+Call this hook in App.jsx so 
+shortcuts work everywhere.
+
+═══════════════════════════════════════
+NOTIFICATION SYSTEM
+═══════════════════════════════════════
+
+In-app notification bell in navbar.
+
+SUPABASE TABLE:
+
+CREATE TABLE IF NOT EXISTS 
+  notifications (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id),
+  type text,
+  title text,
+  message text,
+  link text,
+  is_read boolean DEFAULT false,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE notifications
+  ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "users own notifications"
+  ON notifications FOR ALL
+  USING (auth.uid() = user_id);
+
+NOTIFICATION BELL (navbar):
+
+Bell icon (lucide: bell)
+Position: right side of navbar
+
+Unread badge:
+  When unread count > 0:
+    Small red circle on bell
+    Shows count (max "9+")
+    bg: #FF5A5A
+    color: white
+    font-size: 10px
+    border-radius: full
+    position: absolute
+    top: -4px, right: -4px
+    min-width: 18px, height: 18px
+
+On bell click:
+  Dropdown panel opens below:
+    Width: 360px
+    Max-height: 480px
+    bg: #12121A
+    border: 1px solid #2A2A3E
+    border-radius: 12px
+    shadow: 0 8px 32px 
+            rgba(0,0,0,0.4)
+    overflow-y: auto
+
+Dropdown header:
+  "Notifications" (bold)
+  "Mark all read" button 
+  (small, right aligned, 
+   only if unread exist)
+
+Notification items:
+
+Each notification:
+  padding: 14px 16px
+  border-bottom: 1px solid #1A1A2E
+  cursor: pointer
+  
+  Unread: 
+    bg: rgba(108,99,255,0.06)
+    Blue dot (6px) on left
+  
+  Read:
+    bg: transparent
+  
+  Hover:
+    bg: rgba(255,255,255,0.03)
+  
+  Layout:
+    Left: type icon (colored)
+    Right:
+      Title (bold, 14px, #F0F0FF)
+      Message (13px, #9090B0, 
+               2 lines max)
+      Time (12px, #5A5A7A, mt-1)
+  
+  On click:
+    Mark as read
+    Navigate to notification link
+
+Notification type icons:
+  assignment → clipboard (#6C63FF)
+  blueprint_fork → git-fork (#00D4FF)
+  step_complete → check-circle (#00C896)
+  ai_limit → sparkles (#FFB84D)
+  system → bell (#9090B0)
+
+Empty state:
+  Bell icon (large, muted)
+  "No notifications yet"
+  "We'll notify you about your 
+   projects and activity here"
+
+CREATE NOTIFICATIONS automatically:
+  When user completes all steps:
+    Insert notification:
+      type: 'step_complete'
+      title: 'Project Complete! 🎉'
+      message: '[project title] 
+                is fully built'
+      link: /workspace/[id]
+  
+  When blueprint gets forked:
+    Insert notification for author:
+      type: 'blueprint_fork'
+      title: 'Your blueprint 
+               was forked!'
+      message: '[username] forked 
+                [blueprint title]'
+      link: /blueprints/[id]
+  
+  When AI limit is near (2 left):
+    Insert notification:
+      type: 'ai_limit'
+      title: 'AI messages running low'
+      message: '2 messages left today.
+                Upgrade for more.'
+      link: /pricing
+
+Poll for new notifications:
+  Every 60 seconds when app is open:
+  GET /api/notifications/:userId
+  Update bell badge count
+
+═══════════════════════════════════════
+ONBOARDING EXPERIENCE POLISH
+═══════════════════════════════════════
+
+File: client/src/components/onboarding/
+      OnboardingTour.jsx
+
+First-time user guided tour.
+Triggers automatically after 
+role selection on first login.
+
+Uses a simple custom spotlight system
+(no external library needed).
+
+State stored in localStorage:
+  localStorage.getItem(
+    'nexora_tour_completed'
+  )
+  
+  If null: show tour
+  If 'true': skip tour
+
+TOUR STEPS (5 steps):
+
+Step 1 — Dashboard:
+  Spotlight: Stats row
+  Title: "Your Dashboard"
+  Description: "This is your home base.
+    Track your projects, components,
+    and activity here."
+  Position: below spotlight
+
+Step 2 — Sidebar:
+  Spotlight: Sidebar nav
+  Title: "Navigate Nexora"
+  Description: "Access your projects,
+    IDE, blueprints, and AI assistant
+    from here anytime."
+  Position: right of sidebar
+
+Step 3 — New Project button:
+  Spotlight: "+ New Project" button
+  Title: "Start Building"
+  Description: "Describe any IoT idea
+    and our AI will analyze it,
+    suggest components, and create
+    a step-by-step build plan."
+  Position: below button
+
+Step 4 — IDE nav item:
+  Spotlight: "IDE" sidebar item
+  Title: "Your Built-in IDE"
+  Description: "As you complete each
+    build step, code automatically
+    appears here. No copy-pasting."
+  Position: right of item
+
+Step 5 — AI Assistant button:
+  Spotlight: floating AI button
+  Title: "AI Always Available"
+  Description: "Ask anything about
+    your project. The AI knows
+    your components, your code,
+    and your current step."
+  Position: above button
+
+TOUR UI:
+
+Overlay:
+  Full screen
+  bg: rgba(0,0,0,0.7)
+  Cutout/spotlight around 
+  highlighted element:
+    Use box-shadow technique:
+    box-shadow: 
+      0 0 0 9999px rgba(0,0,0,0.7)
+    border-radius: matches element
+
+Tooltip card:
+  bg: #12121A
+  border: 1px solid #6C63FF
+  border-radius: 12px
+  padding: 20px 24px
+  width: 300px
+  position: absolute
+  (positioned near spotlight)
+  
+  Shadow: 
+    0 8px 32px rgba(108,99,255,0.3)
+  
+  Step indicator:
+    Small dots at top
+    Active: #6C63FF filled
+    Inactive: #2A2A3E
+  
+  Title (bold, #F0F0FF, mt-2)
+  Description (#9090B0, mt-1, 
+               font-size 14px)
+  
+  Bottom row:
+    Left: "Skip tour" 
+      (small, muted, clickable)
+    Right: 
+      "← Back" (if step > 1)
+      "Next →" / "Get Started!" 
+      (if last step)
+      (primary button, small)
+
+On tour complete:
+  localStorage.setItem(
+    'nexora_tour_completed', 
+    'true'
+  )
+  Fade out overlay
+  Show welcome toast:
+  "You're all set! 
+   Start by creating your 
+   first project. 🚀"
+
+═══════════════════════════════════════
+EMPTY STATE IMPROVEMENTS
+═══════════════════════════════════════
+
+Improve empty states across the app
+to be more helpful and actionable.
+
+File: client/src/components/ui/
+      EmptyState.jsx
+
+Reusable component:
+Props:
+  icon: lucide icon component
+  iconColor: string (default #6C63FF)
+  title: string
+  description: string
+  actionLabel: string (optional)
+  onAction: function (optional)
+  secondaryLabel: string (optional)
+  onSecondary: function (optional)
+
+Design:
+  Centered, padding: 48px 24px
+  
+  Icon wrapper:
+    bg: rgba(108,99,255,0.08)
+    border: 1px solid #2A2A3E
+    border-radius: 16px
+    width: 80px, height: 80px
+    centered
+    margin: 0 auto
+    
+    Icon: 36px, iconColor
+  
+  Title: 
+    font-size: 18px
+    font-weight: 600
+    color: #F0F0FF
+    mt-4, text-center
+  
+  Description:
+    font-size: 14px
+    color: #9090B0
+    mt-2, text-center
+    max-width: 360px
+    margin: 8px auto 0
+  
+  Action button (if provided):
+    Primary style, mt-6
+  
+  Secondary action (if provided):
+    Ghost/link style, mt-3
+
+Apply EmptyState to these pages:
+
+/projects (no projects):
+  icon: FolderOpen
+  title: "No projects yet"
+  description: "Start by describing 
+    your IoT idea and let Nexora 
+    AI plan and guide your build."
+  actionLabel: "Create First Project"
+  onAction: → /projects/new
+
+/blueprints (no results found):
+  icon: Search
+  title: "No blueprints found"
+  description: "Try different search 
+    terms or browse all categories."
+  actionLabel: "Clear Filters"
+  onAction: clear filters
+
+/components (no components):
+  icon: Cpu
+  title: "Your inventory is empty"
+  description: "Add the components 
+    you own and Nexora will suggest 
+    projects you can build today."
+  actionLabel: "Add First Component"
+  secondaryLabel: "Scan & Suggest Projects"
+
+/assignments (student, no assignments):
+  icon: ClipboardList
+  title: "No assignments yet"
+  description: "Join a class with 
+    your professor's code to see 
+    assignments here."
+  actionLabel: "Join a Class"
+
+/professor (no classes):
+  icon: Users
+  title: "No classes created"
+  description: "Create your first 
+    class and share the join code 
+    with your students."
+  actionLabel: "Create First Class"
+
+═══════════════════════════════════════
+GLOBAL ERROR HANDLING
+═══════════════════════════════════════
+
+File: client/src/components/ui/
+      ErrorBoundary.jsx
+
+React Error Boundary component:
+
+class ErrorBoundary extends 
+  React.Component {
+  
+  state = { hasError: false, error: null }
+  
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
+  }
+  
+  componentDidCatch(error, info) {
+    console.error('Nexora Error:', 
+      error, info)
+  }
+  
+  render() {
+    if (this.state.hasError) {
+      return <ErrorFallback 
+        error={this.state.error}
+        onRetry={() => 
+          this.setState({ 
+            hasError: false 
+          })
+        }
+      />
+    }
+    return this.props.children
+  }
+}
+
+ErrorFallback component:
+  Full page, centered
+  
+  Icon: alert-triangle 
+        (48px, #FF5A5A)
+  
+  Heading: "Something went wrong"
+  
+  Error message (collapsible):
+    "Show error details" link
+    Expands to show error.message
+    in a code-style box
+  
+  Two buttons:
+    "Try Again" (primary)
+      → calls onRetry
+    "Go to Dashboard" (secondary)
+      → navigate('/dashboard')
+
+Wrap entire app in ErrorBoundary 
+in main.jsx or App.jsx.
+
+Also wrap individual page sections:
+  <ErrorBoundary>
+    <Workspace />
+  </ErrorBoundary>
+
+GLOBAL API ERROR HANDLER:
+File: client/src/lib/apiClient.js
+
+Wrapper around fetch that handles 
+common errors:
+
+async function apiCall(url, options) {
+  try {
+    const response = await fetch(
+      url, options
+    )
+    
+    if (response.status === 401) {
+      // Redirect to login
+      window.location.href = '/login'
+      return
+    }
+    
+    if (response.status === 429) {
+      // Rate limited
+      throw new Error(
+        'Too many requests. 
+         Please wait a moment.'
+      )
+    }
+    
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(
+        error.message || 
+        'Something went wrong'
+      )
+    }
+    
+    return await response.json()
+    
+  } catch (err) {
+    if (err.name === 'TypeError') {
+      throw new Error(
+        'Network error. Check your 
+         connection and try again.'
+      )
+    }
+    throw err
+  }
+}
+
+export default apiCall
+
+Replace all raw fetch() calls 
+throughout the app with apiCall().
+
+═══════════════════════════════════════
+LOADING STATES
+═══════════════════════════════════════
+
+File: client/src/components/ui/
+      LoadingSpinner.jsx
+
+Sizes: sm (16px) | md (24px) | 
+       lg (40px) | xl (64px)
+
+Spinner design:
+  Circle with gap
+  Border: 2px solid #2A2A3E
+  Border-top: 2px solid #6C63FF
+  Border-radius: full
+  Animation: spin 0.8s linear infinite
+
+Usage examples:
+
+Page loading (full page):
+  Center of viewport
+  xl size
+  Below: "Loading..." text 
+         (#9090B0, mt-4)
+
+Section loading (inside card):
+  md size, centered in card
+  Replace content while loading
+
+Button loading:
+  sm size, inline in button
+  Replaces button text
+  Button disabled while loading
+
+Skeleton loading for project cards:
+  File: client/src/components/ui/
+        SkeletonCard.jsx
+  
+  Shows shimmer animation while 
+  projects load:
+  
+  Same dimensions as ProjectCard
+  but filled with:
+    bg: #12121A
+    Shimmer blocks where content is:
+      bg: linear-gradient(
+        90deg,
+        #1A1A2E 25%,
+        #2A2A3E 50%,
+        #1A1A2E 75%
+      )
+      background-size: 200% 100%
+      animation: shimmer 1.5s infinite
+  
+  @keyframes shimmer {
+    0% { background-position: 200% 0 }
+    100% { background-position: -200% 0 }
+  }
+  
+  Show 3 SkeletonCards while 
+  /projects page loads.
+
+Apply loading states to:
+  Dashboard stats (skeleton numbers)
+  Projects page (skeleton cards)
+  Blueprints page (skeleton cards)
+  Workspace build plan 
+    (skeleton steps while loading)
+  Component inventory 
+    (skeleton cards)
+
+═══════════════════════════════════════
+404 PAGE
+═══════════════════════════════════════
+
+File: client/src/pages/NotFound.jsx
+
+Route: /* (catch-all, last route 
+            in App.jsx)
+
+Design:
+
+  Full page, centered content
+  
+  Large "404" text:
+    font-size: 120px
+    font-weight: 900
+    bg: linear-gradient(
+      135deg, #6C63FF, #00D4FF
+    )
+    -webkit-background-clip: text
+    -webkit-text-fill-color: 
+      transparent
+    line-height: 1
+  
+  Heading: "Page not found"
+  (font-size: 24px, #F0F0FF, mt-4)
+  
+  Subtext: 
+  "The page you're looking for 
+   doesn't exist or was moved."
+  (#9090B0, mt-2)
+  
+  Illustration:
+    Simple CSS/SVG circuit board 
+    pattern (decorative, muted)
+    Or just a large muted icon:
+    compass (64px, #2A2A3E)
+  
+  Two buttons (mt-8):
+    "Go to Dashboard" (primary)
+    "Browse Blueprints" (secondary)
+  
+  Quick links below:
+    "Looking for something?"
+    Links: 
+      My Projects | IDE | 
+      Blueprints | Settings
+
+═══════════════════════════════════════
+PROFILE PAGE — /profile/:username
+═══════════════════════════════════════
+
+Public profile page for makers 
+who have public profiles.
+
+Route: /profile/:username
+No auth required to VIEW.
+
+Layout: max-width 800px, centered
+
+Header section:
+  Avatar (large, 96px)
+  Full name (large, bold)
+  "@username" (secondary)
+  Bio text
+  Location (if set, with map-pin icon)
+  Website link (if set, with 
+               external-link icon)
+  
+  Role badge:
+    Student / Maker / Professor / 
+    Professional
+  
+  Join date:
+    "Member since [month year]"
+  
+  Stats row:
+    Projects: X
+    Blueprints published: X
+    Profile views: X
+
+Tabs:
+  [Blueprints] [Projects]
+
+Blueprints tab:
+  Shows user's PUBLIC blueprints
+  Same card design as /blueprints
+
+Projects tab:
+  Shows user's PUBLIC projects
+  (where is_public = true)
+  Read-only project cards
+
+If viewing OWN profile:
+  "Edit Profile" button in header
+  → /settings (profile section)
+
+If profile is PRIVATE or not found:
+  Show: "This profile is private"
+  Or: "User not found"
+
+═══════════════════════════════════════
+BACKEND ROUTES TO ADD
+═══════════════════════════════════════
+
+PUT /api/settings/profile
+  Body: { userId, fullName,
+          username, bio, role,
+          collegeName, course,
+          location, website }
+  → Updates profiles table
+  → Validates username unique
+  → Returns { profile }
+
+POST /api/settings/change-password
+  Body: { userId, newPassword }
+  → Uses Supabase admin to 
+    update password
+  → Returns { success }
+
+DELETE /api/auth/delete-account
+  Body: { userId }
+  → Deletes all user data:
+    projects, components, 
+    conversations, subscriptions
+  → Deletes Supabase auth user
+  → Returns { success }
+
+PUT /api/settings/notifications
+  Body: { userId, preferences }
+  → Saves to Supabase:
+  
+  ALTER TABLE profiles
+    ADD COLUMN IF NOT EXISTS
+    notification_preferences 
+    jsonb DEFAULT '{}';
+  
+  → Returns { success }
+
+GET /api/notifications/:userId
+  → Returns notifications 
+    ordered by created_at desc
+  → Limit 50
+  → Returns { notifications, 
+              unreadCount }
+
+PUT /api/notifications/read
+  Body: { userId, 
+          notificationIds: [] }
+  → Marks notifications as read
+  → If notificationIds empty:
+    mark ALL as read
+  → Returns { success }
+
+GET /api/profile/:username
+  → Returns public profile data
+  → Includes public blueprints
+    and projects
+  → Returns { profile, 
+              blueprints,
+              projects }
+
+POST /api/settings/validate-username
+  Body: { username, userId }
+  → Checks username available
+  → Excludes current user's own
+  → Returns { available: boolean }
+
+═══════════════════════════════════════
+SUPABASE CHANGES NEEDED
+═══════════════════════════════════════
+
+Run in Supabase SQL Editor:
+
+CREATE TABLE IF NOT EXISTS 
+  notifications (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id),
+  type text,
+  title text,
+  message text,
+  link text,
+  is_read boolean DEFAULT false,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE notifications
+  ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "users own notifications"
+  ON notifications FOR ALL
+  USING (auth.uid() = user_id);
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS
+  username text UNIQUE;
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS
+  bio text;
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS
+  location text;
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS
+  website text;
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS
+  notification_preferences 
+  jsonb DEFAULT '{}';
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS
+  profile_views integer DEFAULT 0;
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS
+  is_profile_public 
+  boolean DEFAULT true;
+
+═══════════════════════════════════════
+IMPORTANT RULES
+═══════════════════════════════════════
+
+1. Settings must save immediately
+   or show clear save button.
+   Never lose user changes 
+   silently on navigation.
+   If unsaved changes exist and 
+   user tries to navigate away:
+   Show browser confirm dialog:
+   "You have unsaved changes. 
+    Leave anyway?"
+
+2. Username validation must be
+   real-time but debounced 
+   (500ms after typing stops).
+   Never call API on every keystroke.
+
+3. Delete account flow requires
+   typing "DELETE" exactly.
+   No shortcuts, no shortcuts.
+   This is permanent.
+
+4. Tour must not block the UI
+   for returning users.
+   Check localStorage FIRST 
+   before rendering any tour UI.
+
+5. Notifications polling must
+   stop when user leaves the app
+   (page becomes invisible).
+   Use document.visibilitychange
+   to pause/resume polling.
+
+6. ErrorBoundary must catch 
+   errors without crashing 
+   the whole app.
+   Individual page errors 
+   should not kill the sidebar 
+   or navbar.
+
+7. Skeleton loading must match
+   the exact dimensions of 
+   real content to avoid 
+   layout shift (CLS).
+
+8. 404 page must be the LAST
+   route in App.jsx.
+   All other routes must be 
+   defined before it.
+
+9. Keyboard shortcuts must NOT
+   fire when user is typing
+   in an input or textarea.
+   Check:
+   if (e.target.tagName === 'INPUT' 
+     || e.target.tagName === 
+        'TEXTAREA') return
+
+10. After building confirm:
+    ✓ /settings loads all sections
+    ✓ Profile saves correctly
+    ✓ Password change works
+    ✓ Notification toggles save
+    ✓ Appearance font size 
+      applies to IDE
+    ✓ Keyboard shortcuts work
+    ✓ Tour shows for new users
+    ✓ Tour skips for returning users
+    ✓ Bell shows unread count
+    ✓ Notifications dropdown opens
+    ✓ Empty states show correctly
+    ✓ Skeleton loading shows 
+      on project pages
+    ✓ 404 page shows for bad URLs
+    ✓ Error boundary catches errors
+    ✓ /profile/:username loads
+    ✓ Delete account flow works

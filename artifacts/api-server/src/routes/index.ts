@@ -16,11 +16,15 @@ import analyticsRouter from "./analytics";
 import paymentsRouter from "./payments";
 import usageRouter from "./usage";
 import contactRouter from "./contact";
+import settingsRouter from "./settings";
+import notificationsRouter from "./notifications";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(profilesRouter);
+router.use(settingsRouter);
+router.use(notificationsRouter);
 router.use(analyzeRouter);
 router.use(workspaceRouter);
 router.use(aiRouter);

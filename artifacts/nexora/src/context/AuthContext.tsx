@@ -25,6 +25,13 @@ export interface UserProfile {
   trial_used?: boolean;
   skill_level?: string;
   bio?: string;
+  username?: string;
+  location?: string;
+  website?: string;
+  notification_preferences?: Record<string, boolean>;
+  profile_views?: number;
+  is_profile_public?: boolean;
+  blueprint_attribution?: boolean;
 }
 
 interface AuthContextType {

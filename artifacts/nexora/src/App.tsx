@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/context/AuthContext";
 import { useAuth } from "@/hooks/useAuth";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import FloatingAI from "@/components/ai/FloatingAI";
 
 import NotFound from "@/pages/not-found";
@@ -24,6 +26,8 @@ import StudentAssignments from "@/pages/assignments";
 import PricingPage from "@/pages/pricing";
 import BillingPage from "@/pages/billing";
 import IDEPage from "@/pages/ide";
+import SettingsPage from "@/pages/settings";
+import ProfilePage from "@/pages/profile";
 
 import ProfessorOverview from "@/pages/professor/index";
 import ProfessorClasses from "@/pages/professor/classes";
@@ -34,16 +38,16 @@ import ProfessorAnalytics from "@/pages/professor/analytics";
 import ProfessorStudents from "@/pages/professor/students";
 import { ProtectedProfessorRoute } from "@/components/professor/ProfessorLayout";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
+});
 
 function ProtectedRoute({ component: Component }: { component: () => ReactNode }) {
   const { user, loading } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    if (!loading && !user) {
-      setLocation("/login");
-    }
+    if (!loading && !user) setLocation("/login");
   }, [loading, user, setLocation]);
 
   if (loading) {
@@ -55,7 +59,6 @@ function ProtectedRoute({ component: Component }: { component: () => ReactNode }
   }
 
   if (!user) return null;
-
   return <Component />;
 }
 
@@ -68,14 +71,22 @@ function FloatingAIWrapper() {
   return <FloatingAI />;
 }
 
+function KeyboardShortcutsProvider() {
+  useKeyboardShortcuts();
+  return null;
+}
+
 function Router() {
   return (
     <>
+      <KeyboardShortcutsProvider />
       <Switch>
         <Route path="/" component={Landing} />
         <Route path="/login" component={Login} />
         <Route path="/signup" component={Signup} />
         <Route path="/pricing" component={PricingPage} />
+        <Route path="/profile/:username" component={ProfilePage} />
+
         <Route path="/role-select">
           <ProtectedRoute component={RoleSelect} />
         </Route>
@@ -89,7 +100,9 @@ function Router() {
           <ProtectedRoute component={NewProject} />
         </Route>
         <Route path="/workspace/:projectId">
-          <ProtectedRoute component={Workspace} />
+          <ErrorBoundary>
+            <ProtectedRoute component={Workspace} />
+          </ErrorBoundary>
         </Route>
         <Route path="/components">
           <ProtectedRoute component={ComponentsPage} />
@@ -108,6 +121,9 @@ function Router() {
         </Route>
         <Route path="/settings/billing">
           <ProtectedRoute component={BillingPage} />
+        </Route>
+        <Route path="/settings">
+          <ProtectedRoute component={SettingsPage} />
         </Route>
         <Route path="/p/:shareToken" component={PublicProjectPage} />
 
@@ -137,6 +153,7 @@ function Router() {
           <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorStudents} />} />
         </Route>
 
+        {/* 404 — must be last */}
         <Route component={NotFound} />
       </Switch>
       <FloatingAIWrapper />
@@ -149,9 +166,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL?.replace(/\/$/, "")}>
-            <Router />
-          </WouterRouter>
+          <ErrorBoundary>
+            <WouterRouter base={import.meta.env.BASE_URL?.replace(/\/$/, "")}>
+              <Router />
+            </WouterRouter>
+          </ErrorBoundary>
           <Toaster />
         </TooltipProvider>
       </AuthProvider>

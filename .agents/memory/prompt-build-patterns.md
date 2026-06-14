@@ -1,6 +1,6 @@
 ---
 name: Nexora build patterns
-description: Design system, auth, Supabase column shapes, and route conventions for Nexora prompts
+description: Design system, auth, Supabase column shapes, route conventions, and component locations for Nexora prompts 1–9
 ---
 
 ## Auth & API pattern
@@ -38,9 +38,24 @@ description: Design system, auth, Supabase column shapes, and route conventions 
 ## Supabase Node.js ws fix
 - `supabaseAdmin` and `verifyToken` must import `ws` from `"ws"` and pass `{ realtime: { transport: ws } }` to createClient — required on Node.js 20+ where WebSocket is not global
 
-## Prompt 9 — IDE page patterns
+## IDE page patterns (Prompt 8)
 - `/ide` page uses `DashboardLayout` directly; it lists all user projects with "Open in IDE" → `/workspace/:id?panel=ide`
-- `useSearch()` from wouter reads query params in workspace; `?panel=ide` triggers a 2.2s inset glow (`boxShadow: inset 0 0 0 2px #6C63FF`) on the IDE panel div
-- Auto-save debounce is **2s** (not 30s) — applies both to `handleCodeChange` and AI push code path
-- NexoraIDE download button: check `isPro` from `usePlan()` hook; non-pro clicks open `UpgradeModal` instead of downloading
-- `.new-code-line` Monaco decoration class: purple bg + left border + `fadeCodeLine` keyframe animation (2s fade-out)
+- `useSearch()` from wouter reads query params in workspace; `?panel=ide` triggers a 2.2s inset glow on the IDE panel div
+- Auto-save debounce is **2s** (not 30s)
+- NexoraIDE download button: check `isPro` from `usePlan()` hook; non-pro clicks open `UpgradeModal`
+
+## zod bundling fix (critical)
+- `zod` must NOT be in the `external` array of `artifacts/api-server/build.mjs` — esbuild must bundle it
+- If left external, zod can't be found at runtime from the dist folder (pnpm workspace resolution doesn't symlink it there)
+- **Why:** The api-server packages zod as external but it's not installed as a local node_module symlink, only in pnpm .pnpm store
+
+## Prompt 9 — Settings & Notifications (added Prompt 9)
+- `/settings` uses `DashboardLayout` with 7 sections; routing: `/settings/billing` must come BEFORE `/settings` in App.tsx (Wouter first-match)
+- `useKeyboardShortcuts` is wired via `<KeyboardShortcutsProvider />` inside `Router()` — needs useLocation hook so must be inside router context
+- `NotificationBell` polls `/api/notifications` every 60s; pauses on `document.visibilitychange hidden`
+- `OnboardingTour` is localStorage-gated at key `nexora_tour_completed`; renders at end of DashboardLayout
+- `ErrorBoundary` is a class component (required by React) — exported as named + default from `components/ui/ErrorBoundary.tsx`
+- `data-tour="stats-row"` on dashboard stats grid div; `data-testid="btn-new-project"` on new project buttons
+
+## UserProfile type (AuthContext)
+- Includes (as of Prompt 9): id, email, full_name, role, college_name, course, avatar_url, plan, trial_used, bio, username, location, website, notification_preferences, profile_views, is_profile_public, blueprint_attribution

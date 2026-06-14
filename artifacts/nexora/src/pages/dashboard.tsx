@@ -10,13 +10,15 @@ import {
 } from "@workspace/api-client-react";
 import {
   LayoutDashboard, Folder, Plus, Grid2x2, Cpu,
-  Sparkles, Settings, Bell, LogOut, Loader2,
+  Sparkles, Settings, LogOut, Loader2,
   FolderOpen, Zap, CheckCircle2, Package,
   Lightbulb, ThermometerSun, ParkingSquare, Droplets,
   ClipboardList, Code2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ProjectCard from "@/components/ui/ProjectCard";
+import NotificationBell from "@/components/notifications/NotificationBell";
+import OnboardingTour from "@/components/onboarding/OnboardingTour";
 
 export function DashboardLayout({
   children,
@@ -140,9 +142,7 @@ export function DashboardLayout({
         <header className="h-16 border-b border-border bg-card flex items-center justify-between px-6 flex-shrink-0">
           <h1 className="text-lg font-semibold text-foreground">{title}</h1>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="text-muted-foreground h-9 w-9">
-              <Bell className="w-4 h-4" />
-            </Button>
+            <NotificationBell />
             <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
               {initials}
             </div>
@@ -154,6 +154,7 @@ export function DashboardLayout({
 
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
+      <OnboardingTour />
     </div>
   );
 }
@@ -245,7 +246,7 @@ export default function Dashboard() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div data-tour="stats-row" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {statCards.map(({ icon: Icon, label, value }) => (
             <div
               key={label}
