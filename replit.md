@@ -393,6 +393,26 @@ Nexora is a complete IoT project creation platform. Prompts 1–6 of 14 complete
   - Supabase tables: `classes`, `class_members`, `assignments`, `assignment_submissions`
   - `projects` table: added `assignment_id uuid` and `submitted_for_assignment boolean` columns
 
+- **Prompt 12**: Admin Panel + Platform Management:
+  - `/admin` routes (protected by `AdminRoute` — checks `admin_users` table): Overview, Users, Blueprints, Revenue, AI Usage, Reports, Announcements, College Inquiries, Settings
+  - `AdminLayout` sidebar: dark `#080810` bg, `#FFB84D` active nav accent, collapsible on mobile
+  - Overview dashboard: platform stats (users, projects, blueprints, revenue), activity feed, quick actions, platform health cards
+  - Users page: full user table with search/filter, user detail modal (projects, payments, activity tabs), ban/suspend actions
+  - Blueprints moderation: table with approve/reject/feature controls, status filter
+  - Revenue dashboard: MRR, total revenue, plan breakdown, payment history table
+  - AI Usage monitoring: daily/weekly usage charts, per-user top consumers, model cost estimates
+  - Content Reports: pending/reviewed/resolved queue, inline review + dismiss
+  - Announcements: create/edit/delete platform-wide banners (info/warning/success/error, target audience, date range); `AnnouncementBanner` component shown on all non-admin/landing pages
+  - College Inquiries: manage Lab plan inquiries, mark as contacted/closed, admin notes
+  - Settings: feature flags toggle panel, platform config (maintenance mode, AI rate limits, max file size), maintenance mode gate (wraps entire app — non-admins see a maintenance screen)
+  - `FeatureFlagContext`: polls `/api/admin/feature-flags` + `/api/admin/platform-config` every 5min; exposes `maintenanceMode`, `maintenanceMessage`, `getFlag(key)` 
+  - `ReportModal` component: Flag button on blueprint-detail page + public profile page (non-own), submits to `/api/admin/reports/create`
+  - Dashboard sidebar: "Admin Panel" nav link shown only to `isAdmin` users (ShieldCheck icon, ADMIN badge)
+  - `AuthContext` upgraded: `isAdmin` + `adminRole` state populated on login via `/api/admin/check`
+  - Backend route: `artifacts/api-server/src/routes/admin.ts` — all admin endpoints behind `requireAdmin` middleware
+  - Supabase tables: `admin_users`, `content_reports`, `announcements`, `feature_flags`, `platform_config`, `platform_metrics`
+  - To grant admin access: `INSERT INTO admin_users (user_id, role) VALUES ('<uuid>', 'super_admin')`
+
 - **Prompt 11**: Global Search System, Advanced Blueprint Discovery, Project Search & Filtering, Recently Viewed, Trending & Recommendations:
   - `GlobalSearch` component: full-screen overlay (Ctrl+K / ⌘K), keyboard navigation, grouped results (projects, blueprints, components), search history, recent searches, all sections auto-close on Esc or backdrop click
   - `/search` page: sidebar filters (type, difficulty, category), highlighted results, load more, mobile BottomSheet filters
@@ -590,10 +610,114 @@ CREATE POLICY "users own recently viewed" ON recently_viewed FOR ALL USING (auth
 CREATE POLICY "blueprint tags readable" ON blueprint_tags FOR SELECT USING (true);
 ```
 
+## Supabase Setup Required (Prompt 12 additions)
+
+Run these SQL statements in Supabase SQL Editor after the Prompt 11 tables:
+
+```sql
+-- Admin users table
+CREATE TABLE IF NOT EXISTS admin_users (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id) UNIQUE,
+  role text DEFAULT 'moderator' CHECK (role IN ('super_admin','moderator','support')),
+  granted_by uuid REFERENCES profiles(id),
+  created_at timestamptz DEFAULT now()
+);
+
+-- Content reports table
+CREATE TABLE IF NOT EXISTS content_reports (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  reporter_id uuid REFERENCES profiles(id),
+  content_type text CHECK (content_type IN ('blueprint','profile','project','comment')),
+  content_id text NOT NULL,
+  reason text NOT NULL,
+  details text,
+  status text DEFAULT 'pending' CHECK (status IN ('pending','reviewed','resolved','dismissed')),
+  admin_notes text,
+  reviewed_by uuid REFERENCES admin_users(id),
+  reviewed_at timestamptz,
+  created_at timestamptz DEFAULT now()
+);
+
+-- Announcements table
+CREATE TABLE IF NOT EXISTS announcements (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  title text NOT NULL,
+  message text NOT NULL,
+  type text DEFAULT 'info' CHECK (type IN ('info','warning','success','error')),
+  target_audience text DEFAULT 'all' CHECK (target_audience IN ('all','students','professors','makers','professionals','free','paid')),
+  is_active boolean DEFAULT true,
+  starts_at timestamptz DEFAULT now(),
+  ends_at timestamptz,
+  created_by uuid REFERENCES admin_users(id),
+  created_at timestamptz DEFAULT now()
+);
+
+-- Platform metrics table
+CREATE TABLE IF NOT EXISTS platform_metrics (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  metric_name text NOT NULL,
+  metric_value numeric NOT NULL,
+  recorded_at timestamptz DEFAULT now()
+);
+
+-- Feature flags table
+CREATE TABLE IF NOT EXISTS feature_flags (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  flag_key text UNIQUE NOT NULL,
+  flag_value boolean DEFAULT false,
+  description text,
+  updated_by uuid REFERENCES admin_users(id),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Platform config table
+CREATE TABLE IF NOT EXISTS platform_config (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  config_key text UNIQUE NOT NULL,
+  config_value text,
+  description text,
+  updated_by uuid REFERENCES admin_users(id),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Enable RLS
+ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE content_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE announcements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE platform_metrics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE feature_flags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE platform_config ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies
+CREATE POLICY "admins view admin_users" ON admin_users FOR SELECT USING (
+  EXISTS (SELECT 1 FROM admin_users au WHERE au.user_id = auth.uid())
+);
+CREATE POLICY "users insert own reports" ON content_reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
+CREATE POLICY "admins manage reports" ON content_reports FOR ALL USING (
+  EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid())
+);
+CREATE POLICY "announcements readable" ON announcements FOR SELECT USING (is_active = true);
+CREATE POLICY "admins manage announcements" ON announcements FOR ALL USING (
+  EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid())
+);
+CREATE POLICY "feature_flags readable" ON feature_flags FOR SELECT USING (true);
+CREATE POLICY "admins manage feature_flags" ON feature_flags FOR ALL USING (
+  EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid())
+);
+CREATE POLICY "platform_config readable" ON platform_config FOR SELECT USING (true);
+CREATE POLICY "admins manage platform_config" ON platform_config FOR ALL USING (
+  EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid())
+);
+
+-- Add yourself as a super_admin (replace <your-user-uuid> with your Supabase user UUID)
+-- INSERT INTO admin_users (user_id, role) VALUES ('<your-user-uuid>', 'super_admin');
+```
+
 ## User preferences
 
 - Design system must be consistent across every screen built in all future prompts
-- This is Prompt 11 of 14 — future prompts will build on top of this foundation
+- This is Prompt 12 of 14 — future prompts will build on top of this foundation
 
 ## Gotchas
 

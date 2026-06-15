@@ -4,12 +4,15 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/context/AuthContext";
+import { FeatureFlagProvider, useFeatureFlags } from "@/context/FeatureFlagContext";
 import { useAuth } from "@/hooks/useAuth";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import FloatingAI from "@/components/ai/FloatingAI";
 import { InstallPrompt } from "@/components/ui/InstallPrompt";
 import GlobalSearch from "@/components/search/GlobalSearch";
+import AnnouncementBanner from "@/components/admin/AnnouncementBanner";
+import { Settings } from "lucide-react";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Landing = lazy(() => import("@/pages/landing"));
@@ -41,6 +44,16 @@ const ProfessorAnalytics = lazy(() => import("@/pages/professor/analytics"));
 const ProfessorStudents = lazy(() => import("@/pages/professor/students"));
 import { ProtectedProfessorRoute } from "@/components/professor/ProfessorLayout";
 
+const AdminOverview = lazy(() => import("@/pages/admin/index"));
+const AdminUsers = lazy(() => import("@/pages/admin/users"));
+const AdminBlueprints = lazy(() => import("@/pages/admin/blueprints"));
+const AdminRevenue = lazy(() => import("@/pages/admin/revenue"));
+const AdminAIUsage = lazy(() => import("@/pages/admin/ai-usage"));
+const AdminReports = lazy(() => import("@/pages/admin/reports"));
+const AdminAnnouncements = lazy(() => import("@/pages/admin/announcements"));
+const AdminCollege = lazy(() => import("@/pages/admin/college"));
+const AdminSettings = lazy(() => import("@/pages/admin/settings"));
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
 });
@@ -55,6 +68,21 @@ const PageLoader = () => (
     </div>
   </div>
 );
+
+function MaintenanceScreen({ message }: { message?: string }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-6" style={{ background: "#0A0A0F" }}>
+      <Settings className="w-16 h-16 animate-spin" style={{ color: "#6C63FF" }} />
+      <div className="text-center">
+        <h1 className="text-2xl font-bold mb-2" style={{ color: "#F0F0FF" }}>Nexora is under maintenance</h1>
+        <p className="text-sm mb-4" style={{ color: "#6A6A8A" }}>
+          {message || "We're making improvements. Be back shortly!"}
+        </p>
+        <a href="#" className="text-sm" style={{ color: "#6C63FF" }}>Check our status →</a>
+      </div>
+    </div>
+  );
+}
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -81,7 +109,8 @@ function FloatingAIWrapper() {
   const isProfessor = location.startsWith("/professor");
   const isWorkspace = location.startsWith("/workspace/");
   const isPricing = location === "/pricing";
-  if (isWorkspace || isProfessor || isPricing) return null;
+  const isAdmin = location.startsWith("/admin");
+  if (isWorkspace || isProfessor || isPricing || isAdmin) return null;
   return <FloatingAI />;
 }
 
@@ -100,11 +129,31 @@ function GlobalSearchWrapper() {
   return <GlobalSearch open={open} onClose={() => setOpen(false)} />;
 }
 
+function AnnouncementBannerWrapper() {
+  const [location] = useLocation();
+  const isAdmin = location.startsWith("/admin");
+  const isLanding = location === "/";
+  if (isAdmin || isLanding) return null;
+  return <AnnouncementBanner />;
+}
+
+function MaintenanceGate({ children }: { children: React.ReactNode }) {
+  const { maintenanceMode, maintenanceMessage, loading } = useFeatureFlags();
+  const { isAdmin, loading: authLoading } = useAuth();
+
+  if (loading || authLoading) return null;
+  if (maintenanceMode && !isAdmin) {
+    return <MaintenanceScreen message={maintenanceMessage} />;
+  }
+  return <>{children}</>;
+}
+
 function Router() {
   return (
     <>
       <KeyboardShortcutsProvider />
       <GlobalSearchWrapper />
+      <AnnouncementBannerWrapper />
       <Suspense fallback={<PageLoader />}>
         <Switch>
           <Route path="/" component={Landing} />
@@ -181,6 +230,17 @@ function Router() {
             <ProtectedRoute component={() => <ProtectedProfessorRoute component={ProfessorStudents} />} />
           </Route>
 
+          {/* Admin routes */}
+          <Route path="/admin" component={AdminOverview} />
+          <Route path="/admin/users" component={AdminUsers} />
+          <Route path="/admin/blueprints" component={AdminBlueprints} />
+          <Route path="/admin/revenue" component={AdminRevenue} />
+          <Route path="/admin/ai-usage" component={AdminAIUsage} />
+          <Route path="/admin/reports" component={AdminReports} />
+          <Route path="/admin/announcements" component={AdminAnnouncements} />
+          <Route path="/admin/college" component={AdminCollege} />
+          <Route path="/admin/settings" component={AdminSettings} />
+
           <Route component={NotFound} />
         </Switch>
       </Suspense>
@@ -194,14 +254,18 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider>
-          <ErrorBoundary>
-            <WouterRouter base={import.meta.env.BASE_URL?.replace(/\/$/, "")}>
-              <Router />
-            </WouterRouter>
-          </ErrorBoundary>
-          <Toaster />
-        </TooltipProvider>
+        <FeatureFlagProvider>
+          <TooltipProvider>
+            <ErrorBoundary>
+              <WouterRouter base={import.meta.env.BASE_URL?.replace(/\/$/, "")}>
+                <MaintenanceGate>
+                  <Router />
+                </MaintenanceGate>
+              </WouterRouter>
+            </ErrorBoundary>
+            <Toaster />
+          </TooltipProvider>
+        </FeatureFlagProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

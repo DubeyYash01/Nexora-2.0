@@ -20,6 +20,7 @@ import settingsRouter from "./settings";
 import notificationsRouter from "./notifications";
 import searchRouter from "./search";
 import recentlyViewedRouter from "./recently-viewed";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
@@ -43,6 +44,7 @@ router.use(usageRouter);
 router.use(contactRouter);
 router.use(searchRouter);
 router.use(recentlyViewedRouter);
+router.use(adminRouter);
 router.use(projectsRouter);
 
 export default router;

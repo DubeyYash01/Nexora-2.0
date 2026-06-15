@@ -12,7 +12,7 @@ import {
   LayoutDashboard, Folder, Plus, Grid2x2, Cpu,
   Sparkles, Settings, LogOut, Loader2,
   FolderOpen, Zap, CheckCircle2, Package,
-  ClipboardList, Code2, Search, TrendingUp, GitFork, Clock,
+  ClipboardList, Code2, Search, TrendingUp, GitFork, Clock, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ProjectCard from "@/components/ui/ProjectCard";
@@ -28,7 +28,7 @@ export function DashboardLayout({
   children: React.ReactNode;
   title?: string;
 }) {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, isAdmin } = useAuth();
   const [location, setLocation] = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -48,6 +48,7 @@ export function DashboardLayout({
     ...(profile?.role === "professor" ? [{ icon: ClipboardList, label: "Professor Portal", href: "/professor" }] : []),
     { icon: Sparkles, label: "AI Assistant", href: "/assistant" },
     { icon: Settings, label: "Settings", href: "/settings" },
+    ...(isAdmin ? [{ icon: ShieldCheck, label: "Admin Panel", href: "/admin", badge: "ADMIN" }] : []),
   ];
 
   const roleColors: Record<string, string> = {

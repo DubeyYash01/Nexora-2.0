@@ -6,9 +6,10 @@ import { DashboardLayout } from "./dashboard";
 import {
   ArrowLeft, GitFork, Heart, ChevronDown, ChevronRight,
   Clock, DollarSign, Cpu, Star, Loader2, CheckCircle2, Package,
-  AlertCircle,
+  AlertCircle, Flag,
 } from "lucide-react";
 import ForkModal from "@/components/blueprints/ForkModal";
+import ReportModal from "@/components/admin/ReportModal";
 import type { Blueprint } from "@/components/blueprints/BlueprintCard";
 
 interface Review {
@@ -53,6 +54,7 @@ export default function BlueprintDetailPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabType>("Overview");
   const [forkOpen, setForkOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
@@ -246,8 +248,26 @@ export default function BlueprintDetailPage() {
             >
               <Heart className="w-4 h-4" style={{ fill: liked ? "#FF5A5A" : "none" }} /> {likeCount}
             </button>
+            <button
+              onClick={() => setReportOpen(true)}
+              title="Report Blueprint"
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm border transition-all"
+              style={{ borderColor: "#2A2A3E", color: "#5A5A7A" }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "#FF5A5A"; e.currentTarget.style.borderColor = "rgba(255,90,90,0.3)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = "#5A5A7A"; e.currentTarget.style.borderColor = "#2A2A3E"; }}
+            >
+              <Flag className="w-4 h-4" />
+            </button>
           </div>
         </div>
+
+        <ReportModal
+          open={reportOpen}
+          onClose={() => setReportOpen(false)}
+          contentType="blueprint"
+          contentId={id!}
+          contentTitle={blueprint?.title}
+        />
 
         {/* Tabs */}
         <div className="border-b" style={{ borderColor: "#2A2A3E" }}>

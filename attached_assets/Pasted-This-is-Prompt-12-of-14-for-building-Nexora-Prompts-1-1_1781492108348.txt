@@ -1,0 +1,1574 @@
+This is Prompt 12 of 14 for building Nexora.
+Prompts 1-11 plus IDE fix are already built.
+Do NOT touch or recreate anything already built.
+Only ADD and IMPROVE what exists.
+
+═══════════════════════════════════════
+WHAT THIS PROMPT BUILDS
+═══════════════════════════════════════
+
+1. Admin Panel (/admin)
+   (only accessible by admin users)
+2. Platform Analytics Dashboard
+3. User Management
+4. Blueprint Moderation
+5. College Inquiry Management
+6. Revenue Dashboard
+7. Platform Health Monitoring
+8. Admin Notifications System
+9. Content Reporting System
+10. Platform Settings Management
+
+═══════════════════════════════════════
+UNDERSTANDING THE ADMIN PANEL
+═══════════════════════════════════════
+
+This is YOUR control center as the
+founder of Nexora. You need to:
+
+- See how many users signed up today
+- See which blueprints are trending
+- Manage college inquiries
+- See revenue from Razorpay
+- Monitor AI usage and costs
+- Moderate reported content
+- Manage featured blueprints
+- Send platform announcements
+
+This is not a user-facing feature.
+It is YOUR internal tool.
+Build it to be data-rich and fast.
+
+═══════════════════════════════════════
+SUPABASE CHANGES NEEDED
+═══════════════════════════════════════
+
+Run in Supabase SQL Editor:
+
+-- Admin users table
+CREATE TABLE IF NOT EXISTS 
+  admin_users (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id)
+    UNIQUE,
+  role text DEFAULT 'admin'
+    CHECK (role IN (
+      'super_admin', 'admin', 
+      'moderator'
+    )),
+  added_by uuid 
+    REFERENCES profiles(id),
+  created_at timestamptz 
+    DEFAULT now()
+);
+
+-- Content reports table
+CREATE TABLE IF NOT EXISTS 
+  content_reports (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  reporter_id uuid 
+    REFERENCES profiles(id),
+  content_type text
+    CHECK (content_type IN (
+      'blueprint', 'project',
+      'profile', 'review'
+    )),
+  content_id uuid NOT NULL,
+  reason text NOT NULL,
+  description text,
+  status text DEFAULT 'pending'
+    CHECK (status IN (
+      'pending', 'reviewed',
+      'resolved', 'dismissed'
+    )),
+  reviewed_by uuid
+    REFERENCES profiles(id),
+  created_at timestamptz 
+    DEFAULT now(),
+  updated_at timestamptz 
+    DEFAULT now()
+);
+
+-- Platform announcements
+CREATE TABLE IF NOT EXISTS
+  announcements (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  title text NOT NULL,
+  message text NOT NULL,
+  type text DEFAULT 'info'
+    CHECK (type IN (
+      'info', 'warning', 
+      'success', 'maintenance'
+    )),
+  target_roles text[]
+    DEFAULT ARRAY[
+      'student','maker',
+      'professor','professional'
+    ],
+  is_active boolean DEFAULT true,
+  show_until timestamptz,
+  created_by uuid
+    REFERENCES profiles(id),
+  created_at timestamptz 
+    DEFAULT now()
+);
+
+-- Platform metrics snapshots
+CREATE TABLE IF NOT EXISTS
+  platform_metrics (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  metric_date date UNIQUE NOT NULL,
+  total_users integer DEFAULT 0,
+  new_users_today integer DEFAULT 0,
+  active_users_today integer DEFAULT 0,
+  total_projects integer DEFAULT 0,
+  new_projects_today integer DEFAULT 0,
+  total_blueprints integer DEFAULT 0,
+  ai_messages_today integer DEFAULT 0,
+  revenue_today numeric DEFAULT 0,
+  revenue_month numeric DEFAULT 0,
+  paid_users integer DEFAULT 0,
+  trial_users integer DEFAULT 0,
+  created_at timestamptz 
+    DEFAULT now()
+);
+
+-- RLS: admin tables
+ALTER TABLE admin_users
+  ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "admins only"
+  ON admin_users FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM admin_users
+      WHERE user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE content_reports
+  ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "reporters and admins"
+  ON content_reports FOR ALL
+  USING (
+    auth.uid() = reporter_id OR
+    EXISTS (
+      SELECT 1 FROM admin_users
+      WHERE user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE announcements
+  ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "public read announcements"
+  ON announcements FOR SELECT
+  USING (is_active = true);
+CREATE POLICY "admins manage announcements"
+  ON announcements FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM admin_users
+      WHERE user_id = auth.uid()
+    )
+  );
+
+ALTER TABLE platform_metrics
+  ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "admins read metrics"
+  ON platform_metrics FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM admin_users
+      WHERE user_id = auth.uid()
+    )
+  );
+
+-- Make yourself an admin:
+-- After running the above,
+-- manually insert your user_id:
+-- INSERT INTO admin_users (user_id, role)
+-- VALUES ('your-user-uuid', 'super_admin');
+-- Find your UUID in Supabase 
+-- Auth → Users table
+
+═══════════════════════════════════════
+ADMIN ROUTE PROTECTION
+═══════════════════════════════════════
+
+File: client/src/components/auth/
+      AdminRoute.jsx
+
+Wraps all /admin/* routes.
+
+Checks:
+1. User is authenticated
+2. User exists in admin_users table
+
+If not admin:
+  Show full-page error:
+  
+  Icon: shield (large, #FF5A5A)
+  Heading: "Access Denied"
+  Subtext: "This area is restricted 
+            to Nexora administrators."
+  Button: "Go to Dashboard"
+  
+  Also log the attempt:
+  POST /api/admin/log-access-attempt
+  (security logging)
+
+Admin check:
+  On app load, if user is logged in:
+  GET /api/admin/check/:userId
+  Returns { isAdmin, role }
+  
+  Store in AuthContext:
+  const [isAdmin, setIsAdmin] 
+    = useState(false)
+  
+  All /admin/* routes wrapped with:
+  <AdminRoute>
+    <AdminPage />
+  </AdminRoute>
+
+═══════════════════════════════════════
+ADMIN PANEL LAYOUT
+═══════════════════════════════════════
+
+Route: /admin
+Completely separate layout from 
+main app. No main sidebar.
+
+Admin layout has its own sidebar:
+  Width: 220px
+  bg: #080810 (slightly darker)
+  border-right: 1px solid #1A1A2E
+
+Admin sidebar header:
+  "Nexora Admin" (bold, #F0F0FF)
+  Your role badge:
+    Super Admin → gold badge
+    Admin → purple badge
+    Moderator → blue badge
+  
+  Small text: "Internal tools only"
+  (color: #FF5A5A, text-xs)
+
+Admin nav items:
+  Overview (layout-dashboard)
+  Users (users)
+  Blueprints (git-branch)
+  Revenue (indian-rupee)
+  AI Usage (sparkles)
+  Reports (flag)
+  Announcements (megaphone)
+  College Inquiries (building)
+  Platform Settings (settings-2)
+  
+  Each item same style as 
+  main sidebar but slightly 
+  different color scheme:
+    Active: border-left #FFB84D
+            bg rgba(255,184,77,0.08)
+            color: #FFB84D
+
+Admin top bar:
+  Right side:
+    "← Back to App" link 
+    (goes to /dashboard)
+    Admin user avatar + name
+
+Main content: flex-1, scrollable
+  padding: 32px
+
+═══════════════════════════════════════
+OVERVIEW PAGE — /admin
+═══════════════════════════════════════
+
+Real-time platform snapshot.
+
+────────────────────────────────────
+TOP METRICS ROW (6 cards)
+────────────────────────────────────
+
+Card 1: Total Users
+  Large number
+  Subtext: "+[X] today"
+  Icon: users (#6C63FF)
+  Trend: green arrow if growing
+
+Card 2: Active Today
+  Users who made any action today
+  Subtext: "[X]% of total"
+  Icon: activity (#00D4FF)
+
+Card 3: Paid Users
+  Student Pro + Maker Pro count
+  Subtext: "[X]% conversion"
+  Icon: crown (#FFB84D)
+
+Card 4: Revenue Today
+  "₹[amount]"
+  Subtext: "₹[month] this month"
+  Icon: indian-rupee (#00C896)
+  (Pull from payment_history)
+
+Card 5: Projects Created
+  Total all time
+  Subtext: "+[X] today"
+  Icon: folder (#9090B0)
+
+Card 6: AI Messages Today
+  Total Gemini API calls today
+  Subtext: "~₹[estimated cost]"
+  (Estimate: ₹0.002 per message)
+  Icon: sparkles (#6C63FF)
+  
+  Color coding:
+    Under 1000: green
+    1000-5000: yellow
+    Above 5000: red
+    (cost awareness)
+
+Card design:
+  bg: #12121A
+  border: 1px solid #2A2A3E
+  border-radius: 12px
+  padding: 20px 24px
+  
+  Trend indicator:
+    Small colored arrow + percentage
+    vs yesterday same time
+    Green if up, red if down
+
+────────────────────────────────────
+CHARTS ROW
+────────────────────────────────────
+
+Use CSS-based charts 
+(no external chart library).
+
+Chart 1: User Growth (7 days)
+  Title: "New Users — Last 7 Days"
+  
+  Simple bar chart:
+    7 bars, one per day
+    Bar: bg #6C63FF
+    Height proportional to 
+    new_users count that day
+    
+    X-axis: day labels 
+             (Mon, Tue, etc.)
+    Y-axis: numbers on left
+    
+    Hover on bar:
+      Tooltip: "14 new users"
+    
+    Each bar:
+      position: relative
+      Hover: bg #5A52E0
+             tooltip appears above
+
+Chart 2: Revenue (30 days)
+  Title: "Revenue — Last 30 Days"
+  
+  Line chart (CSS):
+    Use SVG polyline:
+    
+    <svg viewBox="0 0 600 200">
+      <polyline
+        points="[calculated points]"
+        fill="none"
+        stroke="#00C896"
+        stroke-width="2"
+      />
+      <!-- Area fill -->
+      <polygon
+        points="[points + bottom]"
+        fill="rgba(0,200,150,0.08)"
+      />
+    </svg>
+    
+    Y-axis: ₹ amounts
+    X-axis: dates (every 5 days)
+
+Chart 3: Plan Distribution (donut)
+  Title: "Users by Plan"
+  
+  CSS donut chart:
+    Free: gray segment
+    Student Pro: purple segment
+    Maker Pro: cyan segment
+    Trial: yellow segment
+    
+    Center: total users count
+    
+    Legend below:
+      Color dot + plan name + count
+
+────────────────────────────────────
+RECENT ACTIVITY FEED
+────────────────────────────────────
+
+Right side of overview (30% width):
+  Title: "Live Activity"
+  
+  Auto-refreshes every 30 seconds.
+  
+  Shows last 20 platform events:
+  
+  Each event:
+    Icon (colored by type)
+    Text description
+    Timestamp (relative)
+  
+  Event types:
+    🆕 "New user signed up"
+        (user icon, #6C63FF)
+    💰 "Payment received — ₹299"
+        (rupee icon, #00C896)
+    🔧 "Project created: [title]"
+        (folder icon, #9090B0)
+    📋 "Blueprint published: [title]"
+        (git-branch icon, #00D4FF)
+    🚩 "Content reported"
+        (flag icon, #FF5A5A)
+    🎓 "Class created by professor"
+        (graduation-cap, #FFB84D)
+  
+  Pull from multiple tables:
+    profiles (new signups)
+    payment_history (payments)
+    projects (new projects)
+    blueprints (published)
+    content_reports (reports)
+    classes (new classes)
+  
+  Union query ordered by 
+  created_at desc, limit 20.
+
+────────────────────────────────────
+QUICK ACTIONS
+────────────────────────────────────
+
+Row of quick action buttons:
+
+  "Feature a Blueprint" 
+  (star icon, primary)
+  → Opens blueprint selector modal
+
+  "Send Announcement"
+  (megaphone icon, secondary)
+  → Opens announcement composer
+
+  "View Pending Reports"
+  (flag icon, secondary)
+  → Goes to /admin/reports
+  Show count badge if pending > 0
+
+  "Download Report"
+  (download icon, ghost)
+  → Downloads CSV of today's metrics
+
+═══════════════════════════════════════
+USER MANAGEMENT — /admin/users
+═══════════════════════════════════════
+
+────────────────────────────────────
+HEADER
+────────────────────────────────────
+
+Title: "Users"
+Right side:
+  Total count: "[X] total users"
+  Export CSV button
+
+────────────────────────────────────
+SEARCH & FILTERS
+────────────────────────────────────
+
+Search input:
+  Searches by name, email, username
+  Real-time API search (debounced)
+
+Filters:
+  Plan: All | Free | Student Pro | 
+        Maker Pro | Trial
+  Role: All | Student | Maker | 
+        Professor | Professional
+  Status: All | Active | 
+          Inactive (no projects in 30d)
+  Date joined: All | Today | 
+               This week | This month
+
+Sort:
+  Newest | Oldest | 
+  Most Projects | Plan (paid first)
+
+────────────────────────────────────
+USERS TABLE
+────────────────────────────────────
+
+Columns:
+  User (avatar + name + email)
+  Role badge
+  Plan badge
+  Projects count
+  Joined date
+  Last active
+  Actions
+
+Each row:
+  Avatar circle (initials)
+  Name (bold) + email (small, muted)
+  
+  Role badge (colored)
+  Plan badge (colored)
+  
+  Project count 
+  (clickable → filters projects 
+   by this user)
+  
+  Joined: relative date
+  
+  Last active: relative date
+  (based on projects updated_at 
+   or last sign in)
+  
+  Actions (three-dot menu):
+    View Profile
+    View Projects
+    Change Plan (manual override)
+    Make Admin
+    Suspend Account
+    Delete Account
+
+────────────────────────────────────
+USER DETAIL MODAL
+────────────────────────────────────
+
+Clicking "View Profile" in actions:
+
+Slide-in panel from right (480px):
+
+  Header:
+    Avatar (large, 64px)
+    Name (bold, large)
+    Email
+    Role + Plan badges
+    "Joined [date]"
+  
+  Stats row:
+    Projects: X
+    Blueprints: X
+    AI messages used: X
+    Total spent: ₹X
+  
+  Tabs: [Projects] [Payments] 
+        [Activity]
+  
+  Projects tab:
+    List of user's projects
+    Title + status + created date
+    "Open →" link for each
+  
+  Payments tab:
+    Payment history for this user
+    Date | Amount | Plan | Status
+  
+  Activity tab:
+    Recent actions (from 
+    search_history, recently_viewed,
+    ai_conversations count)
+  
+  Admin actions (bottom):
+    "Change Plan" dropdown
+      (override their plan manually)
+    "Send them a message" 
+      (creates notification for them)
+    "Suspend / Unsuspend"
+    "Delete Account" (red)
+
+────────────────────────────────────
+CHANGE PLAN MODAL
+────────────────────────────────────
+
+Admin can manually change 
+any user's plan:
+
+Simple modal:
+  "Change plan for [name]"
+  Current plan shown
+  
+  Select new plan:
+    Free | Student Pro | 
+    Maker Pro | College Lab
+  
+  Reason (optional text):
+    "e.g. Complimentary upgrade, 
+     refund issued, etc."
+  
+  Duration (if upgrading):
+    Permanent | 30 days | 
+    90 days | 6 months
+  
+  "Apply Change" button
+  
+  On confirm:
+    Updates profiles.plan
+    Updates subscriptions table
+    Creates notification for user:
+    "Your plan has been updated 
+     to [plan] by Nexora support."
+
+═══════════════════════════════════════
+BLUEPRINT MANAGEMENT — /admin/blueprints
+═══════════════════════════════════════
+
+────────────────────────────────────
+OVERVIEW STATS
+────────────────────────────────────
+
+4 stat cards:
+  Total Blueprints
+  Public Blueprints
+  Total Forks (all blueprints)
+  Total Views (all blueprints)
+
+────────────────────────────────────
+BLUEPRINT TABLE
+────────────────────────────────────
+
+Columns:
+  Title + Author
+  Category + Difficulty
+  Forks | Views | Likes
+  Status (Public/Private)
+  Featured toggle
+  Created date
+  Actions
+
+Actions (three-dot):
+  View Blueprint
+  Edit Featured Status
+  Pin to Top
+  Unpublish
+  Delete
+
+────────────────────────────────────
+FEATURE MANAGEMENT
+────────────────────────────────────
+
+"Feature a Blueprint" workflow:
+
+Search for blueprint:
+  Type-ahead search input
+  Shows matching blueprints
+
+Select blueprint:
+  Preview card shows
+  
+Toggle featured:
+  Switch to enable/disable featured
+  
+Featured position:
+  Number input (1-10)
+  Lower number = shown first
+  
+Reason for featuring (internal note):
+  Text input, admin use only
+
+"Save" button
+→ Updates is_featured in blueprints
+→ Toast: "Blueprint featured!"
+
+Current featured list:
+  Shows all currently featured 
+  blueprints in order
+  Drag handles to reorder
+  (simple up/down arrows 
+   instead of drag if complex)
+
+════════════════════════════════════════
+REVENUE DASHBOARD — /admin/revenue
+════════════════════════════════════════
+
+────────────────────────────────────
+REVENUE OVERVIEW
+────────────────────────────────────
+
+Top row (4 cards):
+  Today's Revenue: "₹[amount]"
+  This Month: "₹[amount]"
+  Total Revenue: "₹[amount]"
+  MRR (Monthly Recurring Revenue):
+    "₹[active subscriptions × price]"
+
+────────────────────────────────────
+REVENUE BY PLAN
+────────────────────────────────────
+
+Table:
+  Plan | Subscribers | Price | MRR
+  
+  Student Pro Monthly | X | ₹299 | ₹Y
+  Student Pro Semester | X | ₹999 | ₹Y
+  Maker Pro | X | ₹499 | ₹Y
+  Total | | | ₹Y
+
+────────────────────────────────────
+PAYMENT HISTORY
+────────────────────────────────────
+
+Full payment history across 
+all users.
+
+Table:
+  Date | User | Plan | Amount | 
+  Status | Razorpay ID
+
+Filters:
+  Date range picker
+  Plan filter
+  Status: All | Paid | Failed | 
+          Refunded
+
+Export:
+  "Export CSV" button
+  Downloads all filtered payments
+
+────────────────────────────────────
+REVENUE CHART
+────────────────────────────────────
+
+Same SVG line chart as overview
+but for revenue over 90 days.
+
+Toggle: Daily | Weekly | Monthly view
+
+Show goal line if set:
+  Horizontal dashed line at 
+  target revenue
+  Label: "Monthly Goal: ₹50,000"
+
+────────────────────────────────────
+CONVERSION FUNNEL
+────────────────────────────────────
+
+Visual funnel showing:
+
+  [Total Signups: 1,000]
+        ↓
+  [Completed Onboarding: 800]
+        ↓
+  [Created 1+ Projects: 600]
+        ↓
+  [Started Trial: 150]
+        ↓
+  [Converted to Paid: 80]
+        ↓
+  [Still Active Paid: 65]
+
+CSS funnel (trapezoid shapes):
+  Each level: 
+    Colored bar (width proportional)
+    Label + count + percentage
+  
+  Colors gradient from 
+  purple (top) to green (bottom)
+
+═══════════════════════════════════════
+AI USAGE — /admin/ai
+═══════════════════════════════════════
+
+Monitor Gemini API usage and costs.
+
+────────────────────────────────────
+USAGE STATS
+────────────────────────────────────
+
+Top cards:
+  Messages Today
+  Messages This Month
+  Estimated Cost Today
+    ("~₹[messages × 0.002]")
+  Estimated Cost This Month
+  Average per User
+  Peak Usage Hour
+
+────────────────────────────────────
+USAGE BY FEATURE
+────────────────────────────────────
+
+Table showing where AI is used:
+
+  Feature | Calls Today | % of Total
+  Project Analysis | X | X%
+  Build Plan Gen | X | X%  
+  AI Assistant | X | X%
+  Code Analysis | X | X%
+  Component Suggest | X | X%
+  Shopping List | X | X%
+  Substitutions | X | X%
+
+(Track by adding feature_type to 
+ a new ai_usage_log table)
+
+CREATE TABLE IF NOT EXISTS
+  ai_usage_log (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  user_id uuid REFERENCES profiles(id),
+  feature_type text NOT NULL,
+  tokens_used integer,
+  created_at timestamptz DEFAULT now()
+);
+
+────────────────────────────────────
+TOP AI USERS
+────────────────────────────────────
+
+Table: Users consuming most AI
+
+  User | Plan | Messages Today | 
+  Messages Month | Est. Cost
+
+Flag users with unusually 
+high usage:
+  If user > 500 messages/day:
+    Red "High Usage" badge
+    Consider rate limiting
+
+────────────────────────────────────
+COST PROJECTIONS
+────────────────────────────────────
+
+Simple projection card:
+
+  "Based on current usage:"
+  
+  This month: ₹[projected]
+  Next month: ₹[projected × 1.1]
+  
+  Break even point:
+  "Need [X] paid users to 
+   cover AI costs"
+  (Calculate: monthly AI cost / 
+              avg revenue per user)
+  
+  Current status:
+    If paid revenue > AI cost: 
+      Green "Profitable on AI ✓"
+    If not:
+      Red "AI costs exceed revenue"
+
+═══════════════════════════════════════
+CONTENT REPORTS — /admin/reports
+═══════════════════════════════════════
+
+────────────────────────────────────
+REPORTS OVERVIEW
+────────────────────────────────────
+
+Stat row:
+  Pending: X (red if > 0)
+  Reviewed Today: X
+  Resolved This Week: X
+  Dismissed: X
+
+────────────────────────────────────
+REPORTS TABLE
+────────────────────────────────────
+
+Columns:
+  Type (blueprint/project/profile)
+  Content Title/Link
+  Reporter
+  Reason
+  Reported Date
+  Status
+  Actions
+
+Status badges:
+  pending: yellow "Pending"
+  reviewed: blue "Reviewed"
+  resolved: green "Resolved"
+  dismissed: gray "Dismissed"
+
+Actions per report:
+  "View Content" 
+    → Opens content in new tab
+  "Mark Reviewed"
+    → Status = reviewed
+  "Resolve (Remove Content)"
+    → Unpublishes/deletes content
+    → Notifies reporter
+    → Status = resolved
+  "Dismiss"
+    → Status = dismissed
+    → Notifies reporter
+      "We reviewed your report 
+       and found no violation"
+
+────────────────────────────────────
+REPORT DETAIL MODAL
+────────────────────────────────────
+
+Click any report row:
+
+Modal shows:
+  Report details (type, reason, 
+  description from reporter)
+  
+  Content preview:
+    If blueprint: show title, 
+    description, author
+    If profile: show profile info
+  
+  Reporter info:
+    Avatar + name + 
+    "X reports submitted" 
+    (helps identify serial reporters)
+  
+  Admin notes input:
+    "Internal notes about 
+     this report..."
+  
+  Action buttons:
+    "Dismiss Report" (secondary)
+    "Remove Content" (red primary)
+    "Warn User" (yellow)
+      → Creates notification for 
+        content creator:
+        "Your content received a 
+         report. Please review our 
+         community guidelines."
+
+────────────────────────────────────
+REPORT BUTTON (user-facing)
+────────────────────────────────────
+
+Add report button to blueprint 
+detail page and public profiles.
+
+On blueprint detail:
+  Three-dot menu → "Report Blueprint"
+  
+On profile page:
+  Three-dot menu → "Report Profile"
+
+Opens report modal:
+  "Why are you reporting this?"
+  
+  Radio options:
+    ○ Spam or misleading
+    ○ Inappropriate content
+    ○ Incorrect/dangerous info
+    ○ Copyright violation
+    ○ Other
+  
+  "Additional details (optional):"
+  Textarea
+  
+  "Submit Report" button
+  
+  On submit:
+    POST /api/reports/create
+    Creates content_reports row
+    
+    Toast: "Report submitted. 
+            We'll review it within 
+            24 hours."
+
+═══════════════════════════════════════
+ANNOUNCEMENTS — /admin/announcements
+═══════════════════════════════════════
+
+Send platform-wide announcements 
+to users.
+
+────────────────────────────────────
+ANNOUNCEMENTS LIST
+────────────────────────────────────
+
+Table of all announcements:
+  Title | Type | Target | 
+  Active | Show Until | Created
+
+Toggle active/inactive inline.
+
+"+ New Announcement" button.
+
+────────────────────────────────────
+CREATE ANNOUNCEMENT
+────────────────────────────────────
+
+Form (inline or modal):
+
+  Title *
+    Text input, max 80 chars
+  
+  Message *
+    Textarea, max 500 chars
+    Supports basic markdown:
+    **bold** and [links](url)
+  
+  Type *
+    Pills: Info | Warning | 
+           Success | Maintenance
+    
+    Preview of banner style 
+    updates as type changes:
+      Info: blue banner
+      Warning: yellow banner
+      Success: green banner
+      Maintenance: red banner
+  
+  Target Users:
+    Checkboxes for roles:
+    ☑ Students
+    ☑ Makers
+    ☑ Professors
+    ☑ Professionals
+    
+    Or: "All users" toggle
+  
+  Show Until:
+    Date picker
+    "Show indefinitely" option
+  
+  Preview section:
+    Live preview of how the 
+    announcement banner looks
+    to users
+  
+  "Publish Announcement" (primary)
+  "Save as Draft" (secondary)
+
+────────────────────────────────────
+ANNOUNCEMENT BANNER (user-facing)
+────────────────────────────────────
+
+Show active announcements to users.
+
+In main app layout (above content,
+below navbar):
+
+For each active announcement 
+matching user's role:
+
+  Banner:
+    Full width
+    Height: 44px
+    
+    Type colors:
+      info: bg rgba(0,212,255,0.1)
+            border-bottom #00D4FF
+      warning: bg rgba(255,184,77,0.1)
+               border-bottom #FFB84D
+      success: bg rgba(0,200,150,0.1)
+               border-bottom #00C896
+      maintenance: bg rgba(255,90,90,0.1)
+                   border-bottom #FF5A5A
+    
+    Content: centered text
+      Type icon + Title + Message
+      (truncated if too long)
+      "Learn more →" link 
+      if message has URL
+    
+    Right: X dismiss button
+      Clicking X: hides banner
+      Store dismissed IDs in 
+      localStorage:
+      'nexora_dismissed_announcements'
+      = [id1, id2, ...]
+      
+      Don't show dismissed 
+      announcements again 
+      (until localStorage cleared)
+    
+    If multiple announcements:
+      Show most important first
+      (maintenance > warning > 
+       info > success)
+      
+      Small dot indicators at 
+      bottom of banner for multiple:
+      Click dots to cycle through
+
+═══════════════════════════════════════
+COLLEGE INQUIRIES — /admin/college
+═══════════════════════════════════════
+
+Manage leads from the 
+college lab contact form.
+
+────────────────────────────────────
+INQUIRIES OVERVIEW
+────────────────────────────────────
+
+Stat cards:
+  New Inquiries: X (red badge)
+  In Progress: X
+  Converted (became customers): X
+  Total This Month: X
+
+────────────────────────────────────
+INQUIRIES TABLE
+────────────────────────────────────
+
+Columns:
+  Institution | Contact | Email | 
+  Students | Status | Date | Actions
+
+Status options:
+  new (yellow)
+  contacted (blue)
+  demo_scheduled (purple)
+  converted (green)
+  lost (gray)
+
+Actions:
+  "View Details" → opens modal
+  "Change Status" → inline dropdown
+  "Send Email" → mailto link
+
+────────────────────────────────────
+INQUIRY DETAIL MODAL
+────────────────────────────────────
+
+Full inquiry details:
+  Institution name (large, bold)
+  Contact: name + email + phone
+  Student count
+  Their message
+  Submitted: date
+  
+  Internal notes:
+    Textarea for admin to add notes
+    (saved to college_inquiries 
+     notes column:
+     
+     ALTER TABLE college_inquiries
+       ADD COLUMN IF NOT EXISTS
+       admin_notes text;
+     
+     ALTER TABLE college_inquiries
+       ADD COLUMN IF NOT EXISTS
+       status text DEFAULT 'new';
+    )
+    "Save Notes" button
+  
+  Status update:
+    Dropdown: new → contacted → 
+    demo_scheduled → converted → lost
+    "Update Status" button
+  
+  Quick actions:
+    "Email [name]" (mailto: link)
+    "Mark as Converted"
+      → Status = converted
+      → Can manually create 
+        college_lab subscription
+
+═══════════════════════════════════════
+PLATFORM SETTINGS — /admin/settings
+═══════════════════════════════════════
+
+Global platform configuration.
+
+────────────────────────────────────
+FEATURE FLAGS
+────────────────────────────────────
+
+Toggle features on/off platform-wide:
+
+  Feature | Status | Toggle
+
+  Blueprint Marketplace: ON
+  Professor Assignments: ON
+  Component Suggestions: ON
+  Shopping List: ON
+  Public Profiles: ON
+  User Registration: ON
+  
+  Toggle any feature OFF:
+    That feature is hidden/disabled
+    for ALL users immediately
+  
+  Use case: if a feature has a bug,
+  disable it without a deployment.
+
+Store in Supabase:
+
+CREATE TABLE IF NOT EXISTS
+  feature_flags (
+  id uuid DEFAULT gen_random_uuid()
+     PRIMARY KEY,
+  flag_name text UNIQUE NOT NULL,
+  is_enabled boolean DEFAULT true,
+  description text,
+  updated_by uuid 
+    REFERENCES profiles(id),
+  updated_at timestamptz 
+    DEFAULT now()
+);
+
+-- Seed default flags
+INSERT INTO feature_flags 
+  (flag_name, is_enabled, description)
+VALUES
+  ('blueprint_marketplace', true,
+   'Public blueprint library'),
+  ('professor_assignments', true,
+   'Assignment system for professors'),
+  ('component_suggestions', true,
+   'AI project suggestions from inventory'),
+  ('shopping_list', true,
+   'Shopping list generator'),
+  ('public_profiles', true,
+   'Public user profiles'),
+  ('user_registration', true,
+   'New user signup')
+ON CONFLICT (flag_name) DO NOTHING;
+
+Frontend checks feature flags:
+  On app load: 
+  GET /api/admin/feature-flags
+  (public endpoint, no auth needed)
+  
+  Returns { flags: {...} }
+  
+  Store in context:
+  const [flags, setFlags] = useState({})
+  
+  Components check:
+  if (!flags.blueprint_marketplace) {
+    return null // hide feature
+  }
+
+────────────────────────────────────
+RATE LIMITS CONFIGURATION
+────────────────────────────────────
+
+Adjust rate limits without code:
+
+  Free Plan AI Messages/Day: [input] 3
+  Student Pro AI Messages/Day: [input] 50
+  Maker Pro AI Messages/Day: [input] -1
+  
+  Global AI Rate Limit/Hour: [input] 1000
+  
+  Save button → updates 
+  a platform_config table:
+
+CREATE TABLE IF NOT EXISTS
+  platform_config (
+  key text PRIMARY KEY,
+  value text NOT NULL,
+  description text,
+  updated_at timestamptz 
+    DEFAULT now()
+);
+
+INSERT INTO platform_config 
+  (key, value, description)
+VALUES
+  ('free_ai_daily_limit', '3',
+   'AI messages per day for free users'),
+  ('student_pro_ai_daily_limit', '50',
+   'AI messages per day for Student Pro'),
+  ('maker_pro_ai_daily_limit', '-1',
+   'AI messages per day for Maker Pro (-1 = unlimited)')
+ON CONFLICT (key) DO NOTHING;
+
+Backend reads from platform_config 
+instead of hardcoded values.
+
+────────────────────────────────────
+MAINTENANCE MODE
+────────────────────────────────────
+
+Toggle: "Enable Maintenance Mode"
+
+When ON:
+  All non-admin users see:
+  
+  Full page overlay:
+    bg: #0A0A0F
+    
+    Icon: settings (spinning, #6C63FF)
+    Heading: "Nexora is under maintenance"
+    Subtext: "We're making improvements.
+              Be back shortly!"
+    
+    If maintenance message set:
+      Show the message
+    
+    "Check our status →" link
+    (placeholder URL)
+  
+  Admins can still access everything.
+
+════════════════════════════════════
+BACKEND ROUTES TO ADD
+════════════════════════════════════
+
+All /api/admin/* routes must 
+verify admin status:
+
+Middleware: server/middleware/
+            requireAdmin.js
+
+async function requireAdmin(
+  req, res, next
+) {
+  const { userId } = req.body 
+    || req.query || req.params
+  
+  const { data } = await supabase
+    .from('admin_users')
+    .select('role')
+    .eq('user_id', userId)
+    .single()
+  
+  if (!data) {
+    return res.status(403).json({
+      error: 'Admin access required'
+    })
+  }
+  
+  req.adminRole = data.role
+  next()
+}
+
+Routes:
+
+GET /api/admin/check/:userId
+  → Checks if user is admin
+  → Returns { isAdmin, role }
+  → No auth middleware 
+    (used to check before loading)
+
+GET /api/admin/overview
+  Query: userId
+  Middleware: requireAdmin
+  → Returns all overview stats:
+    user counts, revenue today,
+    projects count, AI usage,
+    recent activity feed
+  → Queries multiple tables
+
+GET /api/admin/users
+  Query: userId, search, plan, 
+         role, sort, limit, offset
+  Middleware: requireAdmin
+  → Returns paginated user list
+  → Includes project counts,
+    subscription status
+
+GET /api/admin/users/:targetId
+  Middleware: requireAdmin
+  → Returns full user detail:
+    profile, projects, payments,
+    AI usage summary
+
+PUT /api/admin/users/:targetId/plan
+  Body: { adminId, plan, 
+          duration, reason }
+  Middleware: requireAdmin
+  → Updates user plan manually
+  → Creates notification for user
+  → Logs the change
+
+GET /api/admin/revenue
+  Query: userId, dateFrom, dateTo
+  Middleware: requireAdmin
+  → Returns revenue data:
+    daily totals, by plan,
+    payment history
+
+GET /api/admin/ai-usage
+  Query: userId, date
+  Middleware: requireAdmin
+  → Returns AI usage stats
+  → By feature, by user,
+    cost estimates
+
+GET /api/admin/reports
+  Query: userId, status
+  Middleware: requireAdmin
+  → Returns content reports
+
+PUT /api/admin/reports/:reportId
+  Body: { adminId, status, 
+          action, notes }
+  Middleware: requireAdmin
+  → Updates report status
+  → Takes action on content 
+    if needed
+
+POST /api/reports/create
+  Body: { reporterId, contentType,
+          contentId, reason,
+          description }
+  → Creates content_reports row
+  → No admin required (users submit)
+
+POST /api/admin/announcements
+  Body: { adminId, title, message,
+          type, targetRoles,
+          showUntil }
+  Middleware: requireAdmin
+  → Creates announcement
+
+GET /api/admin/announcements
+  → Public endpoint
+  → Returns active announcements
+  → Filters by show_until
+
+PUT /api/admin/announcements/:id
+  Body: { adminId, isActive }
+  → Toggles announcement
+
+GET /api/admin/feature-flags
+  → Public endpoint (no auth)
+  → Returns all feature flags
+
+PUT /api/admin/feature-flags/:flag
+  Body: { adminId, isEnabled }
+  Middleware: requireAdmin
+  → Updates feature flag
+
+GET /api/admin/college-inquiries
+  Query: userId, status
+  Middleware: requireAdmin
+  → Returns all inquiries
+
+PUT /api/admin/college-inquiries/:id
+  Body: { adminId, status, 
+          adminNotes }
+  Middleware: requireAdmin
+  → Updates inquiry
+
+GET /api/admin/platform-config
+  → Public endpoint
+  → Returns platform config values
+
+PUT /api/admin/platform-config
+  Body: { adminId, key, value }
+  Middleware: requireAdmin
+  → Updates config value
+
+POST /api/admin/maintenance
+  Body: { adminId, enabled, message }
+  Middleware: requireAdmin
+  → Updates maintenance mode
+
+═══════════════════════════════════════
+CONNECT TO EXISTING FEATURES
+═══════════════════════════════════════
+
+1. Landing page navbar:
+   If user is admin:
+   Show "Admin" link in user 
+   dropdown menu → /admin
+
+2. Feature flags:
+   On app load in App.jsx:
+   Fetch /api/admin/feature-flags
+   Store in FeatureFlagContext
+   
+   Wrap relevant components:
+   {flags.blueprint_marketplace && 
+     <BlueprintsLink />}
+
+3. Announcement banner:
+   In main Layout component,
+   fetch active announcements
+   Show banner if any active
+
+4. Platform config:
+   Backend AI route reads 
+   daily limits from platform_config
+   instead of PLAN_LIMITS constants
+
+5. Report button:
+   Add to blueprint detail page
+   (Prompt 6 component)
+   Add to public profile page
+   (Prompt 9 component)
+
+═══════════════════════════════════════
+IMPORTANT RULES
+═══════════════════════════════════════
+
+1. Admin panel security is critical.
+   EVERY admin API route must check
+   admin status on the SERVER.
+   Never trust client-side admin 
+   checks for data access.
+   Frontend check = UX only.
+   Backend check = actual security.
+
+2. The first thing to do after 
+   Replit builds this:
+   Go to Supabase → Auth → Users
+   Find your user UUID
+   Run in SQL editor:
+   INSERT INTO admin_users 
+     (user_id, role)
+   VALUES 
+     ('your-uuid', 'super_admin');
+   
+   Then go to /admin — 
+   you should have access.
+
+3. Revenue numbers must come from 
+   actual payment_history table.
+   Never show fake/placeholder 
+   revenue numbers.
+   If no payments yet: show ₹0 
+   clearly.
+
+4. The activity feed must be 
+   real data from real tables.
+   No mock data in admin panel.
+
+5. Feature flags must actually 
+   disable features when toggled.
+   Test: toggle off blueprints → 
+   /blueprints should show 
+   "Coming soon" or redirect.
+
+6. Maintenance mode must work:
+   Non-admin user hits any page → 
+   sees maintenance screen.
+   Admin user → sees normal app.
+
+7. Charts use SVG/CSS only.
+   No recharts, no chart.js.
+   Keep it simple and fast.
+
+8. After building confirm:
+   ✓ /admin redirects non-admins
+   ✓ After adding yourself as admin,
+     /admin overview loads
+   ✓ User count shows correctly
+   ✓ Revenue shows from 
+     payment_history
+   ✓ Recent activity feed updates
+   ✓ User list loads and filters
+   ✓ Can change user plan manually
+   ✓ Blueprint featured toggle works
+   ✓ Announcement creates and 
+     shows as banner to users
+   ✓ Content report flow works
+   ✓ Feature flags toggle features
+   ✓ College inquiries list shows
+   ✓ AI usage stats show
+   ✓ /admin/revenue shows charts

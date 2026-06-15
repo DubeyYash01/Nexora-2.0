@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { MapPin, Globe, Calendar, Folder, GitFork, Eye, User } from "lucide-react";
+import { MapPin, Globe, Calendar, Folder, GitFork, Eye, User, Flag } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import ReportModal from "@/components/admin/ReportModal";
 
 interface PublicProfile {
   id: string;
@@ -42,6 +43,7 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"blueprints" | "projects">("blueprints");
+  const [reportOpen, setReportOpen] = useState(false);
 
   useEffect(() => {
     if (!username) return;
@@ -86,6 +88,7 @@ export default function ProfilePage() {
   const roleColor = roleColors[p.role ?? ""] ?? "#9090B0";
 
   return (
+    <>
     <div className="min-h-screen pb-12" style={{ background: "#0A0A0F" }}>
       <div className="max-w-3xl mx-auto px-4 pt-12">
 
@@ -103,11 +106,24 @@ export default function ProfilePage() {
                 <h1 className="text-2xl font-bold" style={{ color: "#F0F0FF" }}>{p.full_name}</h1>
                 {p.username && <p className="text-sm mt-0.5" style={{ color: "#9090B0" }}>@{p.username}</p>}
               </div>
-              {isOwn && (
-                <Button variant="outline" size="sm" onClick={() => setLocation("/settings")} className="flex-shrink-0">
-                  Edit Profile
-                </Button>
-              )}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {isOwn ? (
+                  <Button variant="outline" size="sm" onClick={() => setLocation("/settings")}>
+                    Edit Profile
+                  </Button>
+                ) : (
+                  <button
+                    onClick={() => setReportOpen(true)}
+                    title="Report this profile"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-all"
+                    style={{ borderColor: "#2A2A3E", color: "#5A5A7A" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = "#FF5A5A"; e.currentTarget.style.borderColor = "rgba(255,90,90,0.3)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = "#5A5A7A"; e.currentTarget.style.borderColor = "#2A2A3E"; }}
+                  >
+                    <Flag className="w-3.5 h-3.5" /> Report
+                  </button>
+                )}
+              </div>
             </div>
 
             {p.bio && <p className="text-sm mt-3 leading-relaxed" style={{ color: "#9090B0" }}>{p.bio}</p>}
@@ -220,6 +236,14 @@ export default function ProfilePage() {
         )}
       </div>
     </div>
+    <ReportModal
+      open={reportOpen}
+      onClose={() => setReportOpen(false)}
+      contentType="profile"
+      contentId={data?.profile.id ?? ""}
+      contentTitle={data?.profile.full_name}
+    />
+    </>
   );
 }
 

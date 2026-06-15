@@ -39,6 +39,8 @@ interface AuthContextType {
   profile: UserProfile | null;
   session: Session | null;
   loading: boolean;
+  isAdmin: boolean;
+  adminRole: string | null;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -51,6 +53,8 @@ export const AuthContext = createContext<AuthContextType>({
   profile: null,
   session: null,
   loading: true,
+  isAdmin: false,
+  adminRole: null,
   signUp: async () => ({ error: null }),
   signIn: async () => ({ error: null }),
   signOut: async () => {},
@@ -63,6 +67,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminRole, setAdminRole] = useState<string | null>(null);
 
   const fetchProfile = async (accessToken: string) => {
     try {
@@ -74,7 +80,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setProfile(data);
       }
     } catch {
-      // ignore
+    }
+  };
+
+  const checkAdmin = async (userId: string) => {
+    try {
+      const res = await fetch(`/api/admin/check/${userId}`);
+      if (res.ok) {
+        const { isAdmin: admin, role } = await res.json();
+        setIsAdmin(!!admin);
+        setAdminRole(role ?? null);
+      }
+    } catch {
+      setIsAdmin(false);
+      setAdminRole(null);
     }
   };
 
@@ -83,7 +102,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.access_token) {
-        fetchProfile(session.access_token).finally(() => setLoading(false));
+        Promise.all([
+          fetchProfile(session.access_token),
+          checkAdmin(session.user.id),
+        ]).finally(() => setLoading(false));
       } else {
         setLoading(false);
       }
@@ -93,9 +115,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.access_token) {
-        await fetchProfile(session.access_token);
+        await Promise.all([
+          fetchProfile(session.access_token),
+          checkAdmin(session.user!.id),
+        ]);
       } else {
         setProfile(null);
+        setIsAdmin(false);
+        setAdminRole(null);
       }
       setLoading(false);
     });
@@ -118,6 +145,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(null);
     setProfile(null);
     setSession(null);
+    setIsAdmin(false);
+    setAdminRole(null);
   };
 
   const refreshProfile = async () => {
@@ -147,7 +176,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, session, loading, signUp, signIn, signOut, updateProfile, refreshProfile }}>
+    <AuthContext.Provider value={{ user, profile, session, loading, isAdmin, adminRole, signUp, signIn, signOut, updateProfile, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
