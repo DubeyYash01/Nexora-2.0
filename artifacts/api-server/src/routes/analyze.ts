@@ -1,11 +1,10 @@
 import { Router } from "express";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
 import { logger } from "../lib/logger";
 import { getAuthClient } from "../lib/supabaseAdmin";
+import { callGroq, parseGroqJSON } from "../lib/groq";
 
 const router = Router();
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
 const SYSTEM_PROMPT = `You are Nexora's IoT project analysis AI. 
 Your job is to analyze an IoT project idea and return a structured JSON response.
@@ -45,16 +44,13 @@ Return this exact structure:
   "tips": ["helpful tip 1 for this skill level", "helpful tip 2"]
 }`;
 
-async function callGemini(idea: string, skillLevel: string): Promise<object> {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-  const prompt = `${SYSTEM_PROMPT}\n\nAnalyze this IoT project idea for a ${skillLevel} level user: ${idea}`;
-  const result = await model.generateContent(prompt);
-  const text = result.response.text().trim();
-  const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+async function analyzeWithGroq(idea: string, skillLevel: string): Promise<object> {
+  const userPrompt = `Analyze this IoT project idea for a ${skillLevel} level user: ${idea}`;
+  const raw = await callGroq(userPrompt, SYSTEM_PROMPT, 2000);
   try {
-    return JSON.parse(cleaned);
+    return parseGroqJSON(raw) as object;
   } catch {
-    throw new Error("Invalid JSON from Gemini");
+    throw new Error("Invalid JSON from AI");
   }
 }
 
@@ -68,13 +64,13 @@ router.post("/projects/analyze", verifyToken, async (req: AuthRequest, res) => {
 
   let analysis: object;
   try {
-    analysis = await callGemini(idea.trim(), skillLevel ?? "Beginner");
+    analysis = await analyzeWithGroq(idea.trim(), skillLevel ?? "Beginner");
   } catch (firstErr) {
-    logger.warn({ err: firstErr }, "Gemini first attempt failed, retrying...");
+    logger.warn({ err: firstErr }, "Groq analysis first attempt failed, retrying...");
     try {
-      analysis = await callGemini(idea.trim(), skillLevel ?? "Beginner");
+      analysis = await analyzeWithGroq(idea.trim(), skillLevel ?? "Beginner");
     } catch (retryErr) {
-      logger.error({ err: retryErr }, "Gemini retry also failed");
+      logger.error({ err: retryErr }, "Groq analysis retry also failed");
       res.status(500).json({ error: "AI analysis failed. Please try again." });
       return;
     }

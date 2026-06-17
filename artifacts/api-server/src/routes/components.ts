@@ -1,21 +1,17 @@
 import { Router } from "express";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
 import { logger } from "../lib/logger";
 import { getAuthClient } from "../lib/supabaseAdmin";
+import { callGroq, parseGroqJSON } from "../lib/groq";
 
 const router = Router();
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
 async function callGeminiJSON(prompt: string): Promise<unknown> {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-  const result = await model.generateContent(prompt);
-  const text = result.response.text().trim();
-  const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  const raw = await callGroq(prompt, null, 2000);
   try {
-    return JSON.parse(cleaned);
+    return parseGroqJSON(raw);
   } catch {
-    throw new Error("Invalid JSON from Gemini");
+    throw new Error("Invalid JSON from AI");
   }
 }
 

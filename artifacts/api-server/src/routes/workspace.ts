@@ -1,11 +1,10 @@
 import { Router } from "express";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
 import { logger } from "../lib/logger";
 import { getAuthClient } from "../lib/supabaseAdmin";
+import { callGroq, parseGroqJSON } from "../lib/groq";
 
 const router = Router();
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
 const BUILD_PLAN_SYSTEM_PROMPT = `You are Nexora's IoT build plan generator.
 Your job is to create a detailed, step-by-step build plan for an IoT project.
@@ -65,14 +64,13 @@ Return this exact structure:
   }
 }`;
 
-async function callGeminiForPlan(
+async function callGroqForPlan(
   projectTitle: string,
   projectSummary: string,
   components: string[],
   skillLevel: string
 ): Promise<object> {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-  const userMsg = `Generate a complete build plan for this IoT project.
+  const userPrompt = `Generate a complete build plan for this IoT project.
 Project: ${projectTitle}
 Description: ${projectSummary}
 Components: ${components.join(", ")}
@@ -81,13 +79,11 @@ Platform: Choose the most appropriate platform based on the components (ESP32 pr
 
 Remember: code must be cumulative — each step contains ALL code up to that point.`;
 
-  const result = await model.generateContent(`${BUILD_PLAN_SYSTEM_PROMPT}\n\n${userMsg}`);
-  const text = result.response.text().trim();
-  const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  const raw = await callGroq(userPrompt, BUILD_PLAN_SYSTEM_PROMPT, 4000);
   try {
-    return JSON.parse(cleaned);
+    return parseGroqJSON(raw) as object;
   } catch {
-    throw new Error("Invalid JSON from Gemini for build plan");
+    throw new Error("Invalid JSON from AI for build plan");
   }
 }
 
@@ -107,23 +103,23 @@ router.post("/projects/generate-plan", verifyToken, async (req: AuthRequest, res
 
   let planData: object;
   try {
-    planData = await callGeminiForPlan(
+    planData = await callGroqForPlan(
       projectTitle,
       projectSummary ?? "",
       components ?? [],
       skillLevel ?? "Beginner"
     );
   } catch (firstErr) {
-    logger.warn({ err: firstErr }, "Gemini build plan first attempt failed, retrying...");
+    logger.warn({ err: firstErr }, "Groq build plan first attempt failed, retrying...");
     try {
-      planData = await callGeminiForPlan(
+      planData = await callGroqForPlan(
         projectTitle,
         projectSummary ?? "",
         components ?? [],
         skillLevel ?? "Beginner"
       );
     } catch (retryErr) {
-      logger.error({ err: retryErr }, "Gemini build plan retry failed");
+      logger.error({ err: retryErr }, "Groq build plan retry failed");
       res.status(500).json({ error: "Failed to generate build plan. Please try again." });
       return;
     }

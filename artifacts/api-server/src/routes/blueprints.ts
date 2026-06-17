@@ -1,20 +1,16 @@
 import { Router } from "express";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
 import { logger } from "../lib/logger";
 import { SEED_BLUEPRINTS } from "../data/seedBlueprints";
 import type { Request, Response } from "express";
 import { supabase, getAuthClient } from "../lib/supabaseAdmin";
+import { callGroq, parseGroqJSON } from "../lib/groq";
 
 const router = Router();
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
-async function callGeminiJSON(prompt: string): Promise<unknown> {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-  const result = await model.generateContent(prompt);
-  const text = result.response.text().trim();
-  const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-  return JSON.parse(cleaned);
+async function callGroqJSON(prompt: string): Promise<unknown> {
+  const raw = await callGroq(prompt, null, 2000);
+  return parseGroqJSON(raw);
 }
 
 router.get("/blueprints/seed", async (_req: Request, res: Response) => {
@@ -129,11 +125,11 @@ Return ONLY valid JSON:
   "changes": ["change 1"],
   "totalNewCost": 0
 }`;
-      const result = await callGeminiJSON(prompt) as { adaptedComponents: unknown[]; changes: string[] };
+      const result = await callGroqJSON(prompt) as { adaptedComponents: unknown[]; changes: string[] };
       adaptedComponents = { list: result.adaptedComponents };
       adaptationChanges = result.changes ?? [];
     } catch (err) {
-      logger.error({ err }, "Gemini adaptation failed");
+      logger.error({ err }, "Groq adaptation failed");
     }
   }
 

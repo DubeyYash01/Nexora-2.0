@@ -1,11 +1,10 @@
 import { Router } from "express";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { verifyToken, type AuthRequest } from "../middlewares/verifyToken";
 import { logger } from "../lib/logger";
-import { getAuthClient, supabase } from "../lib/supabaseAdmin";
+import { getAuthClient } from "../lib/supabaseAdmin";
+import { groq } from "../lib/groq";
 
 const router = Router();
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
 const AI_SYSTEM_PROMPT = `You are Nexora AI — an expert IoT engineering assistant embedded inside the Nexora platform.
 
@@ -121,26 +120,36 @@ router.post("/ai/chat", verifyToken, async (req: AuthRequest, res) => {
       .eq("user_id", req.userId!);
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
   const systemWithContext = projectContext
     ? `${AI_SYSTEM_PROMPT}\n\n${projectContext}`
     : AI_SYSTEM_PROMPT;
 
-  const historyParts = (conversationHistory ?? []).slice(-10).map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    { role: "system", content: systemWithContext },
+  ];
+
+  if (conversationHistory?.length) {
+    conversationHistory.slice(-10).forEach((m) => {
+      messages.push({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: m.content,
+      });
+    });
+  }
+
+  messages.push({ role: "user", content: message });
 
   let responseText: string;
   try {
-    const chat = model.startChat({
-      history: historyParts,
-      systemInstruction: { role: "system", parts: [{ text: systemWithContext }] },
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages,
+      max_tokens: 1000,
+      temperature: 0.7,
     });
-    const result = await chat.sendMessage(message);
-    responseText = result.response.text();
+    responseText = completion.choices[0]?.message?.content || "";
   } catch (err) {
-    logger.error({ err }, "Gemini AI chat failed");
+    logger.error({ err }, "Groq AI chat failed");
     res.status(500).json({ error: "AI failed to respond. Please try again." });
     return;
   }

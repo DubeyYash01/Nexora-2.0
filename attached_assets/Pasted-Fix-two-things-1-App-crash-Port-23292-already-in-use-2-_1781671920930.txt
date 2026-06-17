@@ -1,0 +1,624 @@
+Fix two things:
+1. App crash: Port 23292 already in use
+2. Replace all Gemini with Groq AI
+
+GROQ_API_KEY is already in Replit Secrets.
+
+═══════════════════════════════════════
+FIX 1 — PORT CRASH (DO THIS FIRST)
+═══════════════════════════════════════
+
+The frontend crashes because port 23292 
+is already in use.
+
+Run in shell:
+kill $(lsof -t -i:23292) 2>/dev/null
+kill $(lsof -t -i:8080) 2>/dev/null
+
+Then check .replit file.
+The workflow is starting the frontend 
+twice. Fix it:
+
+Open .replit and make sure the 
+"Start application" workflow only 
+appears ONCE.
+
+If there are duplicate workflow entries
+for the frontend — delete the duplicate.
+
+Also add strictPort: false to 
+vite.config.ts so it finds another 
+port if 23292 is taken:
+
+server: {
+  host: '0.0.0.0',
+  strictPort: false,
+  proxy: {
+    '/api': {
+      target: 'http://localhost:8080',
+      changeOrigin: true,
+    }
+  }
+}
+
+═══════════════════════════════════════
+FIX 2 — INSTALL GROQ
+═══════════════════════════════════════
+
+Run in shell:
+cd artifacts/api-server
+pnpm remove @google/generative-ai
+pnpm add groq-sdk
+
+═══════════════════════════════════════
+FIX 3 — CREATE GROQ CLIENT
+═══════════════════════════════════════
+
+Create file:
+artifacts/api-server/src/lib/groq.ts
+
+import Groq from 'groq-sdk'
+
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY || ''
+})
+
+export async function callGroq(
+  prompt: string,
+  systemPrompt: string | null = null,
+  maxTokens: number = 2000
+): Promise<string> {
+
+  if (!process.env.GROQ_API_KEY) {
+    throw new Error('GROQ_API_KEY not set')
+  }
+
+  const messages: any[] = []
+
+  if (systemPrompt) {
+    messages.push({
+      role: 'system',
+      content: systemPrompt
+    })
+  }
+
+  messages.push({
+    role: 'user',
+    content: prompt
+  })
+
+  const completion = await
+    groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages,
+      max_tokens: maxTokens,
+      temperature: 0.7
+    })
+
+  return completion.choices[0]
+    ?.message?.content || ''
+}
+
+export function parseGroqJSON(
+  raw: string
+): any {
+  let cleaned = raw
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim()
+
+  const start = cleaned.indexOf('{')
+  const end = cleaned.lastIndexOf('}')
+
+  if (start !== -1 && end !== -1) {
+    cleaned = cleaned.substring(
+      start, end + 1
+    )
+  }
+
+  return JSON.parse(cleaned)
+}
+
+export { groq }
+
+═══════════════════════════════════════
+FIX 4 — ADD HEALTH CHECK TO APP
+═══════════════════════════════════════
+
+In artifacts/api-server/src/app.ts
+find where Express app is created.
+
+Add immediately after 
+const app = express():
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    groqKey: !!process.env.GROQ_API_KEY,
+    supabase: !!(
+      process.env.VITE_SUPABASE_URL ||
+      process.env.SUPABASE_URL
+    ),
+    time: new Date().toISOString()
+  })
+})
+
+app.get('/api/test-groq',
+  async (req, res) => {
+  try {
+    const { callGroq } =
+      await import('./lib/groq.js')
+    const response = await callGroq(
+      'Say WORKING', null, 10
+    )
+    res.json({ 
+      success: true, 
+      response,
+      model: 'llama-3.3-70b-versatile'
+    })
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: err.message
+    })
+  }
+})
+
+═══════════════════════════════════════
+FIX 5 — REPLACE ANALYZE ROUTE
+═══════════════════════════════════════
+
+Find the file handling:
+POST /analyze or POST /api/projects/analyze
+
+Replace the entire route:
+
+import { callGroq, parseGroqJSON }
+  from '../lib/groq.js'
+
+router.post('/analyze',
+  async (req, res) => {
+  try {
+    console.log('=== ANALYZE HIT ===')
+
+    const { idea, skillLevel, userId }
+      = req.body
+
+    if (!idea) {
+      return res.status(400).json({
+        error: 'Idea is required'
+      })
+    }
+
+    const systemPrompt = `You are 
+Nexora's IoT project analysis AI.
+Return ONLY raw JSON. No markdown.
+No backticks. No explanation.
+
+{
+  "projectTitle": "name",
+  "projectSummary": "2-3 sentences",
+  "howItWorks": "3-4 sentences",
+  "estimatedComplexity": "Beginner",
+  "estimatedCost": {
+    "min": 500,
+    "max": 1200,
+    "currency": "INR"
+  },
+  "estimatedTime": "1-2 weeks",
+  "components": [
+    {
+      "id": "comp_1",
+      "name": "ESP32 DevKit V1",
+      "type": "microcontroller",
+      "purpose": "Main controller",
+      "estimatedCost": 350,
+      "isEssential": true,
+      "alternatives": ["Arduino Uno"]
+    }
+  ],
+  "feasibility": {
+    "costFeasibility": {
+      "status": "good",
+      "note": "Within student budget"
+    },
+    "complexityFeasibility": {
+      "status": "good",
+      "note": "Good for skill level"
+    },
+    "availabilityFeasibility": {
+      "status": "good",
+      "note": "Available in India"
+    },
+    "timelineFeasibility": {
+      "status": "good",
+      "note": "Achievable in 1-2 weeks"
+    }
+  },
+  "risks": ["risk 1", "risk 2"],
+  "tips": ["tip 1", "tip 2"]
+}`
+
+    const userPrompt =
+      `Analyze this IoT project idea 
+for a ${skillLevel || 'Beginner'} 
+level user: ${idea}`
+
+    const raw = await callGroq(
+      userPrompt, systemPrompt, 2000
+    )
+
+    let analysis
+    try {
+      analysis = parseGroqJSON(raw)
+    } catch (e) {
+      console.error('Parse failed:', raw)
+      return res.status(500).json({
+        error: 'AI returned invalid 
+                format. Try again.'
+      })
+    }
+
+    let projectId = null
+    try {
+      const { createClient } =
+        await import(
+          '@supabase/supabase-js'
+        )
+
+      const supabase = createClient(
+        process.env.VITE_SUPABASE_URL ||
+        process.env.SUPABASE_URL || '',
+        process.env
+          .SUPABASE_SERVICE_ROLE_KEY || ''
+      )
+
+      if (userId) {
+        const { data, error } =
+          await supabase
+            .from('projects')
+            .insert({
+              user_id: userId,
+              title: analysis.projectTitle,
+              description:
+                analysis.projectSummary,
+              idea_input: idea,
+              status: 'draft',
+              ai_analysis: analysis,
+              components:
+                analysis.components
+            })
+            .select('id')
+            .single()
+
+        if (!error && data) {
+          projectId = data.id
+        }
+      }
+    } catch (dbErr: any) {
+      console.error('DB error:',
+        dbErr.message)
+    }
+
+    console.log('=== ANALYZE SUCCESS ===')
+
+    return res.json({
+      success: true,
+      projectId,
+      analysis
+    })
+
+  } catch (error: any) {
+    console.error('Analyze error:',
+      error.message)
+    return res.status(500).json({
+      error: error.message ||
+             'Analysis failed'
+    })
+  }
+})
+
+═══════════════════════════════════════
+FIX 6 — REPLACE AI CHAT ROUTE
+═══════════════════════════════════════
+
+Find POST /api/ai/chat
+Replace with:
+
+import { groq } from '../lib/groq.js'
+
+router.post('/chat', async (req, res) => {
+  try {
+    const {
+      message,
+      projectContext,
+      conversationHistory
+    } = req.body
+
+    if (!message) {
+      return res.status(400).json({
+        error: 'Message required'
+      })
+    }
+
+    const messages: any[] = []
+
+    messages.push({
+      role: 'system',
+      content: `You are Nexora AI,
+an expert IoT engineering assistant.
+Help users build IoT projects with
+ESP32, Arduino, and sensors.
+Be helpful, concise, and practical.
+${projectContext ?
+  '\nPROJECT CONTEXT:\n' +
+  projectContext : ''}`
+    })
+
+    if (conversationHistory?.length) {
+      conversationHistory
+        .slice(-6)
+        .forEach((m: any) => {
+          messages.push({
+            role: m.role === 'user'
+              ? 'user' : 'assistant',
+            content: m.content
+          })
+        })
+    }
+
+    messages.push({
+      role: 'user',
+      content: message
+    })
+
+    const completion = await
+      groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages,
+        max_tokens: 1000,
+        temperature: 0.7
+      })
+
+    const response =
+      completion.choices[0]
+        ?.message?.content || ''
+
+    return res.json({
+      success: true,
+      response
+    })
+
+  } catch (error: any) {
+    console.error('Chat error:',
+      error.message)
+    return res.status(500).json({
+      error: 'AI failed to respond'
+    })
+  }
+})
+
+═══════════════════════════════════════
+FIX 7 — REPLACE BUILD PLAN ROUTE
+═══════════════════════════════════════
+
+Find POST /api/projects/generate-plan
+Replace Gemini call with Groq:
+
+import { callGroq, parseGroqJSON }
+  from '../lib/groq.js'
+
+const systemPrompt = `You are Nexora's
+IoT build plan generator.
+Return ONLY raw JSON. No markdown.
+No backticks. No explanation.
+
+{
+  "buildPlan": {
+    "totalSteps": 5,
+    "estimatedTotalTime": "3-4 hours",
+    "platform": "ESP32",
+    "programmingLanguage": 
+      "C++ (Arduino)",
+    "steps": [
+      {
+        "stepNumber": 1,
+        "title": "Project Setup",
+        "objective": "objective",
+        "description": "description",
+        "duration": "20 minutes",
+        "phase": "Setup",
+        "whatYouLearn": "concept",
+        "instructions": [
+          "Step 1 instruction",
+          "Step 2 instruction"
+        ],
+        "wiringNotes": null,
+        "safetyWarnings": [],
+        "code": {
+          "filename": "main.ino",
+          "language": "cpp",
+          "content": "#include <Arduino.h>\n\nvoid setup() {\n  Serial.begin(115200);\n}\n\nvoid loop() {\n}",
+          "newLinesAdded": "Basic structure",
+          "highlightLines": [1, 2, 3]
+        },
+        "libraries": [
+          {
+            "name": "Arduino",
+            "installName": "Arduino",
+            "purpose": "Core library",
+            "isNew": true
+          }
+        ],
+        "verificationCheck":
+          "Code compiles without errors"
+      }
+    ]
+  }
+}`
+
+const raw = await callGroq(
+  userPrompt, systemPrompt, 4000
+)
+
+const buildPlanData = 
+  parseGroqJSON(raw)
+
+═══════════════════════════════════════
+FIX 8 — REMOVE ALL GEMINI REFERENCES
+═══════════════════════════════════════
+
+Search and remove ALL Gemini code:
+
+grep -rl "gemini\|GoogleGenerativeAI\|generative-ai\|callGemini" \
+  artifacts/api-server/src/
+
+For every file found:
+1. Remove Gemini imports
+2. Replace callGemini() with callGroq()
+3. Remove GoogleGenerativeAI setup code
+
+Also delete if exists:
+artifacts/api-server/src/lib/gemini.ts
+
+═══════════════════════════════════════
+FIX 9 — ADD MISSING BLUEPRINT ROUTES
+═══════════════════════════════════════
+
+Find blueprint routes file.
+Add BEFORE any /:id route:
+
+router.get('/trending',
+  async (req, res) => {
+  try {
+    const { createClient } =
+      await import('@supabase/supabase-js')
+    const supabase = createClient(
+      process.env.VITE_SUPABASE_URL ||
+      process.env.SUPABASE_URL || '',
+      process.env
+        .SUPABASE_SERVICE_ROLE_KEY || ''
+    )
+
+    const { data } = await supabase
+      .from('blueprints')
+      .select('*')
+      .eq('is_public', true)
+      .order('fork_count',
+        { ascending: false })
+      .limit(4)
+
+    return res.json({
+      success: true,
+      blueprints: data || []
+    })
+  } catch (err: any) {
+    return res.json({
+      success: true,
+      blueprints: []
+    })
+  }
+})
+
+router.get('/recommended',
+  async (req, res) => {
+  try {
+    const { createClient } =
+      await import('@supabase/supabase-js')
+    const supabase = createClient(
+      process.env.VITE_SUPABASE_URL ||
+      process.env.SUPABASE_URL || '',
+      process.env
+        .SUPABASE_SERVICE_ROLE_KEY || ''
+    )
+
+    const { data } = await supabase
+      .from('blueprints')
+      .select('*')
+      .eq('is_public', true)
+      .order('fork_count',
+        { ascending: false })
+      .limit(5)
+
+    return res.json({
+      success: true,
+      blueprints: data || []
+    })
+  } catch (err: any) {
+    return res.json({
+      success: true,
+      blueprints: []
+    })
+  }
+})
+
+═══════════════════════════════════════
+FIX 10 — FIX ANNOUNCEMENTS ROUTE
+═══════════════════════════════════════
+
+Find GET /api/admin/announcements
+Replace with safe version:
+
+router.get('/announcements',
+  async (req, res) => {
+  try {
+    const { createClient } =
+      await import('@supabase/supabase-js')
+    const supabase = createClient(
+      process.env.VITE_SUPABASE_URL ||
+      process.env.SUPABASE_URL || '',
+      process.env
+        .SUPABASE_SERVICE_ROLE_KEY || ''
+    )
+
+    const { data } = await supabase
+      .from('announcements')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at',
+        { ascending: false })
+
+    return res.json({
+      success: true,
+      announcements: data || []
+    })
+  } catch (err: any) {
+    return res.json({
+      success: true,
+      announcements: []
+    })
+  }
+})
+
+═══════════════════════════════════════
+FIX 11 — VERIFY AND RESTART
+═══════════════════════════════════════
+
+After all fixes:
+
+1. Kill any running processes:
+   kill $(lsof -t -i:23292) 2>/dev/null
+   kill $(lsof -t -i:8080) 2>/dev/null
+
+2. Restart both servers fresh
+
+3. Run these curl tests:
+
+curl http://localhost:8080/api/health
+
+curl http://localhost:8080/api/test-groq
+
+curl -X POST \
+  http://localhost:8080/api/projects/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"idea":"smart plant watering system","skillLevel":"Beginner"}'
+
+All 3 must return success.
+
+4. If port crash happens again:
+   Change strictPort: false 
+   in vite.config.ts
+   This lets Vite pick a free port
+   automatically.
+
+Show me output of all 3 curl commands.

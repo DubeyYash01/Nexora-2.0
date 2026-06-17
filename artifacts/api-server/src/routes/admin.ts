@@ -400,16 +400,17 @@ router.post("/reports/create", verifyToken, async (req: AuthRequest, res) => {
   }
 });
 
-// GET /api/admin/announcements (public)
-router.get("/admin/announcements", async (req, res) => {
+// GET /api/admin/announcements (public — gracefully returns [] if table missing)
+router.get("/admin/announcements", async (_req, res) => {
   try {
-    const now = new Date().toISOString();
-    const { data, error } = await supabase.from("announcements").select("*").eq("is_active", true).or(`show_until.is.null,show_until.gt.${now}`).order("created_at", { ascending: false });
-    if (error) { res.status(500).json({ error: error.message }); return; }
+    const { data } = await supabase
+      .from("announcements")
+      .select("*")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
     res.json({ announcements: data ?? [] });
-  } catch (err) {
-    logger.error({ err }, "Error fetching announcements");
-    res.status(500).json({ error: "Internal server error" });
+  } catch {
+    res.json({ announcements: [] });
   }
 });
 
