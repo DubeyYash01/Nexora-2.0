@@ -1,0 +1,393 @@
+The Nexora workspace needs major 
+improvements to make it a true 
+smart IoT IDE.
+
+Remove all instructions that tell 
+users to open Arduino IDE.
+Nexora should be the only tool needed.
+
+Add these features to the workspace:
+
+═══════════════════════════════════════
+FEATURE 1 — WIRING DIAGRAM PANEL
+═══════════════════════════════════════
+
+In the left panel (build steps),
+for each step that has wiring:
+
+Add a visual wiring section below 
+the instructions:
+
+"Connections for this step:"
+
+Show each connection as a clear row:
+  [Component] [Pin] → [Board] [Pin]
+  
+Example:
+  DHT22    DATA  →  ESP32   GPIO 4
+  DHT22    VCC   →  ESP32   3.3V
+  DHT22    GND   →  ESP32   GND
+
+Each connection row:
+  bg: #12121A
+  border: 1px solid #2A2A3E
+  border-radius: 8px
+  padding: 10px 14px
+  margin-bottom: 6px
+  
+  Layout: flex, space-between
+  
+  Left: 
+    Component name (bold, #F0F0FF)
+    Pin name (code style, #00D4FF)
+  
+  Arrow: → (#5A5A7A)
+  
+  Right:
+    Board name (bold, #F0F0FF)  
+    Pin name (code style, #6C63FF)
+  
+  Checkbox on left:
+    User checks each connection 
+    as they make it
+    
+  Warning indicator:
+    If this connection is dangerous:
+    Show red warning icon
+    Tooltip: "High risk — double check"
+
+═══════════════════════════════════════
+FEATURE 2 — WIRING VALIDATOR
+═══════════════════════════════════════
+
+When user checks a connection 
+that could be wrong:
+
+Compare against known dangerous 
+combinations:
+
+const DANGEROUS_CONNECTIONS = [
+  {
+    component: 'any sensor',
+    userPin: 'VCC',
+    boardPin: 'GND',
+    warning: 'Reversed power! This will 
+      damage your sensor immediately.',
+    severity: 'critical'
+  },
+  {
+    component: 'any sensor', 
+    userPin: 'GND',
+    boardPin: '5V',
+    warning: 'Wrong voltage! Most sensors 
+      need 3.3V not 5V.',
+    severity: 'critical'
+  },
+  {
+    component: 'LED',
+    userPin: 'anode',
+    boardPin: 'GPIO without resistor',
+    warning: 'Missing resistor! LED will 
+      burn out without a resistor.',
+    severity: 'warning'
+  }
+]
+
+When dangerous connection detected:
+  Show full-screen warning overlay:
+  
+  bg: rgba(255,90,90,0.15)
+  border: 2px solid #FF5A5A
+  border-radius: 16px
+  padding: 32px
+  max-width: 480px
+  centered on screen
+  
+  Icon: alert-triangle 
+        (64px, #FF5A5A, pulse animation)
+  
+  Heading: "⚠️ Connection Warning!"
+  (color: #FF5A5A, bold, large)
+  
+  Subheading based on severity:
+    critical: "This could damage 
+               your hardware!"
+    warning: "Double-check this 
+              connection"
+  
+  Warning message (from DANGEROUS_CONNECTIONS)
+  
+  Correct connection shown:
+    "It should be:"
+    [correct connection diagram]
+  
+  Two buttons:
+    "I'll fix it" (red primary)
+      → closes overlay, unchecks 
+        the wrong connection
+    "I've already done it correctly"
+      → closes overlay, marks done
+  
+  This popup appears immediately 
+  when wrong connection is detected.
+  Cannot be dismissed without 
+  choosing an option.
+
+Also use AI to validate combinations:
+When user completes all connections 
+in a step, before allowing 
+"Complete Step":
+
+Call POST /api/ai/validate-wiring:
+  Body: {
+    connections: [...user's connections],
+    components: [...project components],
+    platform: 'ESP32'
+  }
+
+AI checks for:
+  - Power/ground reversals
+  - Wrong voltage levels
+  - Missing pull-up/down resistors
+  - Pin conflicts (two components
+    on same pin)
+  - Communication bus conflicts
+
+Returns:
+  {
+    safe: boolean,
+    warnings: [...],
+    critical: [...]
+  }
+
+If critical issues found:
+  Block step completion
+  Show warning overlay
+
+If only warnings:
+  Show yellow warning
+  Allow completion with confirmation
+
+═══════════════════════════════════════
+FEATURE 3 — SERIAL MONITOR
+═══════════════════════════════════════
+
+Add a "Serial Monitor" tab to 
+the bottom AI panel area.
+
+Tabs at bottom: 
+[AI Assistant] [Serial Monitor]
+
+Serial Monitor panel:
+
+Header:
+  "Serial Monitor"
+  
+  Connection status:
+    Disconnected: gray dot "No device"
+    Connected: green dot "ESP32 connected"
+  
+  "Connect Device" button:
+    Uses Web Serial API
+    Only works in Chrome
+    
+    On click:
+    if (!('serial' in navigator)) {
+      showToast({
+        type: 'error',
+        message: 'Serial Monitor requires 
+          Chrome browser. Please open 
+          Nexora in Chrome.'
+      })
+      return
+    }
+    
+    try {
+      const port = await 
+        navigator.serial.requestPort()
+      await port.open({ 
+        baudRate: 115200 
+      })
+      setConnected(true)
+      setSerialPort(port)
+      startReading(port)
+    } catch (err) {
+      console.error(err)
+    }
+  
+  Baud rate selector:
+    Dropdown: 9600 | 115200 | 57600
+    Default: 115200
+
+Serial output area:
+  bg: #0D0D14
+  font-family: JetBrains Mono
+  font-size: 13px
+  color: #00C896
+  padding: 12px
+  height: 200px
+  overflow-y: auto
+  auto-scrolls to bottom
+  
+  Each line shows:
+    timestamp (gray) + output (green)
+    e.g. "[10:23:45] Temperature: 28.5°C"
+  
+  If error output (contains "Error"):
+    color: #FF5A5A
+
+Reading function:
+async function startReading(port) {
+  const reader = port.readable.getReader()
+  const decoder = new TextDecoder()
+  
+  try {
+    while (true) {
+      const { value, done } = 
+        await reader.read()
+      if (done) break
+      
+      const text = decoder.decode(value)
+      addLine(text)
+    }
+  } catch (err) {
+    console.error('Serial read error:', err)
+    setConnected(false)
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+Send command input:
+  At bottom of serial monitor
+  Text input + Send button
+  Sends text to device via serial
+
+Clear button: clears output
+
+Save log button: downloads as .txt
+
+═══════════════════════════════════════
+FEATURE 4 — REMOVE ARDUINO IDE MENTIONS
+═══════════════════════════════════════
+
+Search ALL AI prompts in the backend
+for phrases like:
+  "open Arduino IDE"
+  "Arduino IDE"
+  "upload to Arduino IDE"
+  "paste into Arduino IDE"
+
+Replace with:
+  "The code is already in your 
+   Nexora IDE above"
+  "Click 'Copy Code' to copy 
+   to clipboard"
+  "Connect your device and use 
+   the Serial Monitor below"
+
+Update the build plan generation 
+system prompt to say:
+
+"IMPORTANT: Do NOT mention Arduino IDE.
+Users are using Nexora's built-in IDE.
+All code is displayed in Nexora IDE.
+For uploading: tell users to copy 
+the code from Nexora IDE.
+For serial monitor: tell users to 
+use Nexora's built-in Serial Monitor."
+
+═══════════════════════════════════════
+FEATURE 5 — CODE UPLOAD HELPER
+═══════════════════════════════════════
+
+Since we cannot upload directly 
+from browser yet, add a smart 
+"Upload to Device" button:
+
+In IDE top bar, replace or enhance
+the Download button:
+
+"Upload Guide" button:
+  Opens a modal with step by step 
+  instructions specific to their 
+  platform (ESP32, Arduino Uno, etc.)
+  
+  Modal: "Upload Your Code"
+  
+  Option 1 — Arduino IDE:
+    1. Click "Copy Code" above
+    2. Open Arduino IDE
+    3. Paste code (Ctrl+V)
+    4. Select board: [platform]
+    5. Select port: your COM port
+    6. Click Upload (→)
+    
+  Option 2 — PlatformIO:
+    Instructions for VS Code users
+  
+  Option 3 — Web Upload (ESP32 only):
+    "Coming soon — Upload directly 
+     from Nexora"
+    Join waitlist button
+
+Show platform-specific instructions
+based on project's platform field.
+
+═══════════════════════════════════════
+FEATURE 6 — CONNECTION DIAGRAM VISUAL
+═══════════════════════════════════════
+
+For each wiring step, generate a 
+simple ASCII/SVG connection diagram.
+
+When build plan is generated by AI,
+also generate wiring for each step.
+
+Add to build plan generation prompt:
+
+"For each step with wiring, include:
+'wiringDiagram': [
+  {
+    from: { component: 'DHT22', pin: 'DATA' },
+    to: { component: 'ESP32', pin: 'GPIO 4' },
+    wireColor: 'yellow',
+    critical: false
+  },
+  {
+    from: { component: 'DHT22', pin: 'VCC' },
+    to: { component: 'ESP32', pin: '3.3V' },
+    wireColor: 'red',
+    critical: true,
+    warning: 'Use 3.3V not 5V'
+  }
+]"
+
+Display as visual table with 
+colored wire indicators:
+  Red wire = power (VCC)
+  Black wire = ground (GND)
+  Yellow/colored = data/signal
+  Orange = analog
+  Green = I2C/SDA
+  Blue = I2C/SCL
+
+Each wire row shows the color 
+as a small colored circle.
+
+═══════════════════════════════════════
+AFTER BUILDING
+═══════════════════════════════════════
+
+Test by:
+1. Creating a new project
+2. Going to workspace
+3. Checking Step 1 shows 
+   wiring connections table
+4. Checking a wrong connection 
+   shows warning
+5. Opening Serial Monitor tab
+6. Clicking Connect Device in Chrome
+   (will ask for USB device permission)
+7. Confirming no mention of 
+   Arduino IDE in instructions

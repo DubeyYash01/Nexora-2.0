@@ -6,6 +6,7 @@ import {
   Loader2, Cpu, Timer, Library, BookOpen,
   CheckSquare, Square, Edit2, Save, DollarSign,
   ClipboardList, Send, X, ListChecks, Code2, MessageSquare,
+  Sparkles, Monitor,
 } from "lucide-react";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { useSwipe } from "@/hooks/useSwipe";
@@ -17,6 +18,7 @@ import NexoraIDE from "@/components/ide/NexoraIDE";
 import type { Library as LibraryType } from "@/components/ide/NexoraIDE";
 import AIAssistant from "@/components/ai/AIAssistant";
 import ShareProjectModal from "@/components/blueprints/ShareProjectModal";
+import SerialMonitor from "@/components/workspace/SerialMonitor";
 
 /* ── Types ───────────────────────────────────────────── */
 
@@ -35,6 +37,14 @@ interface StepLibrary {
   isNew: boolean;
 }
 
+interface WiringConnection {
+  from: { component: string; pin: string };
+  to: { component: string; pin: string };
+  wireColor: string;
+  critical: boolean;
+  warning?: string | null;
+}
+
 interface BuildStep {
   stepNumber: number;
   title: string;
@@ -45,6 +55,7 @@ interface BuildStep {
   whatYouLearn: string;
   instructions: string[];
   wiringNotes: string | null;
+  wiringDiagram?: WiringConnection[];
   safetyWarnings: string[];
   code: CodeBlock;
   libraries: StepLibrary[];
@@ -96,20 +107,56 @@ const PHASE_COLORS: Record<string, string> = {
   Deployment: "phase-deployment",
 };
 
+const WIRE_COLORS: Record<string, string> = {
+  red: "#FF4444",
+  black: "#444",
+  yellow: "#FFD700",
+  green: "#00C896",
+  blue: "#4D9FFF",
+  orange: "#FF8C42",
+  white: "#E0E0FF",
+  purple: "#9B59B6",
+};
+
+const DANGEROUS_PATTERNS = [
+  {
+    fromPin: "VCC",
+    toPin: "GND",
+    severity: "critical" as const,
+    warning: "⚠️ Reversed power! Connecting VCC to GND will immediately damage your component.",
+  },
+  {
+    fromPin: "GND",
+    toPin: "5V",
+    severity: "critical" as const,
+    warning: "⚠️ Reversed power! GND connected to 5V line will damage your component.",
+  },
+  {
+    fromPin: "VCC",
+    toPin: "5V",
+    severity: "warning" as const,
+    warning: "⚠️ Voltage mismatch! Most sensors are 3.3V — check your datasheet before connecting to 5V.",
+  },
+];
+
 /* ── Step Card ───────────────────────────────────────── */
 
 function StepCard({
   step,
   state,
   checks,
+  wiringChecks,
   onToggleCheck,
+  onToggleWiring,
   onComplete,
   completing,
 }: {
   step: BuildStep;
   state: "locked" | "active" | "completed";
   checks: boolean[];
+  wiringChecks: boolean[];
   onToggleCheck: (i: number) => void;
+  onToggleWiring: (i: number, conn: WiringConnection) => void;
   onComplete: () => void;
   completing: boolean;
 }) {
@@ -234,6 +281,73 @@ function StepCard({
             ))}
           </ol>
         </div>
+
+        {/* Wiring Diagram */}
+        {step.wiringDiagram && step.wiringDiagram.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold mb-2" style={{ color: "#00D4FF" }}>
+              ⚡ Connections for this step:
+            </p>
+            <div className="space-y-1.5">
+              {step.wiringDiagram.map((conn, i) => {
+                const wireHex = WIRE_COLORS[conn.wireColor] ?? WIRE_COLORS.yellow;
+                const checked = wiringChecks[i] ?? false;
+                return (
+                  <div
+                    key={i}
+                    onClick={() => onToggleWiring(i, conn)}
+                    className="flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-all"
+                    style={{
+                      background: checked ? "rgba(0,200,150,0.06)" : "#12121A",
+                      border: `1px solid ${checked ? "rgba(0,200,150,0.3)" : "#2A2A3E"}`,
+                    }}
+                  >
+                    {checked ? (
+                      <CheckSquare className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#00C896" }} />
+                    ) : (
+                      <Square className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#3A3A5A" }} />
+                    )}
+                    <span
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ background: wireHex, boxShadow: `0 0 4px ${wireHex}60` }}
+                    />
+                    <div className="flex items-center gap-1 flex-1 min-w-0 flex-wrap">
+                      <span className="font-semibold text-xs" style={{ color: "#F0F0FF" }}>
+                        {conn.from.component}
+                      </span>
+                      <code className="text-xs px-1 rounded" style={{ color: "#00D4FF", background: "rgba(0,212,255,0.08)" }}>
+                        {conn.from.pin}
+                      </code>
+                      <span className="text-xs" style={{ color: "#5A5A7A" }}>→</span>
+                      <span className="font-semibold text-xs" style={{ color: "#F0F0FF" }}>
+                        {conn.to.component}
+                      </span>
+                      <code className="text-xs px-1 rounded" style={{ color: "#6C63FF", background: "rgba(108,99,255,0.08)" }}>
+                        {conn.to.pin}
+                      </code>
+                    </div>
+                    {conn.warning && (
+                      <span title={conn.warning}>
+                        <AlertTriangle
+                          className="w-3.5 h-3.5 flex-shrink-0"
+                          style={{ color: "#FFB84D" }}
+                        />
+                      </span>
+                    )}
+                    {conn.critical && !conn.warning && (
+                      <span title="Critical power connection">
+                        <AlertTriangle
+                          className="w-3 h-3 flex-shrink-0 opacity-40"
+                          style={{ color: "#FF5A5A" }}
+                        />
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Wiring note */}
         {step.wiringNotes && (
@@ -382,6 +496,20 @@ export default function Workspace() {
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Wiring diagram connection checks
+  const [wiringChecks, setWiringChecks] = useState<Record<string, boolean[]>>({});
+
+  // Danger overlay
+  const [dangerOverlay, setDangerOverlay] = useState<{
+    warning: string;
+    severity: "critical" | "warning";
+    onFix: () => void;
+    onConfirm: () => void;
+  } | null>(null);
+
+  // Bottom panel tab
+  const [bottomTab, setBottomTab] = useState<"ai" | "serial">("ai");
+
   // ?panel=ide glow
   const searchString = useSearch();
   const [idePanelGlow, setIdePanelGlow] = useState(false);
@@ -489,6 +617,46 @@ export default function Workspace() {
       return { ...prev, [key]: arr };
     });
   };
+
+  /* ── Wiring connection checks ─────────────── */
+
+  const handleToggleWiring = useCallback(
+    (stepNumber: number, connectionIndex: number, conn: WiringConnection) => {
+      const key = String(stepNumber);
+      const current = (wiringChecks[key] ?? [])[connectionIndex] ?? false;
+
+      if (!current) {
+        const fromPin = conn.from.pin.toUpperCase();
+        const toPin = conn.to.pin.toUpperCase();
+        const danger = DANGEROUS_PATTERNS.find(
+          (p) => fromPin.includes(p.fromPin) && toPin.includes(p.toPin)
+        );
+        if (danger) {
+          setDangerOverlay({
+            warning: danger.warning,
+            severity: danger.severity,
+            onFix: () => setDangerOverlay(null),
+            onConfirm: () => {
+              setWiringChecks((prev) => {
+                const arr = [...(prev[key] ?? [])];
+                arr[connectionIndex] = true;
+                return { ...prev, [key]: arr };
+              });
+              setDangerOverlay(null);
+            },
+          });
+          return;
+        }
+      }
+
+      setWiringChecks((prev) => {
+        const arr = [...(prev[key] ?? [])];
+        arr[connectionIndex] = !arr[connectionIndex];
+        return { ...prev, [key]: arr };
+      });
+    },
+    [wiringChecks]
+  );
 
   /* ── Complete step ────────────────────────── */
 
@@ -608,6 +776,13 @@ export default function Workspace() {
     const saved = instructionChecks[key];
     if (saved && saved.length === instructionCount) return saved;
     return new Array(instructionCount).fill(false);
+  };
+
+  const getWiringChecks = (stepNumber: number, connectionCount: number): boolean[] => {
+    const key = String(stepNumber);
+    const saved = wiringChecks[key];
+    if (saved && saved.length === connectionCount) return saved;
+    return new Array(connectionCount).fill(false);
   };
 
   // Mobile tab definitions
@@ -732,7 +907,16 @@ export default function Workspace() {
                 const checks = getStepChecks(step.stepNumber, step.instructions.length);
                 return (
                   <div key={step.stepNumber} ref={(el) => { stepRefs.current[step.stepNumber] = el; }}>
-                    <StepCard step={step} state={state} checks={checks} onToggleCheck={(i) => handleToggleCheck(step.stepNumber, i)} onComplete={() => handleCompleteStep(step)} completing={completingStep} />
+                    <StepCard
+                      step={step}
+                      state={state}
+                      checks={checks}
+                      wiringChecks={getWiringChecks(step.stepNumber, step.wiringDiagram?.length ?? 0)}
+                      onToggleCheck={(i) => handleToggleCheck(step.stepNumber, i)}
+                      onToggleWiring={(i, conn) => handleToggleWiring(step.stepNumber, i, conn)}
+                      onComplete={() => handleCompleteStep(step)}
+                      completing={completingStep}
+                    />
                   </div>
                 );
               })}
@@ -902,7 +1086,9 @@ export default function Workspace() {
                         step={step}
                         state={state}
                         checks={checks}
+                        wiringChecks={getWiringChecks(step.stepNumber, step.wiringDiagram?.length ?? 0)}
                         onToggleCheck={(i) => handleToggleCheck(step.stepNumber, i)}
+                        onToggleWiring={(i, conn) => handleToggleWiring(step.stepNumber, i, conn)}
                         onComplete={() => handleCompleteStep(step)}
                         completing={completingStep}
                       />
@@ -1005,37 +1191,130 @@ export default function Workspace() {
             />
           </div>
 
-          {/* AI Assistant panel */}
+          {/* Bottom panel: AI + Serial Monitor tabs */}
           {project && (
-            <AIAssistant
-              project={project}
-              currentStep={currentStep}
-              ideCode={ideCode}
-              libraryNames={accumulatedLibraries.map((l) => l.name)}
-              completedSteps={Array.from(completedSteps)}
-              userName={user?.user_metadata?.full_name ?? user?.email ?? ""}
-              onPushCode={(code, mode) => {
-                if (mode === "replace") {
-                  setIdeCode(code);
-                  setHighlightLines(
-                    code.split("\n").map((_, i) => i + 1)
-                  );
-                  setTimeout(() => setHighlightLines([]), 3600);
-                } else {
-                  // Insert at end for "insert at cursor" (Monaco cursor not accessible here)
-                  setIdeCode((prev) => prev + "\n" + code);
-                }
-                setSaveStatus("unsaved");
-                if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-                saveTimerRef.current = setTimeout(() => saveCode(ideCode + "\n" + code), 2000);
-                toast({ title: "Code pushed to IDE" });
-              }}
-              externalMessage={explainMessage}
-              onExternalMessageHandled={() => setExplainMessage(undefined)}
-            />
+            <>
+              {/* Tab bar */}
+              <div
+                className="flex flex-shrink-0"
+                style={{ borderTop: "1px solid #2A2A3E", background: "#0D0D14" }}
+              >
+                <button
+                  onClick={() => setBottomTab("ai")}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors"
+                  style={{
+                    color: bottomTab === "ai" ? "#F0F0FF" : "#5A5A7A",
+                    borderBottom: bottomTab === "ai" ? "2px solid #6C63FF" : "2px solid transparent",
+                    background: "transparent",
+                  }}
+                >
+                  <Sparkles className="w-3 h-3" /> AI Assistant
+                </button>
+                <button
+                  onClick={() => setBottomTab("serial")}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors"
+                  style={{
+                    color: bottomTab === "serial" ? "#F0F0FF" : "#5A5A7A",
+                    borderBottom: bottomTab === "serial" ? "2px solid #00C896" : "2px solid transparent",
+                    background: "transparent",
+                  }}
+                >
+                  <Monitor className="w-3 h-3" /> Serial Monitor
+                </button>
+              </div>
+
+              {/* AI Assistant — always mounted, hidden when serial is active */}
+              <div style={{ display: bottomTab === "ai" ? "flex" : "none", flexDirection: "column" }}>
+                <AIAssistant
+                  project={project}
+                  currentStep={currentStep}
+                  ideCode={ideCode}
+                  libraryNames={accumulatedLibraries.map((l) => l.name)}
+                  completedSteps={Array.from(completedSteps)}
+                  userName={user?.user_metadata?.full_name ?? user?.email ?? ""}
+                  onPushCode={(code, mode) => {
+                    if (mode === "replace") {
+                      setIdeCode(code);
+                      setHighlightLines(code.split("\n").map((_, i) => i + 1));
+                      setTimeout(() => setHighlightLines([]), 3600);
+                    } else {
+                      setIdeCode((prev) => prev + "\n" + code);
+                    }
+                    setSaveStatus("unsaved");
+                    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+                    saveTimerRef.current = setTimeout(() => saveCode(ideCode + "\n" + code), 2000);
+                    toast({ title: "Code pushed to IDE" });
+                  }}
+                  externalMessage={explainMessage}
+                  onExternalMessageHandled={() => setExplainMessage(undefined)}
+                />
+              </div>
+
+              {/* Serial Monitor */}
+              {bottomTab === "serial" && (
+                <div className="flex flex-col" style={{ height: 280 }}>
+                  <SerialMonitor />
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
+
+      {/* Wiring Danger Overlay */}
+      {dangerOverlay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/75" />
+          <div
+            className="relative w-full max-w-md rounded-2xl p-8 space-y-5"
+            style={{
+              background: "#12121A",
+              border: `2px solid ${dangerOverlay.severity === "critical" ? "#FF5A5A" : "#FFB84D"}`,
+              boxShadow: `0 0 40px ${dangerOverlay.severity === "critical" ? "rgba(255,90,90,0.2)" : "rgba(255,184,77,0.2)"}`,
+            }}
+          >
+            <div className="flex flex-col items-center text-center space-y-3">
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center"
+                style={{
+                  background: dangerOverlay.severity === "critical" ? "rgba(255,90,90,0.12)" : "rgba(255,184,77,0.12)",
+                  animation: "pulse 1.5s infinite",
+                }}
+              >
+                <AlertTriangle
+                  className="w-8 h-8"
+                  style={{ color: dangerOverlay.severity === "critical" ? "#FF5A5A" : "#FFB84D" }}
+                />
+              </div>
+              <h2 className="text-lg font-bold" style={{ color: dangerOverlay.severity === "critical" ? "#FF5A5A" : "#FFB84D" }}>
+                ⚠️ Connection Warning!
+              </h2>
+              <p className="text-sm font-medium" style={{ color: dangerOverlay.severity === "critical" ? "#FF9090" : "#FFD080" }}>
+                {dangerOverlay.severity === "critical" ? "This could damage your hardware!" : "Double-check this connection"}
+              </p>
+              <p className="text-sm leading-relaxed" style={{ color: "#C0C0D0" }}>
+                {dangerOverlay.warning}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={dangerOverlay.onFix}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+                style={{ background: "#FF5A5A", color: "#fff" }}
+              >
+                I&apos;ll fix it
+              </button>
+              <button
+                onClick={dangerOverlay.onConfirm}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium border"
+                style={{ borderColor: "#2A2A3E", color: "#9090B0" }}
+              >
+                I&apos;ve done it correctly
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Submit assignment modal */}
       {submitModalOpen && assignment && (

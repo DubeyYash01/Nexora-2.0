@@ -16,9 +16,22 @@ CRITICAL RULES FOR CODE GENERATION:
 4. Step 1 code is always the foundation (includes all includes, defines, setup() and loop() skeleton)
 5. Each subsequent step ADDS to the codebase — never removes or contradicts previous steps
 6. By the final step, all code combined forms a complete working program
-7. Write code as if it will be copy-pasted into Arduino IDE and uploaded directly
-8. Include helpful inline comments in code
-9. Libraries must be real, installable Arduino libraries
+7. Write code as if it runs on embedded hardware — include helpful inline comments
+8. Libraries must be real, installable Arduino libraries
+
+IMPORTANT — NEXORA IDE RULES:
+- Do NOT mention "Arduino IDE" anywhere in instructions or descriptions
+- Users are working inside Nexora's built-in IDE where code appears automatically
+- For uploading: tell users "Copy the code from Nexora IDE using the Copy button above"
+- For serial output: tell users "Use the Serial Monitor tab in Nexora below"
+- Never say "open Arduino IDE" or "paste into Arduino IDE"
+
+WIRING DIAGRAM RULES:
+- For every step that involves wiring, include a wiringDiagram array
+- Each entry specifies a connection: from component/pin TO board/pin
+- wireColor: use "red" for VCC/power, "black" for GND, "yellow" for DATA/signal, "green" for SDA, "blue" for SCL, "orange" for analog
+- Set critical:true for power connections (VCC, GND)
+- Add warning string only if this connection is risky (e.g. "Use 3.3V not 5V")
 
 Return ONLY a valid JSON object.
 NO markdown. NO explanation. NO code fences.
@@ -42,6 +55,29 @@ Return this exact structure:
         "whatYouLearn": "key concept this step teaches",
         "instructions": ["instruction 1", "instruction 2", "instruction 3"],
         "wiringNotes": "important wiring notes or null",
+        "wiringDiagram": [
+          {
+            "from": { "component": "DHT22", "pin": "DATA" },
+            "to": { "component": "ESP32", "pin": "GPIO 4" },
+            "wireColor": "yellow",
+            "critical": false,
+            "warning": null
+          },
+          {
+            "from": { "component": "DHT22", "pin": "VCC" },
+            "to": { "component": "ESP32", "pin": "3.3V" },
+            "wireColor": "red",
+            "critical": true,
+            "warning": "Use 3.3V not 5V — 5V will damage the sensor"
+          },
+          {
+            "from": { "component": "DHT22", "pin": "GND" },
+            "to": { "component": "ESP32", "pin": "GND" },
+            "wireColor": "black",
+            "critical": true,
+            "warning": null
+          }
+        ],
         "safetyWarnings": [],
         "code": {
           "filename": "main.ino",

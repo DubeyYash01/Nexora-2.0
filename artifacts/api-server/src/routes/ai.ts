@@ -31,6 +31,7 @@ CRITICAL RULES:
 5. If suggesting code changes: show the specific lines to change, not the whole file.
 6. For wiring questions: describe connections clearly (e.g. "Connect GPIO 4 on ESP32 to the DATA pin of the DHT22")
 7. Never suggest components not in the user's component list unless explicitly asked.
+8. NEVER mention "Arduino IDE". Users are in Nexora's built-in IDE. Say "the code is already in your Nexora IDE above" or "use the Copy button to copy the code".
 
 FORMATTING RULES:
 - Use **bold** for important terms
@@ -280,6 +281,39 @@ router.post("/ai/feedback", verifyToken, async (req: AuthRequest, res) => {
   });
 
   res.json({ success: true });
+});
+
+router.post("/ai/validate-wiring", verifyToken, async (req: AuthRequest, res) => {
+  try {
+    const { connections, components, platform } = req.body as {
+      connections: Array<{ from: { component: string; pin: string }; to: { component: string; pin: string } }>;
+      components: string[];
+      platform: string;
+    };
+
+    const systemPrompt = `You are a hardware safety validator for IoT projects. 
+Analyze wiring connections and identify dangerous mistakes.
+Return ONLY valid JSON, no markdown.`;
+
+    const userPrompt = `Validate these wiring connections for a ${platform} project.
+Components in use: ${components.join(", ")}
+Connections:
+${connections.map((c, i) => `${i + 1}. ${c.from.component} ${c.from.pin} → ${c.to.component} ${c.to.pin}`).join("\n")}
+
+Check for: reversed power/ground, wrong voltage levels (5V to 3.3V sensors), missing pull-up resistors, pin conflicts.
+
+Return: { "safe": boolean, "warnings": ["..."], "critical": ["..."] }`;
+
+    const raw = await callGroq(userPrompt, systemPrompt, 400);
+    let result = { safe: true, warnings: [] as string[], critical: [] as string[] };
+    try {
+      result = JSON.parse(raw.trim()) as typeof result;
+    } catch { /* return safe=true on parse fail */ }
+    res.json(result);
+  } catch (err) {
+    logger.error({ err }, "validate-wiring error");
+    res.json({ safe: true, warnings: [], critical: [] });
+  }
 });
 
 export default router;

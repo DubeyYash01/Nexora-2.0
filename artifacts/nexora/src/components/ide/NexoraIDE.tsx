@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import Editor, { useMonaco } from "@monaco-editor/react";
-import { Copy, Download, Package, Info, Check, Sparkles, FileCode } from "lucide-react";
+import { Copy, Download, Package, Info, Check, Sparkles, FileCode, UploadCloud, X } from "lucide-react";
 import { usePlan } from "@/hooks/usePlan";
 import UpgradeModal from "@/components/billing/UpgradeModal";
 
@@ -55,7 +55,11 @@ export default function NexoraIDE({
   const [activeTab, setActiveTab] = useState<"editor" | "libraries">("editor");
   const [copied, setCopied] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [showUploadGuide, setShowUploadGuide] = useState(false);
+  const [uploadTab, setUploadTab] = useState<"arduino" | "platformio">("arduino");
   const { isPro } = usePlan();
+
+  const platformShort = platform.split("·")[0].trim();
 
   const displayCode = code || WELCOME_CODE;
   const lineCount = displayCode.split("\n").length;
@@ -167,6 +171,16 @@ export default function NexoraIDE({
             style={{ background: "#1A1A2E", color: copied ? "#00C896" : "#9090B0", border: "1px solid #2A2A3E" }}
           >
             {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+          </button>
+
+          <button
+            onClick={() => setShowUploadGuide(true)}
+            className="flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors"
+            style={{ background: "#1A1A2E", color: "#9090B0", border: "1px solid #2A2A3E" }}
+            title="Upload guide"
+          >
+            <UploadCloud className="w-3 h-3" />
+            <span className="hidden sm:inline">Upload</span>
           </button>
 
           <button
@@ -293,9 +307,104 @@ export default function NexoraIDE({
             style={{ background: "rgba(0,212,255,0.06)", border: "1px solid #00D4FF30" }}>
             <Info className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: "#00D4FF" }} />
             <p className="text-xs leading-relaxed" style={{ color: "#9090B0" }}>
-              Install in Arduino IDE via{" "}
-              <strong style={{ color: "#F0F0FF" }}>Tools → Manage Libraries</strong>.
+              Install via{" "}
+              <strong style={{ color: "#F0F0FF" }}>Arduino IDE → Tools → Manage Libraries</strong>
+              {" "}or PlatformIO Library Manager.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Guide Modal */}
+      {showUploadGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowUploadGuide(false)} />
+          <div
+            className="relative w-full max-w-lg rounded-2xl border p-6 space-y-5"
+            style={{ background: "#12121A", borderColor: "#2A2A3E" }}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-foreground text-lg flex items-center gap-2">
+                <UploadCloud className="w-5 h-5" style={{ color: "#6C63FF" }} />
+                Upload Your Code
+              </h2>
+              <button onClick={() => setShowUploadGuide(false)}>
+                <X className="w-4 h-4" style={{ color: "#6A6A8A" }} />
+              </button>
+            </div>
+
+            <div className="flex gap-1 p-1 rounded-xl" style={{ background: "#0A0A0F" }}>
+              {(["arduino", "platformio"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setUploadTab(t)}
+                  className="flex-1 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  style={{
+                    background: uploadTab === t ? "#6C63FF" : "transparent",
+                    color: uploadTab === t ? "#fff" : "#5A5A7A",
+                  }}
+                >
+                  {t === "arduino" ? "Arduino IDE" : "PlatformIO"}
+                </button>
+              ))}
+            </div>
+
+            {uploadTab === "arduino" && (
+              <ol className="space-y-3">
+                {[
+                  'Click the Copy button above to copy your code',
+                  'Open Arduino IDE on your computer',
+                  'Create a new sketch (File → New)',
+                  'Select all existing code (Ctrl+A) and paste (Ctrl+V)',
+                  `Select board: Tools → Board → ${platformShort}`,
+                  'Select port: Tools → Port → your COM/tty port',
+                  'Click Upload (→ arrow button) and wait for "Done uploading"',
+                  'Open Nexora Serial Monitor below to see output',
+                ].map((text, n) => (
+                  <li key={n} className="flex gap-3 items-start">
+                    <span
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
+                      style={{ background: "rgba(108,99,255,0.15)", color: "#6C63FF" }}
+                    >
+                      {n + 1}
+                    </span>
+                    <p className="text-sm" style={{ color: "#C0C0D0" }}>{text}</p>
+                  </li>
+                ))}
+              </ol>
+            )}
+
+            {uploadTab === "platformio" && (
+              <ol className="space-y-3">
+                {[
+                  'Install the PlatformIO extension in VS Code',
+                  'Create a new PlatformIO project for your board',
+                  'Click Copy above and paste into src/main.cpp',
+                  'Update platformio.ini with the correct board and library dependencies',
+                  'Click the Upload button (→) in the VS Code status bar',
+                  'Use PlatformIO Serial Monitor to view device output',
+                ].map((text, n) => (
+                  <li key={n} className="flex gap-3 items-start">
+                    <span
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
+                      style={{ background: "rgba(108,99,255,0.15)", color: "#6C63FF" }}
+                    >
+                      {n + 1}
+                    </span>
+                    <p className="text-sm" style={{ color: "#C0C0D0" }}>{text}</p>
+                  </li>
+                ))}
+              </ol>
+            )}
+
+            <div
+              className="rounded-xl p-3"
+              style={{ background: "rgba(0,212,255,0.06)", border: "1px solid rgba(0,212,255,0.2)" }}
+            >
+              <p className="text-xs" style={{ color: "#7090A0" }}>
+                🚀 <strong style={{ color: "#00D4FF" }}>Coming soon:</strong> Direct upload from Nexora — no external tools needed.
+              </p>
+            </div>
           </div>
         </div>
       )}
