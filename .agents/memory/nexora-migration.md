@@ -1,20 +1,25 @@
 ---
 name: Nexora migration
-description: Key decisions from migrating Nexora from Supabase to Replit Auth + Replit PostgreSQL (Drizzle ORM)
+description: Replit environment setup decisions for the Nexora app (Supabase auth + DB, Groq AI)
 ---
 
-# Nexora Migration Decisions
+# Nexora Replit Environment Setup
 
-**Auth**: Replaced Supabase Auth with Replit OIDC via `openid-client` + `passport`. Session stored in PostgreSQL via `connect-pg-simple`. Session table auto-created by `connect-pg-simple` (createTableIfMissing: true). Auth routes: `/api/login`, `/api/callback`, `/api/logout`. Frontend redirects to `/api/login` instead of form-based auth.
+**Auth & DB**: App uses Supabase (email+password auth, PostgreSQL). Secrets: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`. API server uses `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` to create `supabaseAdmin` client.
 
-**Why:** Replit Auth is required for Replit-hosted projects; Supabase Auth requires external JWT validation which doesn't work with session-based Replit OAuth flow.
+**AI**: Groq API via `GROQ_API_KEY` secret (replaces Gemini in this Replit environment). Routes in `artifacts/api-server/src/routes/analyze.ts` and `workspace.ts` call Groq.
 
-**DB**: Drizzle ORM with `@workspace/db` package (lib/db). Schema in `lib/db/src/schema/`. Push with `pnpm --filter @workspace/db run push`. All routes import `{ db } from "@workspace/db"` and `{ table } from "@workspace/db/schema"`.
+**Supabase ws fix**: The `ws` npm package is blocked by Replit's package firewall. Fix: use a `FakeWebSocket` stub class in `supabaseAdmin.ts` passed to `{ realtime: { transport: FakeWebSocket } }`.
 
-**Frontend auth**: `AuthContext.tsx` uses `/api/auth/user` endpoint (session-based). `authFetch` in `lib/supabase.ts` uses `credentials: "include"` for session cookies. No more JWT Bearer tokens.
+**Service worker (CRITICAL)**: The original `public/sw.js` used a cache-first strategy that caused ALL JS to be served from a stale cache, making the app appear broken even after code changes. Fix applied: replaced `sw.js` with a self-destructing service worker that:
+1. Calls `self.skipWaiting()` on install
+2. On activate: clears ALL caches, then calls `self.registration.unregister()`
+This ensures no stale JS is ever served in dev or production.
 
-**esbuild externals**: `drizzle-orm`, `drizzle-orm/*`, `pg`, `zod`, `openid-client`, `passport`, `passport-*`, `express-session`, `connect-pg-simple`, `memoizee` all must be in the `external` array in `artifacts/api-server/build.mjs` — they cannot be bundled by esbuild.
+**main.tsx SW unregistration**: Added dev-mode check to unregister any existing SWs on startup (belt-and-suspenders with the self-destructing sw.js).
 
-**Secrets**: `SESSION_SECRET`, `GEMINI_API_KEY`, `DATABASE_URL` all provisioned by Replit. GEMINI_API_KEY auto-injected via `javascript_gemini_ai_integrations:2.0.0` integration.
+**Why the SW was the root cause**: First app load caches all JS via cache-first SW. Any subsequent load — even after code fixes — serves old broken JS from cache. The "Invalid hook call" error was from stale cached modules, not from the current code.
 
-**How to apply:** When adding new server packages that use native modules or complex ESM, add them to the external list in build.mjs before building.
+**HMR config**: `clientPort: 443, protocol: "wss"` is correct for Replit proxy access. Screenshot tool uses `localhost:5000` directly and gets HMR connection refused — expected, app still functions.
+
+**esbuild externals**: `drizzle-orm`, `pg`, `zod` must NOT be in the external array — esbuild must bundle them (pnpm workspace doesn't symlink to dist/).
