@@ -13,6 +13,7 @@ import {
   Sparkles, Settings, LogOut, Loader2,
   FolderOpen, Zap, CheckCircle2, Package,
   ClipboardList, Code2, Search, TrendingUp, GitFork, Clock, ShieldCheck,
+  X, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ProjectCard from "@/components/ui/ProjectCard";
@@ -286,6 +287,170 @@ function TrendingWidget() {
   );
 }
 
+/* ─── Welcome Banner (first-time users with 0 projects) ──── */
+function WelcomeBanner({ onDismiss }: { onDismiss: () => void }) {
+  const [, setLocation] = useLocation();
+  return (
+    <div
+      className="rounded-xl border p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative"
+      style={{
+        background: "linear-gradient(135deg, rgba(108,99,255,0.12), rgba(0,212,255,0.06))",
+        borderColor: "#6C63FF",
+      }}
+    >
+      <button
+        onClick={onDismiss}
+        className="absolute top-3 right-3 p-1 rounded-lg transition-colors"
+        style={{ color: "#5A5A7A" }}
+        onMouseEnter={(e) => (e.currentTarget.style.color = "#F0F0FF")}
+        onMouseLeave={(e) => (e.currentTarget.style.color = "#5A5A7A")}
+        aria-label="Dismiss"
+      >
+        <X className="w-4 h-4" />
+      </button>
+      <div>
+        <p className="font-bold text-base" style={{ color: "#F0F0FF" }}>👋 Welcome to Nexora!</p>
+        <p className="text-sm mt-1" style={{ color: "#9090B0" }}>
+          You're all set. Create your first IoT project to get started.
+        </p>
+      </div>
+      <div className="flex gap-3 flex-shrink-0">
+        <Button onClick={() => setLocation("/blueprints")} variant="outline" size="sm">
+          Browse Blueprints
+        </Button>
+        <Button onClick={() => setLocation("/projects/new")} size="sm">
+          Create First Project
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Getting Started Checklist ──────────────────────────── */
+type ChecklistItem = { label: string; done: boolean };
+
+function GettingStartedChecklist({
+  projectCount,
+  componentCount,
+  profile,
+}: {
+  projectCount: number;
+  componentCount: number;
+  profile: Record<string, unknown> | null;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [dismissed, setDismissed] = useState(() =>
+    localStorage.getItem("nexora_checklist_dismissed") === "true",
+  );
+
+  if (dismissed) return null;
+
+  const items: ChecklistItem[] = [
+    { label: "Complete your profile", done: !!(profile?.bio || profile?.college_name) },
+    { label: "Create your first project", done: projectCount > 0 },
+    { label: "Add components to inventory", done: componentCount > 0 },
+    { label: "Browse the Blueprint Library", done: !!localStorage.getItem("nexora_viewed_blueprint") },
+    { label: "Try the AI Assistant", done: !!localStorage.getItem("nexora_used_ai") },
+  ];
+
+  const doneCount = items.filter((i) => i.done).length;
+  const allDone = doneCount === items.length;
+
+  if (allDone) {
+    const dismissedAt = localStorage.getItem("nexora_checklist_all_done_at");
+    if (!dismissedAt) localStorage.setItem("nexora_checklist_all_done_at", Date.now().toString());
+    const elapsed = Date.now() - parseInt(localStorage.getItem("nexora_checklist_all_done_at") || "0");
+    if (elapsed > 7 * 24 * 60 * 60 * 1000) return null;
+  }
+
+  return (
+    <div
+      className="rounded-xl border overflow-hidden"
+      style={{ background: "#12121A", borderColor: "#2A2A3E" }}
+    >
+      <button
+        className="w-full flex items-center justify-between px-5 py-4"
+        onClick={() => setCollapsed((c) => !c)}
+      >
+        <div className="flex items-center gap-3">
+          <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "#6C63FF" }} />
+          <span className="font-semibold text-sm" style={{ color: "#F0F0FF" }}>
+            {allDone ? "🎉 All done!" : "Your Getting Started Checklist"}
+          </span>
+          <span
+            className="text-xs px-2 py-0.5 rounded-full"
+            style={{ background: "rgba(108,99,255,0.15)", color: "#6C63FF" }}
+          >
+            {doneCount}/5
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {allDone && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                localStorage.setItem("nexora_checklist_dismissed", "true");
+                setDismissed(true);
+              }}
+              className="text-xs px-2 py-1 rounded transition-colors"
+              style={{ color: "#5A5A7A" }}
+            >
+              Dismiss
+            </button>
+          )}
+          {collapsed ? (
+            <ChevronDown className="w-4 h-4" style={{ color: "#6A6A8A" }} />
+          ) : (
+            <ChevronUp className="w-4 h-4" style={{ color: "#6A6A8A" }} />
+          )}
+        </div>
+      </button>
+
+      {!collapsed && (
+        <div className="px-5 pb-4">
+          {/* Progress bar */}
+          <div
+            className="h-1.5 rounded-full mb-4 overflow-hidden"
+            style={{ background: "#2A2A3E" }}
+          >
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${(doneCount / items.length) * 100}%`,
+                background: "linear-gradient(90deg, #6C63FF, #00D4FF)",
+              }}
+            />
+          </div>
+          <div className="space-y-2.5">
+            {items.map((item) => (
+              <div key={item.label} className="flex items-center gap-3">
+                <div
+                  className="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0"
+                  style={{
+                    borderColor: item.done ? "#00C896" : "#3A3A5E",
+                    background: item.done ? "rgba(0,200,150,0.15)" : "transparent",
+                  }}
+                >
+                  {item.done && <CheckCircle2 className="w-3 h-3" style={{ color: "#00C896" }} />}
+                </div>
+                <span
+                  className="text-sm"
+                  style={{
+                    color: item.done ? "#6A6A8A" : "#F0F0FF",
+                    textDecoration: item.done ? "line-through" : "none",
+                  }}
+                >
+                  {item.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Greeting ───────────────────────────────────────────── */
 function getGreeting() {
   const h = new Date().getHours();
@@ -315,12 +480,20 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    // Seed blueprints on first load
     fetch("/api/blueprints/seed").catch(() => {});
   }, []);
 
+  const [welcomeDismissed, setWelcomeDismissed] = useState(
+    () => localStorage.getItem("nexora_welcome_dismissed") === "true",
+  );
+  const handleDismissWelcome = () => {
+    localStorage.setItem("nexora_welcome_dismissed", "true");
+    setWelcomeDismissed(true);
+  };
+
   const firstName = profile?.full_name?.split(" ")[0] || "Builder";
   const recentProjects = (projects ?? []).slice(0, 3);
+  const totalProjects = projects?.length ?? 0;
 
   const statCards = [
     { icon: FolderOpen, label: "Total Projects", value: stats?.total ?? 0 },
@@ -332,6 +505,18 @@ export default function Dashboard() {
   return (
     <DashboardLayout title="Dashboard">
       <div className="max-w-5xl mx-auto space-y-6 lg:space-y-8">
+
+        {/* Welcome banner — only for new users with 0 projects */}
+        {!welcomeDismissed && !projectsLoading && totalProjects === 0 && (
+          <WelcomeBanner onDismiss={handleDismissWelcome} />
+        )}
+
+        {/* Getting started checklist */}
+        <GettingStartedChecklist
+          projectCount={totalProjects}
+          componentCount={componentCount}
+          profile={profile as Record<string, unknown> | null}
+        />
 
         {/* Greeting */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

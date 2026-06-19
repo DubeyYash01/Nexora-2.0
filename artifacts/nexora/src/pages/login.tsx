@@ -25,7 +25,9 @@ export default function Login() {
     if (error) {
       setError(error.message ?? "Invalid email or password");
     } else {
-      setLocation("/dashboard");
+      const redirect = localStorage.getItem("nexora_redirect") || "/dashboard";
+      localStorage.removeItem("nexora_redirect");
+      setLocation(redirect);
     }
   };
 

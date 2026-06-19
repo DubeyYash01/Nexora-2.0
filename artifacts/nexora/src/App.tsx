@@ -12,6 +12,7 @@ import FloatingAI from "@/components/ai/FloatingAI";
 import { InstallPrompt } from "@/components/ui/InstallPrompt";
 import GlobalSearch from "@/components/search/GlobalSearch";
 import AnnouncementBanner from "@/components/admin/AnnouncementBanner";
+import FeedbackWidget from "@/components/ui/FeedbackWidget";
 import { Settings } from "lucide-react";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
@@ -90,13 +91,29 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    if (!loading && !user) setLocation("/login");
+    if (!loading && !user) {
+      const path = window.location.pathname;
+      if (path !== "/" && path !== "/login" && path !== "/signup") {
+        localStorage.setItem("nexora_redirect", path);
+      }
+      setLocation("/login");
+    }
   }, [loading, user, setLocation]);
 
   if (loading) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-background">
-        <div className="animate-pulse w-8 h-8 rounded-full bg-primary/50" />
+      <div className="h-screen flex items-center justify-center" style={{ background: "#0A0A0F" }}>
+        <div className="text-center">
+          <div
+            className="w-12 h-12 rounded-full mx-auto mb-4"
+            style={{
+              border: "2px solid #6C63FF",
+              borderTopColor: "transparent",
+              animation: "spin 0.8s linear infinite",
+            }}
+          />
+          <p className="text-sm" style={{ color: "#5A5A7A" }}>Loading Nexora...</p>
+        </div>
       </div>
     );
   }
@@ -111,8 +128,19 @@ function FloatingAIWrapper() {
   const isWorkspace = location.startsWith("/workspace/");
   const isPricing = location === "/pricing";
   const isAdmin = location.startsWith("/admin");
-  if (isWorkspace || isProfessor || isPricing || isAdmin) return null;
+  const isLanding = location === "/";
+  if (isWorkspace || isProfessor || isPricing || isAdmin || isLanding) return null;
   return <FloatingAI />;
+}
+
+function FeedbackWrapper() {
+  const [location] = useLocation();
+  const { user } = useAuth();
+  const isWorkspace = location.startsWith("/workspace/");
+  const isLanding = location === "/";
+  const isAuth = location === "/login" || location === "/signup";
+  if (!user || isWorkspace || isLanding || isAuth) return null;
+  return <FeedbackWidget />;
 }
 
 function KeyboardShortcutsProvider() {
@@ -247,6 +275,7 @@ function Router() {
         </Switch>
       </Suspense>
       <FloatingAIWrapper />
+      <FeedbackWrapper />
       <InstallPrompt />
     </>
   );

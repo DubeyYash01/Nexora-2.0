@@ -1,0 +1,1047 @@
+This is Prompt 14 of 14 — the final 
+prompt for Nexora.
+Everything from Prompts 1-13 is built.
+This prompt makes Nexora launch-ready.
+
+Do NOT break anything working.
+Only ADD and POLISH.
+
+═══════════════════════════════════════
+WHAT THIS PROMPT DOES
+═══════════════════════════════════════
+
+1. Landing page final polish
+2. Onboarding improvements
+3. User feedback widget
+4. SEO and meta tags
+5. Email notification setup
+6. Final performance pass
+7. Launch checklist page
+8. Deploy to Render.com
+9. Push everything to GitHub
+
+═══════════════════════════════════════
+PART 1 — LANDING PAGE FINAL POLISH
+═══════════════════════════════════════
+
+File: artifacts/nexora/src/pages/
+      Landing.tsx
+
+Make the landing page world-class.
+
+────────────────────────────────────
+HERO SECTION
+────────────────────────────────────
+
+Current headline is good.
+Add animated gradient to headline:
+
+"Turn any IoT idea into a"
+"working project."
+
+CSS for animated gradient text:
+.gradient-text {
+  background: linear-gradient(
+    135deg,
+    #6C63FF 0%,
+    #00D4FF 50%,
+    #6C63FF 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradientShift 3s 
+    linear infinite;
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% }
+  100% { background-position: 200% }
+}
+
+Add floating stats below hero CTA:
+
+Three small stat pills in a row:
+  "🎓 Built for students"
+  "⚡ Powered by AI"  
+  "🔧 ESP32 + Arduino"
+
+Each pill:
+  bg: rgba(108,99,255,0.08)
+  border: 1px solid #2A2A3E
+  border-radius: full
+  padding: 6px 16px
+  font-size: 13px
+  color: #9090B0
+
+────────────────────────────────────
+SOCIAL PROOF SECTION
+────────────────────────────────────
+
+Add below hero:
+
+"Trusted by students and makers 
+ across India"
+
+Show 5 avatar circles in a row
+(overlapping, like -ml-2 each):
+  Colored circles with initials
+  Colors: purple, cyan, green, 
+          orange, pink
+  
+  Then: "+2,000 makers" text
+
+Add 3 testimonial cards below:
+
+Card 1:
+  "Nexora helped me complete my 
+   BTech final year IoT project 
+   in half the time. The AI 
+   guided me through every step."
+  — Rahul K., VIT Pune
+  ⭐⭐⭐⭐⭐
+
+Card 2:
+  "Finally a tool that understands 
+   IoT from idea to deployment. 
+   No more switching between 
+   5 different apps."
+  — Priya S., MIT College
+  ⭐⭐⭐⭐⭐
+
+Card 3:
+  "The wiring validator saved my 
+   ESP32 from getting fried. 
+   Detected my mistake before 
+   I powered it on."
+  — Arjun M., BITS Pilani
+  ⭐⭐⭐⭐⭐
+
+Card style:
+  bg: #12121A
+  border: 1px solid #2A2A3E
+  border-radius: 12px
+  padding: 24px
+  
+  Quote text: #F0F0FF, italic
+  Author: #9090B0, small
+  Stars: #FFB84D
+
+────────────────────────────────────
+HOW IT WORKS SECTION
+────────────────────────────────────
+
+Add a visual step-by-step section:
+
+Heading: "How Nexora Works"
+Subtext: "From idea to working 
+          IoT project in minutes"
+
+4 steps in a horizontal flow
+(vertical on mobile):
+
+Step 1: "Describe Your Idea"
+  Icon: lightbulb (#6C63FF)
+  "Type your IoT idea in plain 
+   English. No technical knowledge 
+   needed to start."
+
+Step 2: "AI Plans Everything"
+  Icon: sparkles (#00D4FF)
+  "Nexora AI analyzes your idea, 
+   selects components, checks 
+   feasibility, and creates a 
+   step-by-step build plan."
+
+Step 3: "Build with Guidance"
+  Icon: wrench (#00C896)
+  "Follow guided steps with wiring 
+   diagrams, safety checks, and 
+   AI assistance at every point."
+
+Step 4: "Code Appears Automatically"
+  Icon: code-2 (#6C63FF)
+  "As you complete each step, 
+   code is pushed to your Nexora 
+   IDE automatically. Just copy 
+   and upload."
+
+Each step:
+  Number badge (purple, bold)
+  Icon below
+  Title (bold, #F0F0FF)
+  Description (#9090B0)
+  
+  Arrow between steps on desktop
+  (→ icon, muted color)
+
+────────────────────────────────────
+FEATURES GRID SECTION
+────────────────────────────────────
+
+Heading: "Everything you need 
+          to build IoT"
+
+6 feature cards in 3x2 grid:
+(2x3 on tablet, 1x6 on mobile)
+
+Feature 1:
+  Icon: brain (#6C63FF)
+  "AI Project Analysis"
+  "Describe any idea. AI identifies 
+   components, estimates cost, and 
+   checks feasibility instantly."
+
+Feature 2:
+  Icon: code-2 (#00D4FF)
+  "Built-in IDE"
+  "Code appears automatically as 
+   you complete each build step. 
+   No copy-pasting between tools."
+
+Feature 3:
+  Icon: shield (#00C896)
+  "Wiring Validator"
+  "AI detects dangerous connections 
+   before they damage your hardware. 
+   Real-time safety checks."
+
+Feature 4:
+  Icon: monitor (#FFB84D)
+  "Serial Monitor"
+  "Connect your device via USB and 
+   see live sensor readings directly 
+   in Nexora. No Arduino IDE needed."
+
+Feature 5:
+  Icon: book-open (#6C63FF)
+  "Blueprint Library"
+  "Start from proven templates. 
+   Fork, customize, and build faster 
+   with community blueprints."
+
+Feature 6:
+  Icon: graduation-cap (#00D4FF)
+  "For Colleges"
+  "Professors create assignments. 
+   Students submit full project plans. 
+   A complete academic IoT workflow."
+
+Card style:
+  bg: #12121A
+  border: 1px solid #2A2A3E
+  border-radius: 12px
+  padding: 24px
+  hover: border #6C63FF
+         transform translateY(-4px)
+  transition: all 0.3s ease
+
+────────────────────────────────────
+PRICING PREVIEW SECTION
+────────────────────────────────────
+
+Add a simple pricing preview 
+on landing page:
+
+Heading: "Simple Pricing"
+Subtext: "Start free. Upgrade 
+          when you need more."
+
+Show 2 cards (Free and Student Pro):
+
+Free card:
+  "₹0 forever"
+  3 key features
+  "Get Started Free" button
+
+Student Pro card:
+  "₹299/month"
+  Badge: "Most Popular"
+  5 key features
+  "Start Free Trial" button
+
+"View full pricing →" link below
+→ /pricing
+
+────────────────────────────────────
+FINAL CTA SECTION
+────────────────────────────────────
+
+Bottom of landing page:
+
+Full-width section:
+  bg: linear-gradient(
+    135deg,
+    rgba(108,99,255,0.12) 0%,
+    rgba(0,212,255,0.06) 100%
+  )
+  border-top: 1px solid #2A2A3E
+  padding: 80px 24px
+  text-align: center
+
+Heading: "Ready to build 
+          your first IoT project?"
+(large, bold)
+
+Subtext: "Join thousands of students 
+          and makers already building 
+          with Nexora."
+
+Two buttons:
+  "Start Building Free" (primary, large)
+  "Browse Blueprints" (secondary, large)
+
+Below buttons:
+  "No credit card required · 
+   Free forever plan available"
+  (small, muted)
+
+════════════════════════════════════
+PART 2 — ONBOARDING IMPROVEMENTS
+════════════════════════════════════
+
+Make the first experience magical.
+
+────────────────────────────────────
+WELCOME EMAIL (Supabase)
+────────────────────────────────────
+
+In Supabase dashboard:
+Authentication → Email Templates → 
+Confirm signup
+
+Update the email template:
+
+Subject: "Welcome to Nexora 🔧"
+
+Body:
+Hi there,
+
+Welcome to Nexora — the AI-powered 
+IoT project platform.
+
+You're now part of a community of 
+students and makers building smarter.
+
+Here's how to get started:
+1. Describe your IoT idea
+2. Let AI plan your project  
+3. Follow the guided build steps
+4. Your code appears automatically
+
+Start your first project:
+[Start Building] → your app URL
+
+If you have any questions, just reply 
+to this email.
+
+Happy building!
+The Nexora Team
+
+────────────────────────────────────
+FIRST PROJECT PROMPT
+────────────────────────────────────
+
+After role selection and reaching 
+dashboard for the FIRST TIME:
+
+Show a "Getting Started" banner 
+at the top of dashboard:
+
+bg: linear-gradient(
+  135deg,
+  rgba(108,99,255,0.12),
+  rgba(0,212,255,0.06)
+)
+border: 1px solid #6C63FF
+border-radius: 12px
+padding: 20px 24px
+margin-bottom: 24px
+
+Content:
+  Left:
+    "👋 Welcome to Nexora!"
+    "You're all set. Create your first 
+     IoT project to get started."
+  
+  Right:
+    "Create First Project" 
+    (primary button)
+    "Browse Blueprints" 
+    (secondary button)
+
+Dismiss button (X) top right.
+Once dismissed: save to localStorage
+'nexora_welcome_dismissed' = true
+Don't show again.
+
+Only show if user has 0 projects.
+
+────────────────────────────────────
+PROGRESS INDICATOR
+────────────────────────────────────
+
+For new users with 0 completed projects:
+
+Show "Getting Started" checklist 
+in dashboard sidebar or as a card:
+
+"Your Getting Started Checklist"
+
+☐ Complete your profile
+☐ Create your first project  
+☐ Add components to inventory
+☐ Browse the Blueprint Library
+☐ Try the AI Assistant
+
+Each item:
+  Checkbox (auto-checked when done)
+  Check based on:
+    Profile: has bio or college set
+    First project: projects count > 0
+    Components: components count > 0
+    Blueprints: recently_viewed has blueprint
+    AI: ai_conversations count > 0
+
+Progress bar: X of 5 complete
+
+"🎉 All done!" when all checked.
+
+Collapse/expand toggle.
+Hide completely after all 5 done
+for more than 7 days.
+
+════════════════════════════════════
+PART 3 — FEEDBACK WIDGET
+════════════════════════════════════
+
+Add a feedback button to 
+every page (except workspace).
+
+File: artifacts/nexora/src/components/
+      ui/FeedbackWidget.tsx
+
+Floating button:
+  Position: fixed, bottom-right
+  Bottom: 24px, right: 24px
+  (above the floating AI button 
+   if it exists — so at bottom: 84px)
+  
+  Button:
+    bg: #12121A
+    border: 1px solid #2A2A3E
+    border-radius: 24px
+    padding: 8px 16px
+    
+    Content: 
+      message-square icon (14px)
+      "Feedback" text (13px)
+    
+    Hover: border #6C63FF
+    color: #F0F0FF
+
+On click: opens feedback modal
+
+Modal:
+  Width: 400px
+  bg: #12121A
+  border: 1px solid #2A2A3E
+  border-radius: 16px
+  padding: 24px
+  
+  Heading: "Share your feedback"
+  Subtext: "Help us make Nexora better"
+  
+  Mood selector (emoji buttons):
+    😞 😐 🙂 😊 🤩
+    Select one (highlight selected)
+  
+  "What's on your mind?" label
+  Textarea (4 rows):
+    Placeholder: "Tell us what you 
+    love, what's broken, or what 
+    you'd like to see next..."
+  
+  Page/Feature dropdown:
+    "Which feature is this about?"
+    Options:
+      General Experience
+      Project Creation
+      AI Assistant
+      Nexora IDE
+      Blueprint Library
+      Components
+      Pricing
+      Bug Report
+      Other
+  
+  "Submit Feedback" button (primary)
+  "Cancel" (ghost)
+  
+  On submit:
+    POST /api/feedback
+    Save to Supabase:
+    
+    Run in Supabase SQL Editor:
+    CREATE TABLE IF NOT EXISTS 
+      user_feedback (
+      id uuid DEFAULT 
+        gen_random_uuid() PRIMARY KEY,
+      user_id uuid 
+        REFERENCES profiles(id),
+      mood integer CHECK 
+        (mood BETWEEN 1 AND 5),
+      message text,
+      feature text,
+      page_url text,
+      created_at timestamptz 
+        DEFAULT now()
+    );
+    
+    Show success state:
+    "Thanks for your feedback! 🙏"
+    "We read every response and 
+     use it to improve Nexora."
+    Auto-close after 3 seconds.
+
+Backend route:
+POST /api/feedback
+  Body: { userId, mood, message,
+          feature, pageUrl }
+  → Saves to user_feedback
+  → Returns { success }
+
+════════════════════════════════════
+PART 4 — SEO AND META TAGS
+════════════════════════════════════
+
+Update: artifacts/nexora/index.html
+
+Replace head section with:
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" 
+    content="width=device-width, 
+    initial-scale=1.0,
+    viewport-fit=cover">
+  
+  <!-- Primary Meta -->
+  <title>Nexora — AI-Powered IoT 
+    Project Platform</title>
+  <meta name="description" 
+    content="Turn any IoT idea into 
+    a working project. AI-guided 
+    build plans, built-in IDE, 
+    wiring validator, and component 
+    management. Built for students 
+    and makers in India.">
+  <meta name="keywords" 
+    content="IoT platform, Arduino AI, 
+    ESP32 projects, IoT for students, 
+    AI IoT assistant, IoT project 
+    builder, Nexora">
+  <meta name="author" 
+    content="Nexora">
+  <meta name="robots" 
+    content="index, follow">
+  
+  <!-- Open Graph -->
+  <meta property="og:type" 
+    content="website">
+  <meta property="og:url" 
+    content="https://nexora.app">
+  <meta property="og:title" 
+    content="Nexora — Build IoT 
+    Projects with AI">
+  <meta property="og:description" 
+    content="From idea to working IoT 
+    project. AI-guided steps, 
+    auto-generated code, wiring 
+    validation. Free to start.">
+  <meta property="og:image" 
+    content="/og-image.png">
+  
+  <!-- Twitter -->
+  <meta name="twitter:card" 
+    content="summary_large_image">
+  <meta name="twitter:title" 
+    content="Nexora — Build IoT 
+    Projects with AI">
+  <meta name="twitter:description" 
+    content="AI-powered IoT platform 
+    for students and makers. 
+    Free to start.">
+  <meta name="twitter:image" 
+    content="/og-image.png">
+  
+  <!-- PWA -->
+  <meta name="theme-color" 
+    content="#6C63FF">
+  <meta name="apple-mobile-web-app-capable" 
+    content="yes">
+  <meta name="apple-mobile-web-app-title" 
+    content="Nexora">
+  <link rel="manifest" 
+    href="/manifest.json">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" 
+    href="https://fonts.googleapis.com">
+  <link rel="preconnect" 
+    href="https://fonts.gstatic.com" 
+    crossorigin>
+  <link rel="stylesheet" 
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  
+  <!-- Favicon -->
+  <link rel="icon" 
+    type="image/svg+xml" 
+    href="/icons/nexora-icon.svg">
+</head>
+
+Create OG image placeholder:
+artifacts/nexora/public/og-image.png
+
+Since we cannot generate real images,
+create a simple SVG as placeholder:
+
+artifacts/nexora/public/og-image.svg:
+<svg width="1200" height="630" 
+     xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" 
+        fill="#0A0A0F"/>
+  <rect x="0" y="0" 
+        width="1200" height="630" 
+        fill="url(#grad)"/>
+  <defs>
+    <linearGradient id="grad" 
+      x1="0%" y1="0%" 
+      x2="100%" y2="100%">
+      <stop offset="0%" 
+        style="stop-color:#6C63FF;
+               stop-opacity:0.3"/>
+      <stop offset="100%" 
+        style="stop-color:#00D4FF;
+               stop-opacity:0.1"/>
+    </linearGradient>
+  </defs>
+  <text x="600" y="260" 
+        font-family="Arial" 
+        font-size="80" 
+        font-weight="900"
+        fill="white" 
+        text-anchor="middle">
+    Nexora
+  </text>
+  <text x="600" y="340" 
+        font-family="Arial" 
+        font-size="32"
+        fill="#9090B0" 
+        text-anchor="middle">
+    AI-Powered IoT Project Platform
+  </text>
+  <text x="600" y="420" 
+        font-family="Arial" 
+        font-size="24"
+        fill="#6C63FF" 
+        text-anchor="middle">
+    nexora.app
+  </text>
+</svg>
+
+════════════════════════════════════
+PART 5 — PERFORMANCE FINAL PASS
+════════════════════════════════════
+
+────────────────────────────────────
+LOADING IMPROVEMENTS
+────────────────────────────────────
+
+In App.tsx, add page transition:
+
+Add smooth fade between routes:
+
+const pageVariants = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -8 }
+}
+
+Wrap each page in:
+<div 
+  style={{
+    animation: 'fadeIn 0.2s ease-out'
+  }}
+>
+  {children}
+</div>
+
+Add to index.css:
+@keyframes fadeIn {
+  from { 
+    opacity: 0; 
+    transform: translateY(8px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+────────────────────────────────────
+IMAGE LAZY LOADING
+────────────────────────────────────
+
+Any img tags: add loading="lazy"
+Any heavy components not in 
+initial viewport: use React.lazy()
+
+────────────────────────────────────
+REMOVE CONSOLE LOGS
+────────────────────────────────────
+
+In production build, suppress 
+console.log:
+
+In artifacts/nexora/src/main.tsx:
+
+if (import.meta.env.PROD) {
+  console.log = () => {}
+  console.debug = () => {}
+  // Keep console.error for debugging
+}
+
+════════════════════════════════════
+PART 6 — FINAL BUG FIXES
+════════════════════════════════════
+
+Check and fix these common issues:
+
+1. AUTH REDIRECT:
+   After login, redirect to /dashboard
+   not to /
+   
+   Check: client/src/pages/Login.tsx
+   After successful login:
+   navigate('/dashboard')
+
+2. PROTECTED ROUTES:
+   If user not logged in and tries 
+   to access /dashboard:
+   Redirect to /login
+   After login: redirect back to 
+   original intended URL
+   
+   Store intended URL:
+   localStorage.setItem(
+     'nexora_redirect',
+     window.location.pathname
+   )
+   
+   After login:
+   const redirect = localStorage
+     .getItem('nexora_redirect') 
+     || '/dashboard'
+   localStorage.removeItem(
+     'nexora_redirect'
+   )
+   navigate(redirect)
+
+3. LOADING STATE:
+   While checking auth on app load:
+   Show full-screen loader
+   NOT a flash of login page
+   
+   In App.tsx:
+   if (loading) return (
+     <div className="h-screen 
+       flex items-center 
+       justify-center 
+       bg-[#0A0A0F]">
+       <div className="text-center">
+         <div className="w-12 h-12 
+           border-2 
+           border-[#6C63FF] 
+           border-t-transparent 
+           rounded-full 
+           animate-spin 
+           mx-auto mb-4"/>
+         <p className="text-[#5A5A7A] 
+           text-sm">
+           Loading Nexora...
+         </p>
+       </div>
+     </div>
+   )
+
+4. MOBILE VIEWPORT:
+   Make sure no horizontal scroll 
+   anywhere on mobile.
+   
+   In index.css add:
+   html, body {
+     overflow-x: hidden;
+     max-width: 100vw;
+   }
+
+5. SUPABASE SESSION:
+   Make sure Supabase session 
+   persists across page refreshes.
+   
+   In supabase.js/ts:
+   export const supabase = createClient(
+     url, anonKey, {
+       auth: {
+         persistSession: true,
+         autoRefreshToken: true,
+         detectSessionInUrl: true
+       }
+     }
+   )
+
+════════════════════════════════════
+PART 7 — DEPLOYMENT TO RENDER
+════════════════════════════════════
+
+Render.com is free and perfect 
+for Nexora. Here are the exact steps:
+
+────────────────────────────────────
+PREPARE FOR RENDER
+────────────────────────────────────
+
+Create: render.yaml (already done 
+in Prompt 13, verify it exists)
+
+Create: artifacts/api-server/
+        build.sh
+
+#!/bin/bash
+echo "Building frontend..."
+cd /opt/render/project/src/
+  artifacts/nexora
+npm install
+npm run build
+
+echo "Building backend..."
+cd /opt/render/project/src/
+  artifacts/api-server
+npm install
+npm run build
+
+echo "Build complete!"
+
+Make it executable:
+chmod +x artifacts/api-server/build.sh
+
+Update artifacts/api-server/
+  package.json scripts:
+
+"scripts": {
+  "dev": "tsx watch src/index.ts",
+  "build": "tsc",
+  "start": "node dist/index.js",
+  "build:all": "bash build.sh"
+}
+
+────────────────────────────────────
+RENDER DEPLOYMENT INSTRUCTIONS
+────────────────────────────────────
+
+Add a DEPLOY.md file to root:
+
+# Deploying Nexora to Render
+
+## Steps:
+
+1. Go to render.com
+2. Sign up with GitHub
+3. Click "New +" → "Web Service"
+4. Connect your GitHub repo:
+   github.com/DubeyYash01/Nexora-2.0
+5. Configure:
+   - Name: nexora
+   - Region: Singapore
+   - Branch: main
+   - Root Directory: (leave empty)
+   - Build Command:
+     cd artifacts/nexora && npm install && npm run build && cd ../api-server && npm install && npm run build
+   - Start Command:
+     cd artifacts/api-server && node dist/index.js
+   - Plan: Free
+
+6. Add Environment Variables:
+   NODE_ENV = production
+   PORT = 8080
+   VITE_SUPABASE_URL = (your value)
+   VITE_SUPABASE_ANON_KEY = (your value)
+   SUPABASE_SERVICE_ROLE_KEY = (your value)
+   GROQ_API_KEY = (your value)
+   RAZORPAY_KEY_ID = (your value)
+   RAZORPAY_KEY_SECRET = (your value)
+
+7. Click "Create Web Service"
+8. Wait 5-10 minutes for build
+9. Your URL will be:
+   https://nexora.onrender.com
+
+## After Deployment:
+- Update Supabase Auth settings:
+  Site URL: https://nexora.onrender.com
+  Redirect URLs: 
+    https://nexora.onrender.com/**
+
+════════════════════════════════════
+PART 8 — GITHUB FINAL PUSH
+════════════════════════════════════
+
+Run in shell:
+
+# Stage all changes
+git add .
+
+# Commit with message
+git commit -m "Prompt 14: Launch ready
+- Landing page polish
+- Testimonials and social proof  
+- Feedback widget
+- SEO meta tags
+- Performance optimizations
+- Auth flow fixes
+- Serial Monitor
+- Wiring validator
+- Render deployment config
+- DEPLOY.md instructions"
+
+# Push to main
+git push origin main
+
+echo "GitHub push complete!"
+echo "Ready to deploy to Render.com"
+
+════════════════════════════════════
+PART 9 — FINAL VERIFICATION
+════════════════════════════════════
+
+Run these checks:
+
+1. Landing page:
+   - Animated gradient headline ✓
+   - Social proof section ✓
+   - How it works steps ✓
+   - Features grid ✓
+   - Testimonials ✓
+   - Pricing preview ✓
+   - Final CTA ✓
+
+2. Auth flow:
+   - Signup works ✓
+   - Login redirects to dashboard ✓
+   - Logout works ✓
+   - Protected routes redirect ✓
+
+3. Core flow:
+   - Enter idea → Analyze ✓
+   - Components shown ✓
+   - Build plan generated ✓
+   - Workspace opens ✓
+   - IDE shows placeholder ✓
+   - Complete step → code pushed ✓
+   - AI assistant responds ✓
+
+4. New features:
+   - Serial Monitor tab in workspace ✓
+   - Feedback widget visible ✓
+   - Welcome banner for new users ✓
+
+5. Mobile:
+   - Landing page on mobile ✓
+   - Navigation works ✓
+   - No horizontal scroll ✓
+
+6. Performance:
+   - Page loads under 3 seconds ✓
+   - No console errors ✓
+
+Run curl test:
+curl http://localhost:8080/api/health
+
+Should return:
+{
+  "status": "ok",
+  "services": {
+    "groq": { "status": "ok" },
+    "database": { "status": "ok" }
+  }
+}
+
+Show me results of all checks.
+
+════════════════════════════════════
+PART 10 — POST LAUNCH CHECKLIST
+════════════════════════════════════
+
+After deployment, do these:
+
+1. SUPABASE SETTINGS:
+   Go to Supabase → Authentication 
+   → URL Configuration
+   
+   Site URL: 
+     https://nexora.onrender.com
+   
+   Redirect URLs (add all):
+     http://localhost:5000/**
+     http://localhost:3000/**
+     https://nexora.onrender.com/**
+
+2. TEST ON RENDER URL:
+   Visit your Render URL
+   Sign up with a real email
+   Create a project
+   Test analyze
+   Confirm AI works
+
+3. SHARE NEXORA:
+   
+   LinkedIn post template:
+   "🚀 Excited to launch Nexora!
+   
+   An AI-powered IoT platform I built 
+   for students and makers.
+   
+   What it does:
+   ✅ Describe any IoT idea in English
+   ✅ AI analyzes and plans the project
+   ✅ Step-by-step guided build
+   ✅ Code appears in IDE automatically
+   ✅ Wiring validator prevents damage
+   ✅ Built for Indian students
+   
+   Try it free: nexora.onrender.com
+   
+   #IoT #AI #StudentProject #ESP32 
+   #Arduino #MadeInIndia"
+   
+   Share in these communities:
+   - r/arduino (Reddit)
+   - r/esp32 (Reddit)
+   - r/india (Reddit)
+   - Arduino Forum
+   - LinkedIn Engineering groups
+   - WhatsApp college groups
+   - Telegram IoT groups
+
+4. GOOGLE ANALYTICS (optional):
+   Create free GA4 account
+   Add tracking code to index.html
+   Monitor user behavior
+
+5. DOMAIN (when ready):
+   Buy nexora.app on GoDaddy (~₹800/yr)
+   Connect to Render in dashboard
+   Free SSL included
+
+Show me when GitHub push is done
+and give me the Render deploy URL.

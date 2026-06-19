@@ -22,6 +22,7 @@ import searchRouter from "./search.js";
 import recentlyViewedRouter from "./recently-viewed.js";
 import adminRouter from "./admin.js";
 import wiringRouter from "./wiring.js";
+import feedbackRouter from "./feedback.js";
 
 const router: IRouter = Router();
 
@@ -47,6 +48,7 @@ router.use(searchRouter);
 router.use(recentlyViewedRouter);
 router.use(adminRouter);
 router.use(wiringRouter);
+router.use("/feedback", feedbackRouter);
 router.use(projectsRouter);
 
 export default router;
