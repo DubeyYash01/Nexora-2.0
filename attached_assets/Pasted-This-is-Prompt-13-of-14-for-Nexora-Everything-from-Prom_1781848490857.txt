@@ -1,0 +1,1328 @@
+This is Prompt 13 of 14 for Nexora.
+Everything from Prompts 1-12 is built.
+This prompt handles deployment preparation
+and getting Nexora production-ready.
+
+Do NOT break anything already working.
+
+═══════════════════════════════════════
+WHAT THIS PROMPT DOES
+═══════════════════════════════════════
+
+1. Production build setup
+2. Environment variables for production
+3. Error logging system
+4. Rate limiting for production
+5. Security headers
+6. Database connection pooling
+7. API response caching
+8. Production health monitoring
+9. Prepare for deployment to Render
+   (free hosting platform)
+10. Final pre-launch checklist
+
+═══════════════════════════════════════
+PART 1 — SECURITY HARDENING
+═══════════════════════════════════════
+
+In artifacts/api-server/src/app.ts
+add these security packages and config:
+
+Install:
+pnpm add helmet cors express-rate-limit
+pnpm add compression
+
+Add to app.ts:
+
+import helmet from 'helmet'
+import cors from 'cors'
+import rateLimit from 'express-rate-limit'
+import compression from 'compression'
+
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}))
+
+// Compression
+app.use(compression())
+
+// CORS configuration
+const allowedOrigins = [
+  'http://localhost:5000',
+  'http://localhost:3000',
+  'http://localhost:23292',
+  process.env.FRONTEND_URL || '',
+  process.env.REPLIT_URL || ''
+].filter(Boolean)
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true)
+    if (
+      allowedOrigins.some(o => 
+        origin.includes(
+          o.replace('https://', '')
+           .replace('http://', '')
+        )
+      ) ||
+      origin.includes('.replit.dev') ||
+      origin.includes('.repl.co')
+    ) {
+      callback(null, true)
+    } else {
+      callback(null, true)
+      // Allow all for now
+      // Tighten after custom domain
+    }
+  },
+  credentials: true
+}))
+
+// Global rate limiter
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: 200,
+  message: {
+    error: 'Too many requests. 
+            Please wait 15 minutes.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+})
+app.use('/api', globalLimiter)
+
+// Strict rate limiter for AI routes
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 50,
+  message: {
+    error: 'AI rate limit reached. 
+            Please wait an hour.'
+  }
+})
+app.use('/api/ai', aiLimiter)
+app.use('/api/projects/analyze', 
+  aiLimiter)
+app.use('/api/projects/generate-plan',
+  aiLimiter)
+
+═══════════════════════════════════════
+PART 2 — ERROR LOGGING
+═══════════════════════════════════════
+
+Install:
+pnpm add winston
+
+Create: 
+artifacts/api-server/src/lib/logger.ts
+
+import winston from 'winston'
+
+const logger = winston.createLogger({
+  level: process.env.NODE_ENV === 
+    'production' ? 'info' : 'debug',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ 
+      stack: true 
+    }),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      )
+    })
+  ]
+})
+
+// Add file logging in production
+if (process.env.NODE_ENV === 
+    'production') {
+  logger.add(
+    new winston.transports.File({
+      filename: 'logs/error.log',
+      level: 'error',
+      maxsize: 5242880, // 5MB
+      maxFiles: 5
+    })
+  )
+}
+
+export default logger
+
+Replace all console.log with 
+logger.info and console.error 
+with logger.error throughout 
+the codebase.
+
+═══════════════════════════════════════
+PART 3 — REQUEST VALIDATION
+═══════════════════════════════════════
+
+Install:
+pnpm add zod
+
+Create:
+artifacts/api-server/src/lib/
+  validate.ts
+
+import { z } from 'zod'
+import { Request, Response, 
+         NextFunction } from 'express'
+
+export const analyzeSchema = z.object({
+  idea: z.string()
+    .min(10, 'Idea too short')
+    .max(500, 'Idea too long'),
+  skillLevel: z.enum([
+    'Beginner', 
+    'Intermediate', 
+    'Advanced'
+  ]).default('Beginner'),
+  userId: z.string().uuid()
+    .optional().nullable(),
+  projectType: z.string()
+    .optional()
+})
+
+export const chatSchema = z.object({
+  message: z.string()
+    .min(1, 'Message required')
+    .max(1000, 'Message too long'),
+  projectId: z.string().uuid()
+    .optional().nullable(),
+  userId: z.string().uuid()
+    .optional().nullable(),
+  projectContext: z.string()
+    .optional(),
+  conversationHistory: z.array(
+    z.object({
+      role: z.enum(['user', 'assistant']),
+      content: z.string()
+    })
+  ).optional().default([])
+})
+
+export function validate(schema: any) {
+  return (
+    req: Request, 
+    res: Response, 
+    next: NextFunction
+  ) => {
+    try {
+      req.body = schema.parse(req.body)
+      next()
+    } catch (err: any) {
+      res.status(400).json({
+        error: 'Invalid request',
+        details: err.errors?.map(
+          (e: any) => e.message
+        )
+      })
+    }
+  }
+}
+
+Apply validation to routes:
+
+// In analyze route:
+router.post('/analyze',
+  validate(analyzeSchema),
+  async (req, res) => { ... })
+
+// In chat route:
+router.post('/chat',
+  validate(chatSchema),
+  async (req, res) => { ... })
+
+═══════════════════════════════════════
+PART 4 — RESPONSE CACHING
+═══════════════════════════════════════
+
+Install:
+pnpm add node-cache
+
+Create:
+artifacts/api-server/src/lib/cache.ts
+
+import NodeCache from 'node-cache'
+
+// Cache with 10 minute TTL
+const cache = new NodeCache({
+  stdTTL: 600,
+  checkperiod: 120,
+  useClones: false
+})
+
+export function cacheMiddleware(
+  ttl: number = 600
+) {
+  return (
+    req: any,
+    res: any,
+    next: any
+  ) => {
+    const key = `${req.method}:
+      ${req.originalUrl}`
+    const cached = cache.get(key)
+    
+    if (cached) {
+      return res.json(cached)
+    }
+    
+    const originalJson = res.json
+      .bind(res)
+    
+    res.json = (data: any) => {
+      if (res.statusCode === 200) {
+        cache.set(key, data, ttl)
+      }
+      return originalJson(data)
+    }
+    
+    next()
+  }
+}
+
+export { cache }
+
+Apply caching to appropriate routes:
+
+// Cache blueprints for 10 minutes
+router.get('/trending',
+  cacheMiddleware(600),
+  async (req, res) => { ... })
+
+router.get('/recommended',
+  cacheMiddleware(600),
+  async (req, res) => { ... })
+
+// Cache blueprint list for 5 minutes
+router.get('/',
+  cacheMiddleware(300),
+  async (req, res) => { ... })
+
+// Do NOT cache:
+// - AI routes (always fresh)
+// - User-specific data
+// - POST routes
+
+═══════════════════════════════════════
+PART 5 — PRODUCTION BUILD
+═══════════════════════════════════════
+
+In artifacts/nexora/vite.config.ts
+update build config:
+
+build: {
+  outDir: 'dist',
+  sourcemap: false,
+  minify: 'terser',
+  rollupOptions: {
+    output: {
+      manualChunks: {
+        vendor: [
+          'react',
+          'react-dom',
+          'react-router-dom'
+        ],
+        monaco: [
+          '@monaco-editor/react'
+        ],
+        supabase: [
+          '@supabase/supabase-js'
+        ]
+      }
+    }
+  },
+  chunkSizeWarningLimit: 1000
+}
+
+In artifacts/api-server/
+update for production:
+
+Create: artifacts/api-server/
+        src/middleware/
+        serveStatic.ts
+
+import path from 'path'
+import { fileURLToPath } from 'url'
+import express from 'express'
+
+const __dirname = path.dirname(
+  fileURLToPath(import.meta.url)
+)
+
+export function setupStaticServing(
+  app: any
+) {
+  const distPath = path.join(
+    __dirname,
+    '../../../nexora/dist'
+  )
+  
+  // Serve static files
+  app.use(express.static(distPath, {
+    maxAge: '1d',
+    etag: true
+  }))
+  
+  // SPA fallback
+  app.get('*', (req: any, res: any) => {
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(
+        path.join(distPath, 'index.html')
+      )
+    }
+  })
+}
+
+In production, the API server serves 
+both the API AND the frontend from 
+a single process on a single port.
+
+═══════════════════════════════════════
+PART 6 — ENVIRONMENT CONFIGURATION
+═══════════════════════════════════════
+
+Create: .env.production.example
+
+# Copy this to .env.production
+# and fill in real values
+
+# Server
+NODE_ENV=production
+PORT=8080
+
+# Supabase
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_key
+
+# AI
+GROQ_API_KEY=your_groq_key
+
+# Payments
+RAZORPAY_KEY_ID=your_razorpay_key
+RAZORPAY_KEY_SECRET=your_razorpay_secret
+
+# App
+FRONTEND_URL=https://nexora.app
+VITE_APP_URL=https://nexora.app
+
+# Optional
+SENTRY_DSN=your_sentry_dsn
+
+Create: artifacts/api-server/src/
+        lib/config.ts
+
+export const config = {
+  port: Number(process.env.PORT) || 8080,
+  nodeEnv: process.env.NODE_ENV || 
+           'development',
+  isProduction: process.env.NODE_ENV === 
+                'production',
+  
+  supabase: {
+    url: process.env.VITE_SUPABASE_URL ||
+         process.env.SUPABASE_URL || '',
+    anonKey: process.env
+      .VITE_SUPABASE_ANON_KEY || '',
+    serviceKey: process.env
+      .SUPABASE_SERVICE_ROLE_KEY || ''
+  },
+  
+  groq: {
+    apiKey: process.env.GROQ_API_KEY || ''
+  },
+  
+  razorpay: {
+    keyId: process.env
+      .RAZORPAY_KEY_ID || '',
+    keySecret: process.env
+      .RAZORPAY_KEY_SECRET || ''
+  },
+  
+  frontend: {
+    url: process.env.FRONTEND_URL || 
+         'http://localhost:5000'
+  }
+}
+
+// Validate required config
+const required = [
+  'supabase.url',
+  'supabase.serviceKey',
+  'groq.apiKey'
+]
+
+required.forEach(key => {
+  const value = key.split('.').reduce(
+    (obj: any, k) => obj?.[k], 
+    config
+  )
+  if (!value) {
+    console.warn(
+      `Warning: Missing config: ${key}`
+    )
+  }
+})
+
+export default config
+
+═══════════════════════════════════════
+PART 7 — HEALTH MONITORING
+═══════════════════════════════════════
+
+Enhance the health check endpoint:
+
+app.get('/api/health', 
+  async (req, res) => {
+  const startTime = Date.now()
+  
+  const health: any = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV,
+    version: '1.0.0',
+    services: {}
+  }
+  
+  // Check Groq
+  health.services.groq = {
+    configured: !!process.env.GROQ_API_KEY,
+    status: process.env.GROQ_API_KEY ? 
+      'ok' : 'missing_key'
+  }
+  
+  // Check Supabase
+  try {
+    const { createClient } = 
+      await import('@supabase/supabase-js')
+    const supabase = createClient(
+      process.env.VITE_SUPABASE_URL || '',
+      process.env
+        .SUPABASE_SERVICE_ROLE_KEY || ''
+    )
+    
+    const { error } = await supabase
+      .from('profiles')
+      .select('count')
+      .limit(1)
+    
+    health.services.database = {
+      status: error ? 'error' : 'ok',
+      error: error?.message
+    }
+  } catch (err: any) {
+    health.services.database = {
+      status: 'error',
+      error: err.message
+    }
+  }
+  
+  health.responseTime = 
+    `${Date.now() - startTime}ms`
+  
+  const statusCode = 
+    health.services.database?.status === 
+    'error' ? 503 : 200
+  
+  res.status(statusCode).json(health)
+})
+
+═══════════════════════════════════════
+PART 8 — WIRING VALIDATOR ROUTE
+═══════════════════════════════════════
+
+Add AI-powered wiring validation:
+
+In artifacts/api-server/src/routes/
+create: wiring.ts
+
+import { Router } from 'express'
+import { callGroq, parseGroqJSON }
+  from '../lib/groq.js'
+
+const router = Router()
+
+router.post('/validate', 
+  async (req, res) => {
+  try {
+    const { 
+      connections,
+      components,
+      platform 
+    } = req.body
+
+    const systemPrompt = 
+`You are an expert electronics engineer.
+Validate these wiring connections for 
+an IoT project and identify any 
+dangerous or incorrect connections.
+
+Return ONLY raw JSON:
+{
+  "safe": true/false,
+  "critical": [
+    {
+      "connection": "description",
+      "issue": "what is wrong",
+      "risk": "what could happen",
+      "fix": "how to fix it"
+    }
+  ],
+  "warnings": [
+    {
+      "connection": "description", 
+      "issue": "potential issue",
+      "suggestion": "recommendation"
+    }
+  ],
+  "confirmed": [
+    "confirmed safe connection 1"
+  ]
+}`
+
+    const userPrompt = 
+`Platform: ${platform || 'ESP32'}
+Components: ${JSON.stringify(components)}
+Connections to validate:
+${JSON.stringify(connections, null, 2)}
+
+Check for:
+1. Power/ground reversals
+2. Wrong voltage levels (5V vs 3.3V)
+3. Missing resistors
+4. Pin conflicts
+5. Incorrect pin functions`
+
+    const raw = await callGroq(
+      userPrompt, systemPrompt, 1000
+    )
+
+    const result = parseGroqJSON(raw)
+
+    return res.json({
+      success: true,
+      ...result
+    })
+
+  } catch (error: any) {
+    return res.status(500).json({
+      error: error.message
+    })
+  }
+})
+
+export default router
+
+Register in app.ts:
+import wiringRouter from 
+  './routes/wiring.js'
+app.use('/api/wiring', wiringRouter)
+
+═══════════════════════════════════════
+PART 9 — RENDER DEPLOYMENT SETUP
+═══════════════════════════════════════
+
+Create render.yaml in root:
+
+services:
+  - type: web
+    name: nexora
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: |
+      cd artifacts/api-server && 
+      pnpm install && 
+      pnpm build &&
+      cd ../nexora && 
+      pnpm install && 
+      pnpm build
+    startCommand: |
+      cd artifacts/api-server && 
+      node dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8080
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+
+Also create: 
+artifacts/api-server/src/
+  middleware/serveProduction.ts
+
+import path from 'path'
+import { fileURLToPath } from 'url'
+import express, { 
+  Express, Request, Response 
+} from 'express'
+import fs from 'fs'
+
+export function serveProductionBuild(
+  app: Express
+): void {
+  const __filename = 
+    fileURLToPath(import.meta.url)
+  const __dirname = 
+    path.dirname(__filename)
+  
+  const clientBuildPath = path.resolve(
+    __dirname,
+    '../../../../nexora/dist'
+  )
+  
+  if (!fs.existsSync(clientBuildPath)) {
+    console.warn(
+      'Frontend build not found at:',
+      clientBuildPath
+    )
+    return
+  }
+  
+  console.log(
+    'Serving frontend from:',
+    clientBuildPath
+  )
+  
+  app.use(express.static(
+    clientBuildPath, {
+    maxAge: process.env.NODE_ENV === 
+      'production' ? '1d' : 0,
+    etag: true,
+    index: false
+  }))
+  
+  app.get('*', (
+    req: Request, 
+    res: Response
+  ) => {
+    if (req.path.startsWith('/api')) {
+      return res.status(404).json({
+        error: 'API route not found'
+      })
+    }
+    
+    res.sendFile(
+      path.join(
+        clientBuildPath, 
+        'index.html'
+      )
+    )
+  })
+}
+
+In index.ts, add at the end:
+import { serveProductionBuild }
+  from './middleware/serveProduction.js'
+
+if (process.env.NODE_ENV === 
+    'production') {
+  serveProductionBuild(app)
+}
+
+═══════════════════════════════════════
+PART 10 — SERIAL MONITOR COMPONENT
+═══════════════════════════════════════
+
+Create:
+artifacts/nexora/src/components/
+  ide/SerialMonitor.tsx
+
+import { useState, useRef, 
+         useEffect } from 'react'
+
+interface SerialLine {
+  id: string
+  text: string
+  timestamp: string
+  isError: boolean
+}
+
+export default function SerialMonitor() {
+  const [connected, setConnected] = 
+    useState(false)
+  const [lines, setLines] = 
+    useState<SerialLine[]>([])
+  const [baudRate, setBaudRate] = 
+    useState(115200)
+  const [input, setInput] = 
+    useState('')
+  const portRef = useRef<any>(null)
+  const writerRef = useRef<any>(null)
+  const scrollRef = useRef<HTMLDivElement>
+    (null)
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop =
+        scrollRef.current.scrollHeight
+    }
+  }, [lines])
+
+  const addLine = (text: string) => {
+    const isError = 
+      text.toLowerCase()
+        .includes('error') ||
+      text.toLowerCase()
+        .includes('failed')
+    
+    setLines(prev => [...prev, {
+      id: Date.now().toString(),
+      text: text.trim(),
+      timestamp: new Date()
+        .toLocaleTimeString(),
+      isError
+    }].slice(-500)) // Keep last 500 lines
+  }
+
+  const connect = async () => {
+    if (!('serial' in navigator)) {
+      alert(
+        'Serial Monitor requires Chrome. 
+         Please open Nexora in Chrome.'
+      )
+      return
+    }
+
+    try {
+      const port = await 
+        (navigator as any).serial
+          .requestPort()
+      
+      await port.open({ baudRate })
+      portRef.current = port
+      
+      if (port.writable) {
+        writerRef.current = 
+          port.writable.getWriter()
+      }
+      
+      setConnected(true)
+      addLine(
+        '--- Connected to device ---'
+      )
+      
+      // Start reading
+      const reader = 
+        port.readable.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      
+      const readLoop = async () => {
+        try {
+          while (true) {
+            const { value, done } = 
+              await reader.read()
+            if (done) break
+            
+            buffer += decoder.decode(
+              value, { stream: true }
+            )
+            
+            const lineBreak = 
+              buffer.lastIndexOf('\n')
+            if (lineBreak >= 0) {
+              const complete = 
+                buffer.substring(
+                  0, lineBreak
+                )
+              buffer = buffer.substring(
+                lineBreak + 1
+              )
+              
+              complete.split('\n')
+                .filter(l => l.trim())
+                .forEach(addLine)
+            }
+          }
+        } catch (err) {
+          addLine(
+            '--- Device disconnected ---'
+          )
+          setConnected(false)
+        } finally {
+          reader.releaseLock()
+        }
+      }
+      
+      readLoop()
+      
+    } catch (err: any) {
+      if (err.name !== 'NotFoundError') {
+        addLine(`Error: ${err.message}`)
+      }
+    }
+  }
+
+  const disconnect = async () => {
+    try {
+      if (writerRef.current) {
+        writerRef.current.releaseLock()
+      }
+      if (portRef.current) {
+        await portRef.current.close()
+      }
+    } catch (err) {
+      // Ignore close errors
+    }
+    setConnected(false)
+    addLine('--- Disconnected ---')
+  }
+
+  const sendCommand = async () => {
+    if (!writerRef.current || 
+        !input.trim()) return
+    
+    try {
+      const encoder = new TextEncoder()
+      await writerRef.current.write(
+        encoder.encode(input + '\n')
+      )
+      addLine(`> ${input}`)
+      setInput('')
+    } catch (err: any) {
+      addLine(`Send error: ${err.message}`)
+    }
+  }
+
+  const clearOutput = () => setLines([])
+  
+  const saveLog = () => {
+    const content = lines
+      .map(l => 
+        `[${l.timestamp}] ${l.text}`
+      )
+      .join('\n')
+    const blob = new Blob(
+      [content], 
+      { type: 'text/plain' }
+    )
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'nexora-serial-log.txt'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div className="flex flex-col h-full 
+      bg-[#0A0A0F]">
+      
+      {/* Header */}
+      <div className="flex items-center 
+        justify-between px-4 py-2 
+        border-b border-[#2A2A3E]">
+        
+        <div className="flex items-center 
+          gap-3">
+          <div className={`w-2 h-2 
+            rounded-full ${connected ? 
+              'bg-[#00C896] animate-pulse' : 
+              'bg-[#5A5A7A]'
+            }`} 
+          />
+          <span className="text-sm 
+            font-medium text-[#F0F0FF]">
+            {connected ? 
+              'Device Connected' : 
+              'No Device'
+            }
+          </span>
+          
+          {!connected && (
+            <select
+              value={baudRate}
+              onChange={e => 
+                setBaudRate(
+                  Number(e.target.value)
+                )
+              }
+              className="text-xs 
+                bg-[#12121A] 
+                border border-[#2A2A3E]
+                text-[#9090B0] 
+                rounded px-2 py-1"
+            >
+              <option value={9600}>
+                9600
+              </option>
+              <option value={57600}>
+                57600
+              </option>
+              <option value={115200}>
+                115200
+              </option>
+            </select>
+          )}
+        </div>
+        
+        <div className="flex items-center 
+          gap-2">
+          <button
+            onClick={clearOutput}
+            className="text-xs 
+              text-[#5A5A7A] 
+              hover:text-[#9090B0] 
+              px-2 py-1"
+          >
+            Clear
+          </button>
+          <button
+            onClick={saveLog}
+            disabled={lines.length === 0}
+            className="text-xs 
+              text-[#5A5A7A] 
+              hover:text-[#9090B0] 
+              px-2 py-1 
+              disabled:opacity-30"
+          >
+            Save Log
+          </button>
+          <button
+            onClick={connected ? 
+              disconnect : connect
+            }
+            className={`text-xs px-3 py-1 
+              rounded-lg font-medium
+              transition-all duration-200
+              ${connected
+                ? 'bg-[#FF5A5A] 
+                   text-white 
+                   hover:bg-red-600'
+                : 'bg-[#6C63FF] 
+                   text-white 
+                   hover:bg-[#5A52E0]'
+              }`}
+          >
+            {connected ? 
+              'Disconnect' : 
+              'Connect Device'
+            }
+          </button>
+        </div>
+      </div>
+      
+      {/* Chrome warning */}
+      {!('serial' in navigator) && (
+        <div className="mx-4 mt-2 p-2 
+          bg-[rgba(255,184,77,0.08)] 
+          border border-[#FFB84D] 
+          rounded-lg text-xs 
+          text-[#FFB84D]">
+          ⚠️ Serial Monitor requires 
+          Chrome browser
+        </div>
+      )}
+      
+      {/* Output */}
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto 
+          p-3 font-mono text-xs"
+      >
+        {lines.length === 0 ? (
+          <div className="text-[#3A3A5A] 
+            text-center mt-8">
+            Connect your device to see 
+            serial output here
+          </div>
+        ) : (
+          lines.map(line => (
+            <div
+              key={line.id}
+              className={`mb-0.5 
+                leading-5
+                ${line.isError
+                  ? 'text-[#FF5A5A]'
+                  : line.text.startsWith(
+                      '---'
+                    )
+                    ? 'text-[#5A5A7A]'
+                    : 'text-[#00C896]'
+                }`}
+            >
+              <span className="text-[#3A3A5A] 
+                mr-2">
+                [{line.timestamp}]
+              </span>
+              {line.text}
+            </div>
+          ))
+        )}
+      </div>
+      
+      {/* Input */}
+      {connected && (
+        <div className="flex gap-2 p-3 
+          border-t border-[#2A2A3E]">
+          <input
+            value={input}
+            onChange={e => 
+              setInput(e.target.value)
+            }
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                sendCommand()
+              }
+            }}
+            placeholder="Send command..."
+            className="flex-1 bg-[#12121A] 
+              border border-[#2A2A3E] 
+              rounded-lg px-3 py-1.5 
+              text-xs text-[#F0F0FF] 
+              font-mono
+              focus:border-[#6C63FF] 
+              focus:outline-none"
+          />
+          <button
+            onClick={sendCommand}
+            className="bg-[#6C63FF] 
+              text-white text-xs 
+              px-3 py-1.5 rounded-lg
+              hover:bg-[#5A52E0]"
+          >
+            Send
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+═══════════════════════════════════════
+PART 11 — ADD SERIAL MONITOR TO WORKSPACE
+═══════════════════════════════════════
+
+In the Workspace page,
+find the bottom panel tabs:
+[AI Assistant]
+
+Add Serial Monitor tab:
+[AI Assistant] [Serial Monitor]
+
+When "Serial Monitor" tab active:
+  Render <SerialMonitor />
+
+Tab styling:
+  Active: border-bottom #6C63FF
+  Inactive: color #5A5A7A
+
+Import SerialMonitor in Workspace:
+import SerialMonitor from 
+  '../components/ide/SerialMonitor'
+
+═══════════════════════════════════════
+PART 12 — UPDATE AI PROMPTS
+═══════════════════════════════════════
+
+Find the build plan generation 
+system prompt in:
+artifacts/api-server/src/routes/
+  workspace.ts (or generate-plan route)
+
+Add this to the system prompt:
+
+"CRITICAL INSTRUCTIONS:
+1. NEVER tell users to open Arduino IDE
+2. NEVER say 'paste into Arduino IDE'
+3. NEVER say 'upload using Arduino IDE'
+4. Instead say:
+   - 'The code is in your Nexora IDE'
+   - 'Click Copy Code in the IDE above'
+   - 'Connect via Serial Monitor below'
+5. For uploading code, say:
+   'Copy the code from Nexora IDE 
+    and paste into Arduino IDE' 
+    OR
+   'Use the Upload Guide button 
+    in the IDE toolbar'
+6. Keep all instructions within 
+   the Nexora ecosystem"
+
+Also update the AI chat system prompt
+to add:
+
+"You are embedded in Nexora's IDE.
+The user can see their code in the 
+Nexora IDE on the right side.
+The Serial Monitor is available 
+at the bottom to see device output.
+Never suggest opening external tools.
+Reference Nexora's built-in features."
+
+═══════════════════════════════════════
+PART 13 — PRE-LAUNCH CHECKLIST
+═══════════════════════════════════════
+
+Create a pre-launch check page 
+only visible to admins:
+
+Route: /admin/launch-check
+
+Show a checklist with automated 
+checks:
+
+const checks = [
+  {
+    name: 'API Health',
+    check: async () => {
+      const r = await fetch('/api/health')
+      const d = await r.json()
+      return {
+        pass: d.status === 'ok',
+        detail: JSON.stringify(d.services)
+      }
+    }
+  },
+  {
+    name: 'Groq AI Working',
+    check: async () => {
+      const r = await fetch(
+        '/api/test-groq'
+      )
+      const d = await r.json()
+      return {
+        pass: d.success === true,
+        detail: d.response || d.error
+      }
+    }
+  },
+  {
+    name: 'Supabase Connected',
+    check: async () => {
+      const r = await fetch('/api/health')
+      const d = await r.json()
+      return {
+        pass: d.services?.database
+          ?.status === 'ok',
+        detail: d.services?.database
+          ?.error || 'Connected'
+      }
+    }
+  },
+  {
+    name: 'Blueprints Loading',
+    check: async () => {
+      const r = await fetch(
+        '/api/blueprints'
+      )
+      const d = await r.json()
+      return {
+        pass: Array.isArray(
+          d.blueprints
+        ),
+        detail: `${
+          d.blueprints?.length || 0
+        } blueprints`
+      }
+    }
+  },
+  {
+    name: 'Auth Working',
+    check: async () => {
+      const r = await fetch(
+        '/api/auth/check'
+      )
+      return {
+        pass: r.status !== 500,
+        detail: `Status: ${r.status}`
+      }
+    }
+  }
+]
+
+UI for each check:
+  Running: spinner + check name
+  Pass: green checkmark + detail
+  Fail: red X + error detail
+
+"Run All Checks" button at top.
+"Export Report" button when done.
+
+═══════════════════════════════════════
+PART 14 — GITHUB PUSH
+═══════════════════════════════════════
+
+After all changes are made,
+push to GitHub:
+
+Run in shell:
+git add .
+git commit -m "Prompt 13: Production 
+  ready - security, caching, serial 
+  monitor, wiring validator, 
+  deployment config"
+git push origin main
+
+═══════════════════════════════════════
+VERIFY EVERYTHING WORKS
+═══════════════════════════════════════
+
+After all changes:
+
+1. Run health check:
+curl http://localhost:8080/api/health
+
+Should show:
+{
+  "status": "ok",
+  "services": {
+    "groq": { "status": "ok" },
+    "database": { "status": "ok" }
+  }
+}
+
+2. Test analyze still works:
+curl -X POST \
+  http://localhost:8080/api/projects/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"idea":"plant monitor",
+       "skillLevel":"Beginner"}'
+
+3. Test wiring validator:
+curl -X POST \
+  http://localhost:8080/api/wiring/validate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "ESP32",
+    "components": ["DHT22", "ESP32"],
+    "connections": [
+      {
+        "from": "DHT22 VCC",
+        "to": "ESP32 GND"
+      }
+    ]
+  }'
+
+Should return warning about 
+reversed power connection.
+
+4. Check Serial Monitor tab 
+   appears in workspace.
+
+5. Confirm no "Arduino IDE" 
+   mentions in build steps.
+
+Show me results of all 4 tests.

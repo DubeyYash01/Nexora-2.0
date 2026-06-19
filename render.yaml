@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: nexora
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: |
+      cd artifacts/api-server &&
+      pnpm install &&
+      pnpm build &&
+      cd ../nexora &&
+      pnpm install &&
+      pnpm build
+    startCommand: |
+      cd artifacts/api-server &&
+      node dist/index.mjs
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8080
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false

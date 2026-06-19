@@ -5,6 +5,7 @@ import { SEED_BLUEPRINTS } from "../data/seedBlueprints";
 import type { Request, Response } from "express";
 import { supabase, getAuthClient } from "../lib/supabaseAdmin";
 import { callGroq, parseGroqJSON } from "../lib/groq";
+import { cacheMiddleware } from "../lib/cache";
 
 const router = Router();
 
@@ -43,7 +44,7 @@ router.get("/blueprints/seed", async (_req: Request, res: Response) => {
   res.json({ seeded: true });
 });
 
-router.get("/blueprints", async (req: AuthRequest, res: Response) => {
+router.get("/blueprints", cacheMiddleware(300), async (req: AuthRequest, res: Response) => {
   const { search, difficulty, category, sort = "popular", limit = 50, offset = 0 } = req.query as Record<string, string>;
 
   let query = supabase
@@ -252,7 +253,7 @@ router.get("/blueprints/tags", async (_req, res: Response) => {
   res.json({ tags: data ?? [] });
 });
 
-router.get("/blueprints/trending", async (_req, res: Response) => {
+router.get("/blueprints/trending", cacheMiddleware(600), async (_req, res: Response) => {
   const { data } = await supabase
     .from("blueprints")
     .select("id,title,description,difficulty,category,platform,fork_count,like_count,view_count,estimated_cost_min,estimated_cost_max,estimated_time,tags,components")

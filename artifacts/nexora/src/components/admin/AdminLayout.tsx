@@ -2,7 +2,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import {
   LayoutDashboard, Users, GitBranch, IndianRupee, Sparkles,
-  Flag, Megaphone, Building, Settings2, ArrowLeft,
+  Flag, Megaphone, Building, Settings2, ArrowLeft, Rocket,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { icon: Megaphone, label: "Announcements", href: "/admin/announcements" },
   { icon: Building, label: "College Inquiries", href: "/admin/college" },
   { icon: Settings2, label: "Platform Settings", href: "/admin/settings" },
+  { icon: Rocket, label: "Launch Check", href: "/admin/launch-check" },
 ];
 
 const ROLE_BADGE: Record<string, { label: string; color: string; bg: string }> = {

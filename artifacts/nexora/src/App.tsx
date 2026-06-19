@@ -53,6 +53,7 @@ const AdminReports = lazy(() => import("@/pages/admin/reports"));
 const AdminAnnouncements = lazy(() => import("@/pages/admin/announcements"));
 const AdminCollege = lazy(() => import("@/pages/admin/college"));
 const AdminSettings = lazy(() => import("@/pages/admin/settings"));
+const AdminLaunchCheck = lazy(() => import("@/pages/admin/launch-check"));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -240,6 +241,7 @@ function Router() {
           <Route path="/admin/announcements" component={AdminAnnouncements} />
           <Route path="/admin/college" component={AdminCollege} />
           <Route path="/admin/settings" component={AdminSettings} />
+          <Route path="/admin/launch-check" component={AdminLaunchCheck} />
 
           <Route component={NotFound} />
         </Switch>
