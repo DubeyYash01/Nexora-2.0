@@ -5,7 +5,7 @@
     "node": "22.x"
   },
   "scripts": {
-    "build": "cd artifacts/nexora && npx pnpm@9 install --no-frozen-lockfile && npx pnpm@9 run build && cd ../api-server && npx pnpm@9 install --no-frozen-lockfile && npx pnpm@9 run build",
-    "start": "node artifacts/api-server/dist/index.js"
+    "build": "cd artifacts/nexora && pnpm install --no-frozen-lockfile && pnpm run build && cd ../api-server && pnpm install --no-frozen-lockfile && pnpm run build",
+    "start": "cd artifacts/api-server && node --enable-source-maps ./dist/index.mjs"
   }
 }
