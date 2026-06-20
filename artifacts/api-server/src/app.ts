@@ -157,7 +157,7 @@ if (process.env.NODE_ENV === "production") {
   if (fs.existsSync(frontendPath)) {
     app.use(express.static(frontendPath, { maxAge: "1d" }));
 
-    app.get("*", (req, res) => {
+    app.get("/{*splat}", (req, res) => {
       if (!req.path.startsWith("/api")) {
         res.sendFile(path.join(frontendPath, "index.html"));
       }
