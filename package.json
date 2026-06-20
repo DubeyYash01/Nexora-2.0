@@ -1,11 +1,11 @@
 {
   "name": "nexora-root",
   "version": "1.0.0",
-  "scripts": {
-    "build": "cd artifacts/nexora && npx pnpm@latest install --no-frozen-lockfile && npx pnpm@latest run build && cd ../api-server && npx pnpm@latest install --no-frozen-lockfile && npx pnpm@latest run build",
-    "start": "node artifacts/api-server/dist/index.js"
-  },
   "engines": {
-    "node": "20.x"
+    "node": "22.x"
+  },
+  "scripts": {
+    "build": "cd artifacts/nexora && npx pnpm@9 install --no-frozen-lockfile && npx pnpm@9 run build && cd ../api-server && npx pnpm@9 install --no-frozen-lockfile && npx pnpm@9 run build",
+    "start": "node artifacts/api-server/dist/index.js"
   }
 }
