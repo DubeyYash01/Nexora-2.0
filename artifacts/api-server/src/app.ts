@@ -4,6 +4,9 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 import compression from "compression";
 import pinoHttp from "pino-http";
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
 import { supabase } from "./lib/supabaseAdmin.js";
@@ -139,5 +142,38 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/api", router);
+
+// Serve frontend in production
+if (process.env.NODE_ENV === "production") {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+
+  // From artifacts/api-server/dist/ → artifacts/nexora/dist/public/
+  const frontendPath = path.resolve(__dirname, "../../nexora/dist/public");
+
+  console.log("Frontend path:", frontendPath);
+  console.log("Frontend exists:", fs.existsSync(frontendPath));
+
+  if (fs.existsSync(frontendPath)) {
+    app.use(express.static(frontendPath, { maxAge: "1d" }));
+
+    app.get("*", (req, res) => {
+      if (!req.path.startsWith("/api")) {
+        res.sendFile(path.join(frontendPath, "index.html"));
+      }
+    });
+
+    console.log("Serving frontend from:", frontendPath);
+  } else {
+    console.warn("Frontend build not found at:", frontendPath);
+    app.get("/", (_req, res) => {
+      res.json({
+        status: "API running",
+        frontend: "not found",
+        path: frontendPath,
+      });
+    });
+  }
+}
 
 export default app;
